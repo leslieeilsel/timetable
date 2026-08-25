@@ -1,0 +1,46 @@
+{
+  "name": "school-timetable",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:web": "vp run @timetable/web#dev",
+    "dev:api": "php apps/api/artisan serve --host=127.0.0.1 --port=8000",
+    "dev": "vp exec concurrently -k --kill-others-on-fail \"vp run dev:api\" \"vp run dev:web\"",
+    "check:web": "vp run @timetable/web#check",
+    "check:api": "composer --working-dir=apps/api check",
+    "check": "vp run check:web && vp run check:api",
+    "test:web": "vp run @timetable/web#test",
+    "test:web:coverage": "vp run @timetable/web#test:coverage",
+    "test:api": "composer --working-dir=apps/api test",
+    "test:api:unit": "composer --working-dir=apps/api test:unit",
+    "test:api:feature": "composer --working-dir=apps/api test:feature",
+    "test:api:mysql": "composer --working-dir=apps/api test:mysql",
+    "test:e2e": "vp exec playwright test",
+    "db:up": "docker compose up -d mysql",
+    "db:down": "docker compose down",
+    "test": "vp run test:web && vp run test:api",
+    "build:web": "vp run @timetable/web#build",
+    "contract:lint": "vp exec redocly lint contracts/openapi.yaml",
+    "contract:generate": "vp run @timetable/api-client#generate",
+    "contract:check": "vp run contract:lint && vp run contract:generate && git diff --exit-code"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1",
+    "@redocly/cli": "2.47.0",
+    "concurrently": "10.0.5",
+    "shadcn": "4.19.0",
+    "vite-plus": "0.2.9"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "11.23.0",
+      "onFail": "download"
+    },
+    "runtime": {
+      "name": "node",
+      "version": "24.19.0",
+      "onFail": "download"
+    }
+  }
+}

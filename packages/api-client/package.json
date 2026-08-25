@@ -1,0 +1,16 @@
+{
+  "name": "@timetable/api-client",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "scripts": {
+    "generate": "vp exec openapi-typescript ../../contracts/openapi.yaml -o src/generated-types.ts"
+  },
+  "dependencies": {
+    "openapi-fetch": "0.17.0"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.13.0"
+  }
+}
