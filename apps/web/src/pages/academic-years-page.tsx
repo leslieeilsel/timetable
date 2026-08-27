@@ -1,20 +1,14 @@
-import { useEffect, useMemo, useState } from "react"
+import { useDeferredValue, useEffect, useRef, useState } from "react"
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Link, useNavigate, useParams } from "react-router"
-import {
-  ArrowLeftIcon,
-  ChevronRightIcon,
-  FileUpIcon,
-  MoreHorizontalIcon,
-  PlusIcon,
-  Trash2Icon,
-} from "lucide-react"
+import { Link, useNavigate, useParams, useSearchParams } from "react-router"
+import { ArrowLeftIcon, ChevronRightIcon, FileUpIcon, PlusIcon, Trash2Icon } from "lucide-react"
 import { toast } from "sonner"
-import { api, ApiError, apiMessage, jsonBody } from "@/lib/api"
+import { api, apiAllPages, ApiError, apiMessage, jsonBody } from "@/lib/api"
 import { useAuth } from "@/lib/auth"
-import type { AcademicYear, Grade, SchoolClass, Semester } from "@/lib/types"
+import type { AcademicYear, Grade, PaginationMeta, SchoolClass, Semester } from "@/lib/types"
 import { EmptyList, ErrorState, Field, LoadingState, PageHeader } from "@/components/page"
 import { StatusBadge } from "@/components/status-badge"
+import { TableActionButton } from "@/components/table-action-button"
 import { TablePagination, useTablePagination } from "@/components/table-pagination"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -38,6 +32,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox"
 import { ListToolbar, ToolbarSelect } from "@/components/list-toolbar"
 import { useSchoolContext } from "@/lib/queries"
+import { enumParam, mergeSearchParams, positiveIntegerParam } from "@/lib/url-state"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -60,7 +55,7 @@ export function AcademicYearsPage() {
   const classCounts = useQueries({
     queries: yearItems.map((year) => ({
       queryKey: ["classes", year.id],
-      queryFn: () => api<SchoolClass[]>(`/api/v1/academic-years/${year.id}/classes`),
+      queryFn: () => apiAllPages<SchoolClass>(`/api/v1/academic-years/${year.id}/classes`),
     })),
   })
   const semesterCounts = useQueries({
@@ -167,7 +162,7 @@ export function AcademicYearsPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <Button
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
                           nativeButton={false}
                           render={<Link to={`/years/${year.id}`} />}
@@ -248,12 +243,23 @@ export function AcademicYearDetailPage() {
   const id = Number(yearId)
   const client = useQueryClient()
   const navigate = useNavigate()
+  const [urlParams, setUrlParams] = useSearchParams()
   const [classModal, setClassModal] = useState<SchoolClass | null | undefined>(undefined)
   const [semesterModal, setSemesterModal] = useState<1 | 2 | null>(null)
   const [importOpen, setImportOpen] = useState(false)
-  const [classSearch, setClassSearch] = useState("")
-  const [gradeFilter, setGradeFilter] = useState("all")
-  const [statusFilter, setStatusFilter] = useState("all")
+  const [classSearch, setClassSearch] = useState(() => urlParams.get("q") ?? "")
+  const [gradeFilter, setGradeFilter] = useState(() => {
+    const value = urlParams.get("grade")
+    return value && /^\d+$/.test(value) ? value : "all"
+  })
+  const [statusFilter, setStatusFilter] = useState(() =>
+    enumParam(urlParams, "status", ["all", "active", "inactive"], "all"),
+  )
+  const [classPage, setClassPage] = useState(() => positiveIntegerParam(urlParams, "page", 1))
+  const [classPageSize, setClassPageSize] = useState(() =>
+    positiveIntegerParam(urlParams, "per_page", 20, [20, 50, 100]),
+  )
+  const deferredClassSearch = useDeferredValue(classSearch.trim())
   const [lifecycleModal, setLifecycleModal] = useState<{
     semester: Semester
     action: "close" | "reopen"
@@ -269,25 +275,62 @@ export function AcademicYearDetailPage() {
     enabled: Number.isFinite(id),
   })
   const classes = useQuery({
-    queryKey: ["classes", id],
-    queryFn: () => api<SchoolClass[]>(`/api/v1/academic-years/${id}/classes`),
+    queryKey: [
+      "classes",
+      id,
+      classPage,
+      classPageSize,
+      deferredClassSearch,
+      gradeFilter,
+      statusFilter,
+    ],
+    queryFn: () => {
+      const query = new URLSearchParams({
+        page: String(classPage),
+        per_page: String(classPageSize),
+      })
+      if (deferredClassSearch) query.set("search", deferredClassSearch)
+      if (gradeFilter !== "all") query.set("grade_id", gradeFilter)
+      if (statusFilter !== "all") query.set("status", statusFilter)
+      return api<SchoolClass[]>(`/api/v1/academic-years/${id}/classes?${query}`)
+    },
     enabled: Number.isFinite(id),
   })
   const grades = useQuery({
     queryKey: ["grades"],
-    queryFn: () => api<Grade[]>("/api/v1/grades"),
+    queryFn: () => apiAllPages<Grade>("/api/v1/grades"),
   })
-  const filteredClasses = useMemo(() => {
-    const query = classSearch.trim().toLocaleLowerCase("zh-CN")
-    return (classes.data?.data ?? []).filter((item) => {
-      const matchesSearch =
-        !query || `${item.name} ${item.code ?? ""}`.toLocaleLowerCase("zh-CN").includes(query)
-      const matchesGrade = gradeFilter === "all" || String(item.grade_id) === gradeFilter
-      const matchesStatus = statusFilter === "all" || item.status === statusFilter
-      return matchesSearch && matchesGrade && matchesStatus
-    })
-  }, [classSearch, classes.data?.data, gradeFilter, statusFilter])
-  const classesPagination = useTablePagination(filteredClasses)
+  const classesPagination = classes.data?.meta?.pagination as PaginationMeta | undefined
+  const classTotal = classesPagination?.total ?? classes.data?.data.length ?? 0
+  const hasClassFilters = Boolean(
+    deferredClassSearch || gradeFilter !== "all" || statusFilter !== "all",
+  )
+  const didMountClassFilters = useRef(false)
+  useEffect(() => {
+    if (!didMountClassFilters.current) {
+      didMountClassFilters.current = true
+      return
+    }
+    setClassPage(1)
+  }, [deferredClassSearch, gradeFilter, statusFilter])
+  useEffect(() => {
+    setUrlParams(
+      (current) =>
+        mergeSearchParams(current, {
+          q: classSearch.trim() || null,
+          grade: gradeFilter === "all" ? null : gradeFilter,
+          status: statusFilter === "all" ? null : statusFilter,
+          page: classPage === 1 ? null : classPage,
+          per_page: classPageSize === 20 ? null : classPageSize,
+        }),
+      { replace: true },
+    )
+  }, [classPage, classPageSize, classSearch, gradeFilter, setUrlParams, statusFilter])
+  useEffect(() => {
+    if (classesPagination && classPage > Math.max(1, classesPagination.last_page)) {
+      setClassPage(Math.max(1, classesPagination.last_page))
+    }
+  }, [classPage, classesPagination])
   const semestersPagination = useTablePagination(semesters.data)
   const refreshAll = async () => {
     await Promise.all([
@@ -366,7 +409,7 @@ export function AcademicYearDetailPage() {
           <Button
             size="icon-sm"
             variant="ghost"
-            className="shrink-0 rounded-full"
+            className="shrink-0"
             aria-label="返回学年列表"
             onClick={() => navigate("/years")}
           >
@@ -383,7 +426,7 @@ export function AcademicYearDetailPage() {
             <span aria-hidden="true">·</span>
             <StatusBadge value={year.status} />
             <span aria-hidden="true">·</span>
-            <span>{classes.data?.data.length ?? 0} 个班级</span>
+            <span>{classTotal} 个班级</span>
             <span aria-hidden="true">·</span>
             <span>{semesters.data?.length ?? 0} 个学期</span>
           </div>
@@ -409,7 +452,7 @@ export function AcademicYearDetailPage() {
       <div className="p-5 md:p-7">
         <Tabs defaultValue="classes">
           <TabsList>
-            <TabsTrigger value="classes">班级（{classes.data?.data.length ?? 0}）</TabsTrigger>
+            <TabsTrigger value="classes">班级（{classTotal}）</TabsTrigger>
             <TabsTrigger value="semesters">学期（{semesters.data?.length ?? 0}/2）</TabsTrigger>
           </TabsList>
           <TabsContent
@@ -419,7 +462,6 @@ export function AcademicYearDetailPage() {
             <div className="flex items-center justify-between border-b p-3">
               <div>
                 <p className="font-medium">学年班级</p>
-                <p className="text-sm text-muted-foreground">班级属于学年，两个学期共用。</p>
               </div>
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => setImportOpen(true)}>
@@ -432,7 +474,7 @@ export function AcademicYearDetailPage() {
                 </Button>
               </div>
             </div>
-            {!classes.data?.data.length ? (
+            {!classes.data?.data.length && !hasClassFilters ? (
               <EmptyList
                 title="还没有班级"
                 description="可逐个新增，也可用固定表头的 UTF-8 CSV 批量导入。"
@@ -443,7 +485,7 @@ export function AcademicYearDetailPage() {
                   search={classSearch}
                   onSearchChange={setClassSearch}
                   searchPlaceholder="搜索班级名称或编号"
-                  summary={<span>共 {filteredClasses.length} 个班级</span>}
+                  summary={<span>共 {classTotal} 个班级</span>}
                 >
                   <ToolbarSelect value={gradeFilter} onChange={setGradeFilter} label="年级筛选">
                     <option value="all">全部年级</option>
@@ -459,58 +501,51 @@ export function AcademicYearDetailPage() {
                     <option value="inactive">已停用</option>
                   </ToolbarSelect>
                 </ListToolbar>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>班级</TableHead>
-                      <TableHead>年级</TableHead>
-                      <TableHead>编号</TableHead>
-                      <TableHead>状态</TableHead>
-                      <TableHead className="text-right">操作</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {classesPagination.items.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell className="font-medium">{item.name}</TableCell>
-                        <TableCell>{item.grade.name}</TableCell>
-                        <TableCell>{item.code || "—"}</TableCell>
-                        <TableCell>
-                          <StatusBadge value={item.status} />
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-primary"
-                            onClick={() => setClassModal(item)}
-                          >
-                            编辑
-                          </Button>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger
-                              render={
-                                <Button
-                                  variant="ghost"
-                                  size="icon-sm"
-                                  aria-label={`${item.name}更多操作`}
-                                />
-                              }
-                            >
-                              <MoreHorizontalIcon />
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => setClassModal(item)}>
-                                编辑班级
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
+                {classes.data?.data.length ? (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>班级</TableHead>
+                        <TableHead>年级</TableHead>
+                        <TableHead>编号</TableHead>
+                        <TableHead>状态</TableHead>
+                        <TableHead className="text-right">操作</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                <TablePagination {...classesPagination} />
+                    </TableHeader>
+                    <TableBody>
+                      {classes.data?.data.map((item) => (
+                        <TableRow key={item.id}>
+                          <TableCell className="font-medium">{item.name}</TableCell>
+                          <TableCell>{item.grade.name}</TableCell>
+                          <TableCell>{item.code || "—"}</TableCell>
+                          <TableCell>
+                            <StatusBadge value={item.status} />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <TableActionButton intent="edit" onClick={() => setClassModal(item)}>
+                              编辑
+                            </TableActionButton>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                ) : (
+                  <EmptyList title="没有匹配的班级" description="请调整搜索词或筛选条件。" />
+                )}
+                {classesPagination && classesPagination.total > 0 && (
+                  <TablePagination
+                    page={classesPagination.page}
+                    pageSize={classesPagination.per_page}
+                    totalItems={classesPagination.total}
+                    totalPages={classesPagination.last_page}
+                    onPageChange={setClassPage}
+                    onPageSizeChange={(value) => {
+                      setClassPageSize(value)
+                      setClassPage(1)
+                    }}
+                  />
+                )}
               </>
             )}
           </TabsContent>
@@ -553,7 +588,7 @@ export function AcademicYearDetailPage() {
             {!semesters.data?.length ? (
               <EmptyList
                 title="尚未创建学期"
-                description="先创建上下两个学期，再配置作息和教学任务。"
+                description="先创建上下两个学期，再配置作息和任课关系。"
               />
             ) : (
               <>
@@ -579,7 +614,7 @@ export function AcademicYearDetailPage() {
                         <TableCell className="text-right">
                           <Button
                             size="sm"
-                            variant="outline"
+                            variant="ghost"
                             nativeButton={false}
                             render={<Link to={`/semesters/${semester.id}/setup`} />}
                           >
@@ -595,14 +630,12 @@ export function AcademicYearDetailPage() {
                                 开放
                               </Button>
                               {user?.role === "admin" && (
-                                <Button
-                                  size="icon-sm"
-                                  variant="ghost"
-                                  aria-label={`删除${semester.name}`}
+                                <TableActionButton
+                                  intent="delete"
                                   onClick={() => void semesterAction(semester, "delete")}
                                 >
-                                  <Trash2Icon />
-                                </Button>
+                                  删除
+                                </TableActionButton>
                               )}
                             </>
                           )}
@@ -646,7 +679,7 @@ export function AcademicYearDetailPage() {
         {year.status === "draft" &&
           user?.role === "admin" &&
           !semesters.data?.length &&
-          !classes.data?.data.length && (
+          classTotal === 0 && (
             <div className="mt-6 flex justify-end">
               <Button variant="destructive" onClick={() => void yearAction("delete")}>
                 <Trash2Icon />
@@ -999,6 +1032,16 @@ interface PreviewRow {
   valid: boolean
   errors: { message: string }[]
 }
+interface PreviewPageData {
+  token?: string
+  rows: PreviewRow[]
+  valid_rows?: number[]
+  summary: { total: number; valid: number; invalid: number }
+}
+interface PreviewStartData extends PreviewPageData {
+  token: string
+  valid_rows: number[]
+}
 function CsvImportDialog({
   yearId,
   open,
@@ -1016,27 +1059,65 @@ function CsvImportDialog({
   const [token, setToken] = useState<string | null>(null)
   const [rows, setRows] = useState<PreviewRow[]>([])
   const [selected, setSelected] = useState<number[]>([])
-  const pagination = useTablePagination(rows, 10)
+  const [summary, setSummary] = useState({ total: 0, valid: 0, invalid: 0 })
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
+  const [pagination, setPagination] = useState<PaginationMeta | null>(null)
+  const [rowsLoading, setRowsLoading] = useState(false)
+  const [rowsError, setRowsError] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
   useEffect(() => {
     if (!open) {
       setFile(null)
       setToken(null)
       setRows([])
       setSelected([])
+      setSummary({ total: 0, valid: 0, invalid: 0 })
+      setPage(1)
+      setPageSize(20)
+      setPagination(null)
+      setRowsError(false)
     }
   }, [open])
+  useEffect(() => {
+    if (!token) return
+    let active = true
+    setRowsLoading(true)
+    setRowsError(false)
+    void api<PreviewPageData>(
+      `/api/v1/academic-years/${yearId}/classes/import/preview?token=${encodeURIComponent(token)}&page=${page}&per_page=${pageSize}`,
+    )
+      .then((result) => {
+        if (!active) return
+        setRows(result.data.rows)
+        setSummary(result.data.summary)
+        setPagination((result.meta?.pagination as PaginationMeta | undefined) ?? null)
+      })
+      .catch(() => {
+        if (active) setRowsError(true)
+      })
+      .finally(() => {
+        if (active) setRowsLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [page, pageSize, reloadKey, token, yearId])
   const preview = async () => {
     if (!file) return
     const data = new FormData()
     data.append("file", file)
     try {
-      const result = await api<{ token: string; rows: PreviewRow[] }>(
+      const result = await api<PreviewStartData>(
         `/api/v1/academic-years/${yearId}/classes/import/preview`,
         { method: "POST", body: data, formData: true },
       )
       setToken(result.data.token)
       setRows(result.data.rows)
-      setSelected(result.data.rows.filter((row) => row.valid).map((row) => row.row))
+      setSelected(result.data.valid_rows ?? [])
+      setSummary(result.data.summary)
+      setPage(1)
+      setPagination((result.meta?.pagination as PaginationMeta | undefined) ?? null)
     } catch (error) {
       toast.error(apiMessage(error))
     }
@@ -1080,6 +1161,26 @@ function CsvImportDialog({
           </div>
         ) : (
           <div className="overflow-hidden rounded-2xl border">
+            <div className="flex flex-wrap items-center gap-2 border-b bg-muted/20 px-4 py-2 text-sm">
+              <span>共 {summary.total} 行</span>
+              <span className="text-emerald-700">{summary.valid} 行可导入</span>
+              {summary.invalid > 0 && (
+                <span className="text-destructive">{summary.invalid} 行需修正</span>
+              )}
+              {rowsLoading && (
+                <span className="ml-auto text-muted-foreground">正在加载当前页…</span>
+              )}
+              {rowsError && (
+                <Button
+                  className="ml-auto"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setReloadKey((value) => value + 1)}
+                >
+                  当前页加载失败，重试
+                </Button>
+              )}
+            </div>
             <div className="max-h-80 overflow-auto">
               <Table>
                 <TableHeader>
@@ -1093,8 +1194,11 @@ function CsvImportDialog({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {pagination.items.map((row) => (
-                    <TableRow key={row.row}>
+                  {rows.map((row) => (
+                    <TableRow
+                      key={row.row}
+                      data-state={selected.includes(row.row) ? "selected" : undefined}
+                    >
                       <TableCell>
                         <Checkbox
                           disabled={!row.valid}
@@ -1126,7 +1230,19 @@ function CsvImportDialog({
                 </TableBody>
               </Table>
             </div>
-            <TablePagination {...pagination} />
+            {pagination && pagination.total > 0 && (
+              <TablePagination
+                page={pagination.page}
+                pageSize={pagination.per_page}
+                totalItems={pagination.total}
+                totalPages={pagination.last_page}
+                onPageChange={setPage}
+                onPageSizeChange={(value) => {
+                  setPageSize(value)
+                  setPage(1)
+                }}
+              />
+            )}
           </div>
         )}
         <DialogFooter>

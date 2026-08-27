@@ -11,7 +11,7 @@ use App\Modules\ScheduleTemplate\Models\Item;
 use App\Modules\ScheduleTemplate\Models\ScheduleTemplate;
 use App\Modules\ScheduleTemplate\Models\ScheduleTemplateDay;
 use App\Modules\ScheduleTemplate\Services\ScheduleValidator;
-use App\Modules\TeachingTask\Services\CapacityService;
+use App\Modules\TeachingAssignment\Services\CapacityService;
 use App\Modules\Timetable\Models\TimetableEntry;
 use App\Support\ApiProblemException;
 use App\Support\EtagService;
@@ -122,8 +122,7 @@ class ScheduleTemplateController
                 $this->capacity->assertCanConfirm($lockedSemester, collect());
             }
             if ($before !== $template->toArray()) {
-                $lockedSemester->increment('timetable_revision');
-                $lockedSemester->refresh();
+                $this->bumpInputRevision($lockedSemester);
                 $this->audit->record($request, $actor, 'put', 'schedule_template', $template->id, $before, $template->toArray());
             }
 
@@ -145,8 +144,7 @@ class ScheduleTemplateController
             $template = $lockedSemester->scheduleTemplate()->with(['days', 'items'])->firstOrFail();
             $before = $template->toArray();
             $template->delete();
-            $lockedSemester->increment('timetable_revision');
-            $lockedSemester->refresh();
+            $this->bumpInputRevision($lockedSemester);
             $this->audit->record($request, $actor, 'delete', 'schedule_template', $template->id, $before, null);
 
             return response()->json(['data' => ['deleted' => true], 'meta' => $this->meta($lockedSemester, $settings)])
@@ -180,8 +178,7 @@ class ScheduleTemplateController
                     'counts_as_course', 'show_in_official', 'show_in_full', 'is_active',
                 ]), ['schedule_template_id' => $template->id, 'semester_id' => $target->id]));
             }
-            $target->increment('timetable_revision');
-            $target->refresh();
+            $this->bumpInputRevision($target);
             $template->load(['days', 'items']);
             $this->audit->record($request, $actor, 'copy', 'schedule_template', $template->id, null, ['source_semester_id' => $source->id]);
 
@@ -238,12 +235,20 @@ class ScheduleTemplateController
         }, array_values($value));
     }
 
+    private function bumpInputRevision(Semester $semester): void
+    {
+        $semester->increment('input_revision');
+        $semester->increment('timetable_revision');
+        $semester->refresh();
+    }
+
     /** @return array<string, int|string> */
     private function meta(Semester $semester, AppSetting $settings): array
     {
         return [
             'semester_id' => $semester->id,
             'timetable_revision' => (string) $semester->getRawOriginal('timetable_revision'),
+            'input_revision' => (string) $semester->getRawOriginal('input_revision'),
             'catalog_revision' => (string) $settings->getRawOriginal('catalog_revision'),
         ];
     }

@@ -1,0 +1,131 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900">
+  <defs>
+    <style>
+      .ui { font-family: Arial-Unicode-MS, sans-serif; }
+      .title { fill: #111827; font-size: 30px; font-weight: 650; letter-spacing: -0.5px; }
+      .eyebrow { fill: #667085; font-size: 13px; font-weight: 650; letter-spacing: 1.8px; }
+      .name { fill: #111827; font-size: 22px; font-weight: 650; }
+      .body { fill: #667085; font-size: 14px; }
+      .caption { fill: #98A2B3; font-size: 12px; }
+      .lockup-title { fill: #101828; font-size: 18px; font-weight: 650; }
+      .lockup-subtitle { fill: #667085; font-size: 11px; }
+    </style>
+
+    <symbol id="mark-rhythm" viewBox="0 0 64 64">
+      <path d="M15 10v37c0 5-2 7-7 7M8 23h14M8 38h14" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M34 10v44M49 10v44M27 17h7M49 17h7M27 32h7M49 32h7M27 47h7M49 47h7" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="mark-route" viewBox="0 0 64 64">
+      <rect x="8" y="10" width="48" height="14" rx="7" fill="currentColor"/>
+      <rect x="8" y="30" width="21" height="24" rx="8" fill="currentColor"/>
+      <rect x="35" y="30" width="21" height="24" rx="8" fill="currentColor"/>
+    </symbol>
+    <symbol id="mark-interlock" viewBox="0 0 64 64">
+      <rect x="9" y="9" width="46" height="46" rx="12" fill="none" stroke="currentColor" stroke-width="6"/>
+      <path d="M16 27h13v10h19" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+  </defs>
+
+  <rect width="1440" height="900" fill="#F8F8F6"/>
+  <g class="ui">
+    <text x="64" y="64" class="eyebrow">LOGO EXPLORATION · SVG</text>
+    <text x="64" y="106" class="title">同一个方向，三次造型收敛</text>
+    <text x="64" y="138" class="body">只检验“编排路径”的轮廓、负形和小尺寸识别；暂不使用颜色修饰。</text>
+
+    <line x1="480" y1="190" x2="480" y2="836" stroke="#E1E4EA"/>
+    <line x1="960" y1="190" x2="960" y2="836" stroke="#E1E4EA"/>
+
+    <g transform="translate(64 200)">
+      <text x="0" y="0" class="eyebrow">方向 1</text>
+      <text x="0" y="40" class="name">排字</text>
+      <text x="0" y="68" class="body">为“排课”定制的极简中文字形</text>
+
+      <use href="#mark-rhythm" x="86" y="108" width="180" height="180" color="#111827"/>
+
+      <text x="0" y="340" class="caption">小尺寸</text>
+      <use href="#mark-rhythm" x="0" y="360" width="64" height="64" color="#111827"/>
+      <use href="#mark-rhythm" x="90" y="376" width="32" height="32" color="#111827"/>
+      <use href="#mark-rhythm" x="151" y="380" width="24" height="24" color="#111827"/>
+      <use href="#mark-rhythm" x="204" y="384" width="16" height="16" color="#111827"/>
+      <text x="0" y="444" class="caption">64</text>
+      <text x="95" y="444" class="caption">32</text>
+      <text x="154" y="444" class="caption">24</text>
+      <text x="205" y="444" class="caption">16</text>
+
+      <text x="0" y="506" class="caption">品牌组合</text>
+      <use href="#mark-rhythm" x="0" y="528" width="48" height="48" color="#111827"/>
+      <text x="64" y="548" class="lockup-title">教务排课中心</text>
+      <text x="64" y="568" class="lockup-subtitle">学校教务工作台</text>
+
+      <text x="0" y="632" class="caption">反白与侧栏</text>
+      <rect x="0" y="650" width="64" height="64" rx="16" fill="#111827"/>
+      <use href="#mark-rhythm" x="14" y="664" width="36" height="36" color="#FFFFFF"/>
+      <rect x="90" y="650" width="230" height="64" rx="10" fill="#FFFFFF" stroke="#E1E4EA"/>
+      <use href="#mark-rhythm" x="104" y="664" width="36" height="36" color="#111827"/>
+      <text x="152" y="678" class="lockup-title" font-size="14">教务排课中心</text>
+      <text x="152" y="696" class="lockup-subtitle">学校教务工作台</text>
+    </g>
+
+    <g transform="translate(544 200)">
+      <text x="0" y="0" class="eyebrow">方向 2</text>
+      <text x="0" y="40" class="name">课格</text>
+      <text x="0" y="68" class="body">三个课节组成隐藏的 Timetable T</text>
+
+      <use href="#mark-route" x="86" y="108" width="180" height="180" color="#111827"/>
+
+      <text x="0" y="340" class="caption">小尺寸</text>
+      <use href="#mark-route" x="0" y="360" width="64" height="64" color="#111827"/>
+      <use href="#mark-route" x="90" y="376" width="32" height="32" color="#111827"/>
+      <use href="#mark-route" x="151" y="380" width="24" height="24" color="#111827"/>
+      <use href="#mark-route" x="204" y="384" width="16" height="16" color="#111827"/>
+      <text x="0" y="444" class="caption">64</text>
+      <text x="95" y="444" class="caption">32</text>
+      <text x="154" y="444" class="caption">24</text>
+      <text x="205" y="444" class="caption">16</text>
+
+      <text x="0" y="506" class="caption">品牌组合</text>
+      <use href="#mark-route" x="0" y="528" width="48" height="48" color="#111827"/>
+      <text x="64" y="548" class="lockup-title">教务排课中心</text>
+      <text x="64" y="568" class="lockup-subtitle">学校教务工作台</text>
+
+      <text x="0" y="632" class="caption">反白与侧栏</text>
+      <rect x="0" y="650" width="64" height="64" rx="16" fill="#111827"/>
+      <use href="#mark-route" x="14" y="664" width="36" height="36" color="#FFFFFF"/>
+      <rect x="90" y="650" width="230" height="64" rx="10" fill="#FFFFFF" stroke="#E1E4EA"/>
+      <use href="#mark-route" x="104" y="664" width="36" height="36" color="#111827"/>
+      <text x="152" y="678" class="lockup-title" font-size="14">教务排课中心</text>
+      <text x="152" y="696" class="lockup-subtitle">学校教务工作台</text>
+    </g>
+
+    <g transform="translate(1024 200)">
+      <text x="0" y="0" class="eyebrow">方向 3</text>
+      <text x="0" y="40" class="name">日序</text>
+      <text x="0" y="68" class="body">课表容器中的一条编排路径</text>
+
+      <use href="#mark-interlock" x="86" y="108" width="180" height="180" color="#111827"/>
+
+      <text x="0" y="340" class="caption">小尺寸</text>
+      <use href="#mark-interlock" x="0" y="360" width="64" height="64" color="#111827"/>
+      <use href="#mark-interlock" x="90" y="376" width="32" height="32" color="#111827"/>
+      <use href="#mark-interlock" x="151" y="380" width="24" height="24" color="#111827"/>
+      <use href="#mark-interlock" x="204" y="384" width="16" height="16" color="#111827"/>
+      <text x="0" y="444" class="caption">64</text>
+      <text x="95" y="444" class="caption">32</text>
+      <text x="154" y="444" class="caption">24</text>
+      <text x="205" y="444" class="caption">16</text>
+
+      <text x="0" y="506" class="caption">品牌组合</text>
+      <use href="#mark-interlock" x="0" y="528" width="48" height="48" color="#111827"/>
+      <text x="64" y="548" class="lockup-title">教务排课中心</text>
+      <text x="64" y="568" class="lockup-subtitle">学校教务工作台</text>
+
+      <text x="0" y="632" class="caption">反白与侧栏</text>
+      <rect x="0" y="650" width="64" height="64" rx="16" fill="#111827"/>
+      <use href="#mark-interlock" x="14" y="664" width="36" height="36" color="#FFFFFF"/>
+      <rect x="90" y="650" width="230" height="64" rx="10" fill="#FFFFFF" stroke="#E1E4EA"/>
+      <use href="#mark-interlock" x="104" y="664" width="36" height="36" color="#111827"/>
+      <text x="152" y="678" class="lockup-title" font-size="14">教务排课中心</text>
+      <text x="152" y="696" class="lockup-subtitle">学校教务工作台</text>
+    </g>
+  </g>
+</svg>

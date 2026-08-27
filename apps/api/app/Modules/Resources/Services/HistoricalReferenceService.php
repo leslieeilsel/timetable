@@ -19,11 +19,11 @@ class HistoricalReferenceService
                 ->where('school_classes.id', $id)
                 ->where('semesters.status', 'closed')
                 ->exists(),
-            'teacher' => $this->closedSemesterReference('teaching_tasks', 'teacher_id', $id)
+            'teacher' => $this->closedSemesterReference('teaching_assignments', 'teacher_id', $id)
                 || $this->closedSemesterReference('semester_class_settings', 'homeroom_teacher_id', $id),
-            'course' => $this->closedSemesterReference('teaching_tasks', 'course_id', $id),
+            'course' => $this->closedSemesterReference('teaching_assignments', 'course_id', $id),
             'room' => $this->closedSemesterReference('semester_class_settings', 'fixed_room_id', $id)
-                || $this->closedSemesterReference('teaching_tasks', 'specified_room_id', $id)
+                || $this->closedSemesterReference('teaching_assignments', 'specified_room_id', $id)
                 || $this->closedSemesterReference('timetable_entries', 'actual_room_id', $id),
             default => false,
         };

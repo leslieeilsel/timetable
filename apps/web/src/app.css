@@ -1,0 +1,64 @@
+.surface-panel {
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--card);
+}
+
+.data-toolbar {
+  display: flex;
+  min-height: 3.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.625rem;
+  border-bottom: 1px solid var(--border);
+  padding: 0.75rem 1rem;
+}
+
+.status-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  flex: none;
+  border-radius: 9999px;
+}
+
+@media print {
+  @page {
+    size: landscape;
+    margin: 10mm;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  [data-print-area],
+  [data-print-area] * {
+    visibility: visible !important;
+  }
+
+  [data-print-area] {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    color: #111827;
+  }
+
+  [data-print-heading] {
+    display: block !important;
+    margin-bottom: 12px;
+  }
+
+  [data-print-area] .overflow-auto {
+    overflow: visible !important;
+  }
+
+  [data-print-area] table {
+    min-width: 0 !important;
+    font-size: 9px;
+  }
+
+  [data-print-area] td,
+  [data-print-area] th {
+    break-inside: avoid;
+  }
+}

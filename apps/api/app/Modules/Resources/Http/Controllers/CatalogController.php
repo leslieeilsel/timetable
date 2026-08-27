@@ -16,6 +16,7 @@ use App\Support\ApiProblemException;
 use App\Support\EtagService;
 use App\Support\Normalizer;
 use App\Support\WriteGuard;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
@@ -43,9 +44,14 @@ class CatalogController
         ]])->header('ETag', $this->etags->catalog($settings));
     }
 
-    public function grades(): JsonResponse
+    public function grades(Request $request): JsonResponse
     {
-        return $this->list(Grade::query()->orderBy('sort_order')->get()->all());
+        $filters = $request->validate($this->listRules(['sort_order', 'name', 'created_at']));
+        $query = Grade::query()
+            ->when(isset($filters['search']), fn (Builder $query) => $query->where('name', 'like', '%'.Normalizer::text($filters['search']).'%'));
+        $this->applyActiveFilter($query, $filters);
+
+        return $this->paginatedList($query, $filters, 'sort_order');
     }
 
     public function storeGrade(Request $request): JsonResponse
@@ -85,11 +91,25 @@ class CatalogController
         return $this->delete($request, $grade, 'grade');
     }
 
-    public function teachers(): JsonResponse
+    public function teachers(Request $request): JsonResponse
     {
-        $items = Teacher::query()->with('courses:id,name')->orderBy('name')->get()->all();
+        $filters = $request->validate([
+            ...$this->listRules(['name', 'employee_no', 'created_at']),
+            'course_id' => ['sometimes', 'integer', 'exists:courses,id'],
+        ]);
+        $query = Teacher::query()->with('courses:id,name')
+            ->when(isset($filters['search']), function (Builder $query) use ($filters): void {
+                $search = '%'.Normalizer::text($filters['search']).'%';
+                $query->where(fn (Builder $match) => $match->where('name', 'like', $search)
+                    ->orWhere('employee_no', 'like', $search));
+            })
+            ->when(isset($filters['course_id']), fn (Builder $query) => $query->whereHas(
+                'courses',
+                fn (Builder $courses) => $courses->whereKey((int) $filters['course_id']),
+            ));
+        $this->applyActiveFilter($query, $filters);
 
-        return $this->list($items);
+        return $this->paginatedList($query, $filters, 'name');
     }
 
     public function storeTeacher(Request $request): JsonResponse
@@ -154,9 +174,18 @@ class CatalogController
         return $this->delete($request, $teacher, 'teacher');
     }
 
-    public function courses(): JsonResponse
+    public function courses(Request $request): JsonResponse
     {
-        return $this->list(Course::query()->orderBy('name')->get()->all());
+        $filters = $request->validate($this->listRules(['name', 'short_name', 'created_at']));
+        $query = Course::query()
+            ->when(isset($filters['search']), function (Builder $query) use ($filters): void {
+                $search = '%'.Normalizer::text($filters['search']).'%';
+                $query->where(fn (Builder $match) => $match->where('name', 'like', $search)
+                    ->orWhere('short_name', 'like', $search));
+            });
+        $this->applyActiveFilter($query, $filters);
+
+        return $this->paginatedList($query, $filters, 'name');
     }
 
     public function storeCourse(Request $request): JsonResponse
@@ -199,9 +228,18 @@ class CatalogController
         return $this->delete($request, $course, 'course');
     }
 
-    public function rooms(): JsonResponse
+    public function rooms(Request $request): JsonResponse
     {
-        return $this->list(Room::query()->orderBy('name')->get()->all());
+        $filters = $request->validate([
+            ...$this->listRules(['name', 'type', 'created_at']),
+            'type' => ['sometimes', Rule::enum(RoomType::class)],
+        ]);
+        $query = Room::query()
+            ->when(isset($filters['search']), fn (Builder $query) => $query->where('name', 'like', '%'.Normalizer::text($filters['search']).'%'))
+            ->when(isset($filters['type']), fn (Builder $query) => $query->where('type', $filters['type']));
+        $this->applyActiveFilter($query, $filters);
+
+        return $this->paginatedList($query, $filters, 'name');
     }
 
     public function storeRoom(Request $request): JsonResponse
@@ -241,13 +279,62 @@ class CatalogController
         return $this->delete($request, $room, 'room');
     }
 
-    /** @param list<Model> $models */
-    private function list(array $models): JsonResponse
+    /**
+     * @template TModel of Model
+     *
+     * @param  Builder<TModel>  $query
+     * @param  array<string, mixed>  $filters
+     */
+    private function paginatedList(Builder $query, array $filters, string $defaultSort): JsonResponse
     {
         $settings = AppSetting::query()->findOrFail(1);
+        $sort = (string) ($filters['sort'] ?? $defaultSort);
+        $direction = (string) ($filters['direction'] ?? 'asc');
+        $paginator = $query->orderBy($sort, $direction)->orderBy('id')->paginate((int) ($filters['per_page'] ?? 20));
 
-        return response()->json(['data' => collect($models)->map(fn (Model $model) => $this->serialize($model))->values()])
+        return response()->json([
+            'data' => collect($paginator->items())->map(fn (Model $model) => $this->serialize($model))->values(),
+            'meta' => [
+                'pagination' => [
+                    'page' => $paginator->currentPage(),
+                    'per_page' => $paginator->perPage(),
+                    'total' => $paginator->total(),
+                    'last_page' => $paginator->lastPage(),
+                    'from' => $paginator->firstItem(),
+                    'to' => $paginator->lastItem(),
+                ],
+            ],
+        ])
             ->header('ETag', $this->etags->catalog($settings));
+    }
+
+    /**
+     * @param  list<string>  $sorts
+     * @return array<string, list<mixed>>
+     */
+    private function listRules(array $sorts): array
+    {
+        return [
+            'search' => ['sometimes', 'string', 'max:100'],
+            'status' => ['sometimes', Rule::in(['active', 'inactive'])],
+            'sort' => ['sometimes', Rule::in($sorts)],
+            'direction' => ['sometimes', Rule::in(['asc', 'desc'])],
+            'page' => ['sometimes', 'integer', 'min:1'],
+            'per_page' => ['sometimes', 'integer', Rule::in([20, 50, 100])],
+        ];
+    }
+
+    /**
+     * @template TModel of Model
+     *
+     * @param  Builder<TModel>  $query
+     * @param  array<string, mixed>  $filters
+     */
+    private function applyActiveFilter(Builder $query, array $filters): void
+    {
+        if (isset($filters['status'])) {
+            $query->where('is_active', $filters['status'] === 'active');
+        }
     }
 
     /**

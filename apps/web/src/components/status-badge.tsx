@@ -8,12 +8,13 @@ const labels: Record<string, string> = {
   active: "启用",
   inactive: "停用",
   confirmed: "已确认",
+  cancelled: "已取消",
   admin: "管理员",
   scheduler: "排课员",
   viewer: "查看者",
 }
 
-export function StatusBadge({ value }: { value: string }) {
+export function StatusBadge({ value, label }: { value: string; label?: string }) {
   if (["admin", "scheduler", "viewer"].includes(value)) {
     return (
       <Badge
@@ -23,7 +24,7 @@ export function StatusBadge({ value }: { value: string }) {
           value === "admin" && "border-primary/35 text-primary",
         )}
       >
-        {labels[value]}
+        {label ?? labels[value]}
       </Badge>
     )
   }
@@ -34,7 +35,7 @@ export function StatusBadge({ value }: { value: string }) {
         "inline-flex items-center gap-2 text-sm font-medium whitespace-nowrap",
         ["open", "active", "confirmed"].includes(value) && "text-emerald-700",
         value === "draft" && "text-amber-700",
-        ["closed", "inactive"].includes(value) && "text-slate-500",
+        ["closed", "inactive", "cancelled"].includes(value) && "text-slate-500",
       )}
     >
       <span
@@ -42,10 +43,10 @@ export function StatusBadge({ value }: { value: string }) {
           "status-dot",
           ["open", "active", "confirmed"].includes(value) && "bg-emerald-500",
           value === "draft" && "bg-amber-500",
-          ["closed", "inactive"].includes(value) && "bg-slate-400",
+          ["closed", "inactive", "cancelled"].includes(value) && "bg-slate-400",
         )}
       />
-      {labels[value] ?? value}
+      {label ?? labels[value] ?? value}
     </span>
   )
 }

@@ -74,6 +74,12 @@ it('builds a semester and rejects a teacher conflict in the same slot', function
     $courseB = $response->json('data');
     $catalogEtag = $response->headers->get('ETag');
 
+    $response = $this->withHeader('If-Match', $catalogEtag)
+        ->putJson("/api/v1/teachers/{$teacher['id']}/courses", [
+            'course_ids' => [$courseA['id'], $courseB['id']],
+        ])->assertOk();
+    $catalogEtag = $response->headers->get('ETag');
+
     $response = $this->withHeader('If-Match', $catalogEtag)->postJson('/api/v1/rooms', [
         'name' => '101 教室', 'type' => 'classroom',
     ])->assertCreated();
@@ -146,41 +152,48 @@ it('builds a semester and rejects a teacher conflict in the same slot', function
         ->assertOk();
     $semesterEtag = $response->headers->get('ETag');
 
-    $response = $this->withHeader('If-Match', $semesterEtag)->postJson("/api/v1/semesters/{$semesterA['id']}/teaching-tasks", [
+    $response = $this->withHeader('If-Match', $semesterEtag)->postJson("/api/v1/semesters/{$semesterA['id']}/teaching-assignments", [
         'school_class_id' => $classA['id'], 'course_id' => $courseA['id'], 'teacher_id' => $teacher['id'],
         'weekly_items' => 1, 'room_mode' => 'class_default',
     ])->assertCreated();
-    $taskA = $response->json('data');
+    $assignmentA = $response->json('data');
     $semesterEtag = $response->headers->get('ETag');
 
-    $response = $this->withHeader('If-Match', $semesterEtag)->postJson("/api/v1/semesters/{$semesterA['id']}/teaching-tasks", [
+    $response = $this->withHeader('If-Match', $semesterEtag)->postJson("/api/v1/semesters/{$semesterA['id']}/teaching-assignments", [
         'school_class_id' => $classB['id'], 'course_id' => $courseB['id'], 'teacher_id' => $teacher['id'],
         'weekly_items' => 1, 'room_mode' => 'class_default',
     ])->assertCreated();
-    $taskB = $response->json('data');
+    $assignmentB = $response->json('data');
     $semesterEtag = $response->headers->get('ETag');
 
-    $response = $this->withHeader('If-Match', $semesterEtag)->postJson("/api/v1/semesters/{$semesterA['id']}/teaching-tasks/confirm", [
-        'task_ids' => [$taskA['id'], $taskB['id']],
+    $response = $this->withHeader('If-Match', $semesterEtag)->postJson("/api/v1/semesters/{$semesterA['id']}/teaching-assignments/confirm", [
+        'assignment_ids' => [$assignmentA['id'], $assignmentB['id']],
     ])->assertOk();
     $semesterEtag = $response->headers->get('ETag');
 
     $itemId = $template['items'][0]['id'];
     $response = $this->withHeader('If-Match', $semesterEtag)->postJson("/api/v1/semesters/{$semesterA['id']}/timetable/entries", [
-        'teaching_task_id' => $taskA['id'], 'weekday' => 1, 'item_id' => $itemId,
+        'teaching_assignment_id' => $assignmentA['id'], 'weekday' => 1, 'item_id' => $itemId,
     ])->assertCreated();
     $semesterEtag = $response->headers->get('ETag');
 
     $this->withHeader('If-Match', $semesterEtag)->postJson("/api/v1/semesters/{$semesterA['id']}/timetable/entries", [
-        'teaching_task_id' => $taskB['id'], 'weekday' => 1, 'item_id' => $itemId,
+        'teaching_assignment_id' => $assignmentB['id'], 'weekday' => 1, 'item_id' => $itemId,
     ])->assertStatus(409)
-        ->assertJsonPath('code', 'TIMETABLE_RESOURCE_CONFLICT')
-        ->assertJsonPath('conflicts.0.resource_type', 'teacher');
+        ->assertJsonPath('code', 'TIMETABLE_PLACEMENT_NOT_ALLOWED')
+        ->assertJsonPath('diagnostics.hard_conflicts.0.type', 'teacher')
+        ->assertJsonPath('diagnostics.hard_conflicts.0.resource_name', '陈老师');
 
     $export = $this->get("/api/v1/semesters/{$semesterA['id']}/timetable/export.csv?view=class&resource_id={$classA['id']}&mode=official")
         ->assertOk();
     expect($export->headers->get('content-type'))->toContain('text/csv')
+        ->and($export->streamedContent())->toContain('2026-2027 学年')
         ->and($export->streamedContent())->toContain('一年级 1 班');
+
+    $this->get("/api/v1/semesters/{$semesterA['id']}/timetable/export.xlsx?view=class&resource_id={$classA['id']}&mode=official")
+        ->assertOk()
+        ->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        ->assertDownload("timetable-semester-{$semesterA['id']}-v1-class-{$classA['id']}.xlsx");
 
     $this->putJson('/api/v1/context/current-semester', ['semester_id' => $semesterA['id']])
         ->assertOk()
@@ -192,7 +205,7 @@ it('builds a semester and rejects a teacher conflict in the same slot', function
     $this->getJson('/api/v1/context')->assertOk()->assertJsonPath('data.current_semester', null);
     $this->withHeader('If-Match', $closed->headers->get('ETag'))
         ->postJson("/api/v1/semesters/{$semesterA['id']}/timetable/entries", [
-            'teaching_task_id' => $taskA['id'], 'weekday' => 2, 'item_id' => $itemId,
+            'teaching_assignment_id' => $assignmentA['id'], 'weekday' => 2, 'item_id' => $itemId,
         ])
         ->assertStatus(409)
         ->assertJsonPath('code', 'SEMESTER_NOT_EDITABLE');

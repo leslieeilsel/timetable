@@ -16,7 +16,7 @@
 | 08 | `/years` | 学年与班级 | [08-academic-years.png](08-academic-years.png) |
 | 09 | `/years/:yearId` | 学年详情 | [09-academic-year-detail.png](09-academic-year-detail.png) |
 | 10 | `/semester/setup`、`/semesters/:semesterId/setup` | 学期配置 | [10-semester-setup.png](10-semester-setup.png) |
-| 11 | `/semester/tasks`、`/semesters/:semesterId/tasks` | 教学任务 | [11-teaching-tasks.png](11-teaching-tasks.png) |
+| 11 | `/semester/assignments`、`/semesters/:semesterId/assignments` | 任课关系 | [11-teaching-assignments.png](11-teaching-assignments.png) |
 | 12 | `/semester/timetable`、`/semesters/:semesterId/timetable` | 排课工作台 | [12-timetable.png](12-timetable.png) |
 | 13 | `/users` | 用户管理 | [13-users.png](13-users.png) |
 | 14 | `/settings` | 系统设置 | [14-settings.png](14-settings.png) |
@@ -33,7 +33,7 @@
 ## 列表与分页规范
 
 - 所有可能增长的数据表格都保留分页区，显示总数、每页条数、当前页和前后翻页。
-- 教师、课程、教室、班级、教学任务、用户等列表按真实查找需求提供搜索和必要筛选。
+- 教师、课程、教室、班级、任课关系、用户等列表按真实查找需求提供搜索和必要筛选。
 - 年级、学年等小集合不强塞搜索框，但仍沿用一致的分页位置和交互结构。
 - 筛选、排序和分页属于同一查询状态；翻页后必须保留搜索条件和排序。
 - 表头在长列表滚动时固定，行操作位置统一，删除和停用不作为高亮主操作。
@@ -44,7 +44,7 @@
 - 工作台回答“当前进度、下一步、是否有阻塞”，不展示无决策价值的装饰图表。
 - 基础资料使用可展开父菜单和独立子页面，避免把不同对象塞进页内标签页。
 - 学年详情、学期配置保留业务内部标签页，因为它们属于同一上下文中的紧密步骤。
-- 教学任务用高密度表格和批量确认承载大数据，不将每条任务做成卡片。
+- 任课关系用高密度表格和批量确认承载大数据，不将每条任务做成卡片。
 - 排课工作台以周课表网格为唯一视觉主角；班级、教师、教室只是观察视角。
 - 系统设置只包含当前系统已有的“当前学期”和“学校时区”，不虚构设置项。
 

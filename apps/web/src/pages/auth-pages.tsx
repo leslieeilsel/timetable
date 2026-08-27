@@ -4,20 +4,14 @@ import { useForm } from "react-hook-form"
 import { Navigate, useNavigate } from "react-router"
 import { toast } from "sonner"
 import { z } from "zod"
-import {
-  ArrowLeftIcon,
-  CheckCircle2Icon,
-  CircleIcon,
-  EyeIcon,
-  EyeOffIcon,
-  GalleryVerticalEndIcon,
-} from "lucide-react"
+import { ArrowLeftIcon, CheckCircle2Icon, CircleIcon, EyeIcon, EyeOffIcon } from "lucide-react"
 import { useAuth } from "@/lib/auth"
 import { api, apiMessage, jsonBody } from "@/lib/api"
 import type { User } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Field } from "@/components/page"
+import { Brand } from "@/components/brand"
 
 const loginSchema = z.object({
   email: z.email("请输入有效邮箱"),
@@ -56,7 +50,7 @@ export function LoginPage() {
             变成清晰的工作流程。
           </p>
           <p className="mt-6 text-lg text-muted-foreground">
-            基础资料、学期配置、教学任务与课表统一管理。
+            基础资料、学期配置、任课关系与课表统一管理。
           </p>
         </div>
         <img
@@ -84,7 +78,6 @@ export function LoginPage() {
                 type="email"
                 autoComplete="username"
                 placeholder="name@school.edu"
-                className="h-14"
                 {...form.register("email")}
               />
             </Field>
@@ -93,7 +86,7 @@ export function LoginPage() {
                 <Input
                   type={showPassword ? "text" : "password"}
                   autoComplete="current-password"
-                  className="h-14 pr-11"
+                  className="pr-10"
                   {...form.register("password")}
                 />
                 <button
@@ -112,8 +105,7 @@ export function LoginPage() {
             </Field>
             <Button
               type="submit"
-              size="lg"
-              className="mt-2 h-14 w-full lg:mt-4"
+              className="mt-2 w-full lg:mt-4"
               disabled={form.formState.isSubmitting}
             >
               {form.formState.isSubmitting ? "正在登录…" : "登录"}
@@ -243,29 +235,11 @@ export function ChangePasswordPage() {
   )
 }
 
-function Brand({ large = false }: { large?: boolean }) {
-  return (
-    <div className={`flex items-center ${large ? "gap-5" : "gap-4"}`}>
-      <div
-        className={`flex items-center justify-center rounded-full bg-neutral-950 text-white ${large ? "size-16" : "size-12"}`}
-      >
-        <GalleryVerticalEndIcon className={large ? "size-7" : "size-5"} />
-      </div>
-      <div>
-        <p className={`${large ? "text-2xl" : "text-xl"} font-semibold tracking-tight`}>
-          教务排课中心
-        </p>
-        <p className={`${large ? "text-base" : "text-sm"} text-muted-foreground`}>学校教务工作台</p>
-      </div>
-    </div>
-  )
-}
-
 function PasswordInput(props: React.ComponentProps<typeof Input>) {
   const [visible, setVisible] = useState(false)
   return (
     <div className="relative">
-      <Input {...props} type={visible ? "text" : "password"} className="h-14 pr-11" />
+      <Input {...props} type={visible ? "text" : "password"} className="pr-10" />
       <button
         type="button"
         className="absolute top-1/2 right-3 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"

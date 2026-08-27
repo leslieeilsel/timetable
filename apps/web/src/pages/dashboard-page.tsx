@@ -1,9 +1,9 @@
 import { Link } from "react-router"
 import { useQuery } from "@tanstack/react-query"
 import { ArrowRightIcon, CalendarDaysIcon, CheckIcon, ClipboardCheckIcon } from "lucide-react"
-import { api } from "@/lib/api"
+import { api, apiAllPages } from "@/lib/api"
 import { useAuth } from "@/lib/auth"
-import type { ClassSetting, ScheduleTemplate, Semester, TeachingTask } from "@/lib/types"
+import type { ClassSetting, ScheduleTemplate, Semester, TeachingAssignment } from "@/lib/types"
 import { useSchoolContext } from "@/lib/queries"
 import { ErrorState, LoadingState, PageHeader } from "@/components/page"
 import { Button } from "@/components/ui/button"
@@ -27,7 +27,7 @@ export function DashboardPage() {
   })
   const settings = useQuery({
     queryKey: ["class-settings", semesterId],
-    queryFn: () => api<ClassSetting[]>(`/api/v1/semesters/${semesterId}/class-settings`),
+    queryFn: () => apiAllPages<ClassSetting>(`/api/v1/semesters/${semesterId}/class-settings`),
     enabled: semesterId !== null,
   })
   const template = useQuery({
@@ -36,9 +36,10 @@ export function DashboardPage() {
       api<ScheduleTemplate | null>(`/api/v1/semesters/${semesterId}/schedule-template`),
     enabled: semesterId !== null,
   })
-  const tasks = useQuery({
-    queryKey: ["teaching-tasks", semesterId],
-    queryFn: () => api<TeachingTask[]>(`/api/v1/semesters/${semesterId}/teaching-tasks`),
+  const assignments = useQuery({
+    queryKey: ["teaching-assignments", semesterId],
+    queryFn: () =>
+      apiAllPages<TeachingAssignment>(`/api/v1/semesters/${semesterId}/teaching-assignments`),
     enabled: semesterId !== null,
   })
   const completeness = useQuery({
@@ -54,7 +55,7 @@ export function DashboardPage() {
     semester.isLoading ||
     settings.isLoading ||
     template.isLoading ||
-    tasks.isLoading ||
+    assignments.isLoading ||
     completeness.isLoading
   )
     return <LoadingState />
@@ -62,13 +63,15 @@ export function DashboardPage() {
 
   const current = semester.data?.data
   const classCount = settings.data?.data.length ?? 0
-  const taskCount = tasks.data?.data.length ?? 0
-  const confirmedCount = tasks.data?.data.filter((task) => task.status === "confirmed").length ?? 0
+  const assignmentCount = assignments.data?.data.length ?? 0
+  const confirmedCount =
+    assignments.data?.data.filter((assignment) => assignment.status === "confirmed").length ?? 0
   const scheduled = completeness.data?.reduce((sum, item) => sum + item.scheduled, 0) ?? 0
   const required = completeness.data?.reduce((sum, item) => sum + item.required, 0) ?? 0
   const remaining = completeness.data?.reduce((sum, item) => sum + item.remaining, 0) ?? 0
   const templateReady = Boolean(template.data?.data)
-  const blocked = !classCount || !templateReady || confirmedCount !== taskCount || remaining > 0
+  const blocked =
+    !classCount || !templateReady || confirmedCount !== assignmentCount || remaining > 0
   const startDelta = current
     ? daysBetween(new Date(), new Date(`${current.start_date}T00:00:00`))
     : null
@@ -110,7 +113,7 @@ export function DashboardPage() {
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
-              <Button size="lg" nativeButton={false} render={<Link to="/semester/timetable" />}>
+              <Button nativeButton={false} render={<Link to="/semester/timetable" />}>
                 进入排课工作台
                 <ArrowRightIcon />
               </Button>
@@ -119,9 +122,9 @@ export function DashboardPage() {
                   <Button
                     variant="outline"
                     nativeButton={false}
-                    render={<Link to="/semester/tasks" />}
+                    render={<Link to="/semester/assignments" />}
                   >
-                    查看教学任务
+                    查看任课关系
                   </Button>
                   <Button
                     variant="outline"
@@ -138,7 +141,7 @@ export function DashboardPage() {
           <Workflow
             classCount={classCount}
             templateReady={templateReady}
-            taskCount={taskCount}
+            assignmentCount={assignmentCount}
             confirmedCount={confirmedCount}
             scheduled={scheduled}
             required={required}
@@ -158,9 +161,6 @@ export function DashboardPage() {
                       ? `还有 ${remaining} 节课程未安排，建议优先处理高周课时任务。`
                       : "课表已完整，建议分别从班级、教师和教室视角检查结果。"}
                   </p>
-                  <p className="mt-3 text-sm text-muted-foreground">
-                    {classCount} 个班级 · {scheduled} 节课程
-                  </p>
                 </div>
                 <Button
                   variant="outline"
@@ -175,9 +175,6 @@ export function DashboardPage() {
                 {blocked ? (
                   <div>
                     <p className="font-medium">仍有准备项未完成</p>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      请根据上方流程逐项补齐，完成后再进行开学复核。
-                    </p>
                   </div>
                 ) : (
                   <div>
@@ -185,9 +182,6 @@ export function DashboardPage() {
                       <CheckIcon className="size-5" />
                     </span>
                     <p className="mt-4 font-medium">暂无阻塞项</p>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      教学任务、固定教室和课表完整性均已检查。
-                    </p>
                   </div>
                 )}
               </div>
@@ -199,13 +193,12 @@ export function DashboardPage() {
                 <SummaryRow label="班级配置" value={`${classCount} 个班级`} />
                 <SummaryRow label="作息模板" value={templateReady ? "已设置" : "未设置"} />
                 <SummaryRow
-                  label="教学任务"
-                  value={`${taskCount} 条 · 已确认 ${confirmedCount} 条`}
+                  label="任课关系"
+                  value={`${assignmentCount} 条 · 已确认 ${confirmedCount} 条`}
                 />
                 <SummaryRow label="已排课时" value={`${scheduled} / ${required}`} />
                 <SummaryRow label="冲突" value="0 个冲突" />
               </dl>
-              <p className="mt-6 text-sm text-muted-foreground">数据更新于刚刚</p>
             </section>
           </div>
         </div>
@@ -217,14 +210,14 @@ export function DashboardPage() {
 function Workflow({
   classCount,
   templateReady,
-  taskCount,
+  assignmentCount,
   confirmedCount,
   scheduled,
   required,
 }: {
   classCount: number
   templateReady: boolean
-  taskCount: number
+  assignmentCount: number
   confirmedCount: number
   scheduled: number
   required: number
@@ -238,9 +231,9 @@ function Workflow({
       done: classCount > 0 && templateReady,
     },
     {
-      label: "教学任务",
-      note: `${taskCount} 条任务`,
-      done: taskCount > 0 && confirmedCount === taskCount,
+      label: "任课关系",
+      note: `${assignmentCount} 条任务`,
+      done: assignmentCount > 0 && confirmedCount === assignmentCount,
     },
     {
       label: "排课",
@@ -263,12 +256,9 @@ function Workflow({
             <p className="font-medium">{step.label}</p>
           </div>
           <div className="ml-11 xl:mt-3 xl:ml-0">
-            <span
-              className={`text-xs font-medium ${step.done ? "text-emerald-600" : "text-amber-600"}`}
-            >
-              {step.done ? "已完成" : "待处理"}
-            </span>
-            <p className="mt-1 text-sm text-muted-foreground">{step.note}</p>
+            <p className={`text-sm ${step.done ? "text-emerald-600" : "text-amber-700"}`}>
+              {step.done ? "已完成" : "待处理"} · {step.note}
+            </p>
           </div>
         </div>
       ))}

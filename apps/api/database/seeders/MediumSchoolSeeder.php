@@ -3,7 +3,9 @@
 namespace Database\Seeders;
 
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use RuntimeException;
@@ -58,7 +60,7 @@ class MediumSchoolSeeder extends Seeder
                     $catalog['course_ids']['班会'],
                 );
                 $courseItems = $this->seedScheduleTemplate($semester);
-                $tasks = $this->seedTeachingTasks(
+                $assignments = $this->seedTeachingAssignments(
                     $semester,
                     $semesterClasses,
                     $settings,
@@ -66,18 +68,38 @@ class MediumSchoolSeeder extends Seeder
                     $catalog['teacher_pools'],
                     $catalog['room_pools'],
                 );
+                $constraintCount = $this->seedSchedulingConstraints($semester);
+                DB::table('semesters')->where('id', $semester['id'])->update([
+                    'assignment_revision' => count($assignments),
+                    'constraint_revision' => $constraintCount,
+                    'input_revision' => 1,
+                    'updated_at' => now(),
+                ]);
 
                 if ($semester['status'] !== 'draft') {
-                    $entryCount = $this->seedTimetable(
+                    $timetable = $this->seedTimetable(
                         $semester,
-                        $tasks,
+                        $assignments,
                         $courseItems,
                         $semester['status'] === 'closed',
+                        $users['scheduler_id'],
                     );
                     DB::table('semesters')->where('id', $semester['id'])->update([
-                        'timetable_revision' => $entryCount,
+                        'current_timetable_version_id' => $timetable['version_id'],
+                        'timetable_revision' => $timetable['entry_count'],
                         'updated_at' => now(),
                     ]);
+                    if ($semester['status'] === 'open') {
+                        $this->seedDailyOperations(
+                            $semester,
+                            $timetable['version_id'],
+                            $courseItems,
+                            $users['scheduler_id'],
+                        );
+                        DB::table('semesters')->where('id', $semester['id'])->increment('timetable_revision', 7, [
+                            'updated_at' => now(),
+                        ]);
+                    }
                 }
             }
 
@@ -366,7 +388,8 @@ class MediumSchoolSeeder extends Seeder
                     [
                         'name' => $semesterDefinition['name'], 'start_date' => $semesterDefinition['start_date'],
                         'end_date' => $semesterDefinition['end_date'], 'status' => $semesterDefinition['status'],
-                        'timetable_revision' => 0, 'updated_at' => $timestamp, 'created_at' => $timestamp,
+                        'timetable_revision' => 0, 'input_revision' => 0, 'assignment_revision' => 0,
+                        'constraint_revision' => 0, 'updated_at' => $timestamp, 'created_at' => $timestamp,
                     ],
                 );
                 $semesterId = (int) DB::table('semesters')
@@ -396,8 +419,33 @@ class MediumSchoolSeeder extends Seeder
     /** @param list<int> $semesterIds */
     private function clearOwnedSemesterData(array $semesterIds): void
     {
+        $entryIds = DB::table('timetable_entries')->whereIn('semester_id', $semesterIds)->pluck('id');
+        $leaveIds = DB::table('teacher_leaves')->whereIn('semester_id', $semesterIds)->pluck('id');
+        $exceptionIds = DB::table('calendar_exceptions')->whereIn('semester_id', $semesterIds)->pluck('id');
+        DB::table('substitutions')->where(function ($query) use ($entryIds, $leaveIds, $exceptionIds): void {
+            $query->whereIn('original_entry_id', $entryIds)
+                ->orWhereIn('teacher_leave_id', $leaveIds)
+                ->orWhereIn('calendar_exception_id', $exceptionIds);
+        })
+            ->delete();
+        DB::table('teacher_leaves')->whereIn('semester_id', $semesterIds)->delete();
+        DB::table('calendar_exceptions')->whereIn('semester_id', $semesterIds)->delete();
         DB::table('timetable_entries')->whereIn('semester_id', $semesterIds)->delete();
-        DB::table('teaching_tasks')->whereIn('semester_id', $semesterIds)->delete();
+        DB::table('semesters')->whereIn('id', $semesterIds)->update(['current_timetable_version_id' => null]);
+        DB::table('timetable_versions')->whereIn('semester_id', $semesterIds)->delete();
+        $runIds = DB::table('schedule_runs')->whereIn('semester_id', $semesterIds)->pluck('id');
+        $candidateIds = DB::table('schedule_candidates')->whereIn('schedule_run_id', $runIds)->pluck('id');
+        DB::table('schedule_candidate_entries')->whereIn('schedule_candidate_id', $candidateIds)->delete();
+        DB::table('schedule_candidates')->whereIn('schedule_run_id', $runIds)->delete();
+        DB::table('schedule_runs')->whereIn('id', $runIds)->delete();
+        DB::table('fixed_placements')->whereIn('semester_id', $semesterIds)->delete();
+        DB::table('scheduling_constraints')->whereIn('semester_id', $semesterIds)->delete();
+        $assignmentIds = DB::table('teaching_assignments')->whereIn('semester_id', $semesterIds)->pluck('id');
+        DB::table('teaching_assignment_collaborators')->whereIn('teaching_assignment_id', $assignmentIds)->delete();
+        DB::table('teaching_assignments')->whereIn('semester_id', $semesterIds)->delete();
+        $groupIds = DB::table('teaching_groups')->whereIn('semester_id', $semesterIds)->pluck('id');
+        DB::table('teaching_group_classes')->whereIn('teaching_group_id', $groupIds)->delete();
+        DB::table('teaching_groups')->whereIn('id', $groupIds)->delete();
         DB::table('semester_class_settings')->whereIn('semester_id', $semesterIds)->delete();
         DB::table('items')->whereIn('semester_id', $semesterIds)->delete();
         DB::table('schedule_template_days')->whereIn('semester_id', $semesterIds)->delete();
@@ -532,7 +580,7 @@ class MediumSchoolSeeder extends Seeder
      * @param  array<string, list<int>>  $roomPools
      * @return list<array{id: int, school_class_id: int, course_id: int, course_name: string, teacher_id: int, weekly_items: int, actual_room_id: int, room_mode: string}>
      */
-    private function seedTeachingTasks(
+    private function seedTeachingAssignments(
         array $semester,
         array $classes,
         array $settings,
@@ -541,7 +589,7 @@ class MediumSchoolSeeder extends Seeder
         array $roomPools,
     ): array {
         $timestamp = now();
-        $taskDefinitions = [];
+        $assignmentDefinitions = [];
         foreach ($classes as $class) {
             foreach ($this->gradeLoads[$class['grade_name']] as $courseIndex => $weeklyItems) {
                 if ($courseIndex === '班会') {
@@ -556,7 +604,7 @@ class MediumSchoolSeeder extends Seeder
                 $isInactiveDraft = $semester['status'] === 'draft'
                     && (($class['global_index'] + array_search($courseIndex, array_keys($this->gradeLoads[$class['grade_name']]), true)) % 41 === 0);
                 $status = $semester['status'] === 'draft' ? ($isInactiveDraft ? 'inactive' : 'draft') : 'confirmed';
-                $taskDefinitions[] = [
+                $assignmentDefinitions[] = [
                     'semester_id' => $semester['id'], 'academic_year_id' => $semester['academic_year_id'],
                     'school_class_id' => $class['id'], 'course_id' => $courseIds[$courseIndex],
                     'teacher_id' => $teacherId, 'weekly_items' => $weeklyItems,
@@ -569,52 +617,115 @@ class MediumSchoolSeeder extends Seeder
             }
         }
 
-        foreach (array_chunk($taskDefinitions, 150) as $chunk) {
-            DB::table('teaching_tasks')->insert(array_map(function (array $task): array {
-                unset($task['_course_name'], $task['_actual_room_id']);
+        foreach (array_chunk($assignmentDefinitions, 150) as $chunk) {
+            DB::table('teaching_assignments')->insert(array_map(function (array $assignment): array {
+                unset($assignment['_course_name'], $assignment['_actual_room_id']);
 
-                return $task;
+                return $assignment;
             }, $chunk));
         }
 
-        $taskIds = [];
-        foreach (DB::table('teaching_tasks')->where('semester_id', $semester['id'])->get(['id', 'school_class_id', 'course_id']) as $task) {
-            $taskIds[$task->school_class_id.'-'.$task->course_id] = (int) $task->id;
+        $assignmentIds = [];
+        foreach (DB::table('teaching_assignments')->where('semester_id', $semester['id'])->get(['id', 'school_class_id', 'course_id']) as $assignment) {
+            $assignmentIds[$assignment->school_class_id.'-'.$assignment->course_id] = (int) $assignment->id;
         }
 
-        return array_map(function (array $task) use ($taskIds): array {
+        return array_map(function (array $assignment) use ($assignmentIds): array {
             return [
-                'id' => $taskIds[$task['school_class_id'].'-'.$task['course_id']],
-                'school_class_id' => $task['school_class_id'], 'course_id' => $task['course_id'],
-                'course_name' => $task['_course_name'], 'teacher_id' => $task['teacher_id'],
-                'weekly_items' => $task['weekly_items'], 'actual_room_id' => $task['_actual_room_id'],
-                'room_mode' => $task['room_mode'],
+                'id' => $assignmentIds[$assignment['school_class_id'].'-'.$assignment['course_id']],
+                'school_class_id' => $assignment['school_class_id'], 'course_id' => $assignment['course_id'],
+                'course_name' => $assignment['_course_name'], 'teacher_id' => $assignment['teacher_id'],
+                'weekly_items' => $assignment['weekly_items'], 'actual_room_id' => $assignment['_actual_room_id'],
+                'room_mode' => $assignment['room_mode'],
             ];
-        }, $taskDefinitions);
+        }, $assignmentDefinitions);
     }
 
     /**
      * @param  array{id: int, academic_year_id: int, academic_year_name: string, sequence: int, name: string, status: string}  $semester
-     * @param  list<array{id: int, school_class_id: int, course_id: int, course_name: string, teacher_id: int, weekly_items: int, actual_room_id: int, room_mode: string}>  $tasks
-     * @param  list<int>  $courseItems
      */
-    private function seedTimetable(array $semester, array $tasks, array $courseItems, bool $historical): int
+    private function seedSchedulingConstraints(array $semester): int
     {
-        $lessonsByDay = $this->assignLessonsToDays($tasks, count($courseItems));
+        $definitions = [
+            ['教师同课节不可重复', 'hard', 'availability', null, ['resource_no_overlap' => 'teacher'], '同一教师在同一周型、星期和课节只能授课一次。'],
+            ['班级同课节不可重复', 'hard', 'availability', null, ['resource_no_overlap' => 'school_class'], '同一班级在同一周型、星期和课节只能有一项课程安排。'],
+            ['教室同课节不可重复', 'hard', 'availability', null, ['resource_no_overlap' => 'room'], '同一教室在同一周型、星期和课节只能被一个课程安排使用。'],
+            ['已确认任课关系课时必须排满', 'hard', 'weekly_load', null, ['assignment_completeness' => true], '每条已确认任课关系都必须完整安排规定课时。'],
+            ['只能使用允许排课的课节', 'hard', 'availability', null, ['item_allows_course' => true], '停用课节及非课程课节不能安排普通课程。'],
+            ['教室必须满足任课关系要求', 'hard', 'room_requirement', null, ['assignment_room_mode' => true], '课程安排必须使用班级固定教室或任课关系指定教室。'],
+            ['教师必须具备课程资格', 'hard', 'availability', null, ['teacher_course_qualification' => true], '任课教师必须具备对应课程授课资格。'],
+            ['锁定课程保持原位', 'hard', 'availability', null, ['preserve_locked_entries' => true], '自动排课和普通调整不得移动已锁定课程。'],
+            ['同一课程尽量均匀分布', 'soft', 'course_distribution', 90, ['spread_across_weekdays' => true], '减少同一课程集中在少数工作日。'],
+            ['语数英优先安排在精力较好时段', 'soft', 'course_priority', 75, ['prefer_earlier_items' => ['语文', '数学', '英语']], '核心课程优先安排在上午及下午前段。'],
+            ['减少教师空堂', 'soft', 'teacher_gaps', 70, ['minimize_teacher_gaps' => true], '在不增加硬冲突的前提下减少教师当日空堂。'],
+            ['平衡教师每日工作量', 'soft', 'workload_balance', 65, ['balance_teacher_daily_load' => true], '避免单日授课过多或过少。'],
+            ['限制连续授课', 'soft', 'consecutive_items', 80, ['max_consecutive_items' => 3], '教师连续授课尽量不超过三节。'],
+            ['避免同一课程同日重复', 'soft', 'spacing', 85, ['max_same_course_per_day' => 1], '除连堂配置外，同一班级同一课程每天尽量只安排一次。'],
+        ];
         $timestamp = now();
+        foreach ($definitions as [$name, $kind, $category, $weight, $requirement, $explanation]) {
+            DB::table('scheduling_constraints')->insert([
+                'semester_id' => $semester['id'],
+                'name' => $name,
+                'kind' => $kind,
+                'category' => $category,
+                'scope' => json_encode(['semester_id' => $semester['id']], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+                'requirement' => json_encode($requirement, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+                'weight' => $weight,
+                'source' => $kind === 'hard' ? 'system' : 'template',
+                'status' => 'active',
+                'explanation' => $explanation,
+                'created_at' => $timestamp,
+                'updated_at' => $timestamp,
+            ]);
+        }
+
+        return count($definitions);
+    }
+
+    /**
+     * @param  array{id: int, academic_year_id: int, academic_year_name: string, sequence: int, name: string, status: string}  $semester
+     * @param  list<array{id: int, school_class_id: int, course_id: int, course_name: string, teacher_id: int, weekly_items: int, actual_room_id: int, room_mode: string}>  $assignments
+     * @param  list<int>  $courseItems
+     * @return array{entry_count: int, version_id: int}
+     */
+    private function seedTimetable(
+        array $semester,
+        array $assignments,
+        array $courseItems,
+        bool $historical,
+        int $creatorId,
+    ): array {
+        $lessonsByDay = $this->assignLessonsToDays($assignments, count($courseItems));
+        $timestamp = now();
+        $versionId = (int) DB::table('timetable_versions')->insertGetId([
+            'semester_id' => $semester['id'],
+            'version_no' => 1,
+            'name' => $historical ? '历史归档课表 v1' : '当前课表 v1',
+            'status' => 'active',
+            'source' => 'manual',
+            'created_by' => $creatorId,
+            'input_revision' => 1,
+            'hard_conflict_count' => 0,
+            'soft_warning_count' => 0,
+            'activated_at' => $timestamp,
+            'created_at' => $timestamp,
+            'updated_at' => $timestamp,
+        ]);
         $entries = [];
         foreach ($lessonsByDay as $weekday => $lessons) {
             foreach ($this->colorDayLessons($lessons, count($courseItems)) as $lesson) {
-                $task = $lesson['task'];
+                $assignment = $lesson['assignment'];
                 $itemId = $courseItems[$lesson['color']];
                 $entries[] = [
-                    'semester_id' => $semester['id'], 'teaching_task_id' => $task['id'],
-                    'school_class_id' => $task['school_class_id'], 'teacher_id' => $task['teacher_id'],
-                    'course_id' => $task['course_id'], 'actual_room_id' => $task['actual_room_id'],
-                    'weekday' => $weekday, 'item_id' => $itemId, 'source' => 'manual',
+                    'semester_id' => $semester['id'], 'timetable_version_id' => $versionId,
+                    'teaching_assignment_id' => $assignment['id'],
+                    'school_class_id' => $assignment['school_class_id'], 'teacher_id' => $assignment['teacher_id'],
+                    'course_id' => $assignment['course_id'], 'actual_room_id' => $assignment['actual_room_id'],
+                    'week_pattern' => 'all', 'weekday' => $weekday, 'item_id' => $itemId, 'source' => 'manual',
                     'is_locked' => $historical
-                        ? (($task['id'] + $weekday + $itemId) % 4 === 0)
-                        : (($task['id'] + $weekday + $itemId) % 11 === 0),
+                        ? (($assignment['id'] + $weekday + $itemId) % 4 === 0)
+                        : (($assignment['id'] + $weekday + $itemId) % 11 === 0),
                     'created_at' => $timestamp, 'updated_at' => $timestamp,
                 ];
             }
@@ -623,27 +734,276 @@ class MediumSchoolSeeder extends Seeder
         foreach (array_chunk($entries, 200) as $chunk) {
             DB::table('timetable_entries')->insert($chunk);
         }
+        $classPivots = [];
+        $teacherPivots = [];
+        foreach (DB::table('timetable_entries')->where('timetable_version_id', $versionId)->get([
+            'id', 'school_class_id', 'teacher_id', 'week_pattern', 'weekday', 'item_id',
+        ]) as $entry) {
+            $slot = [
+                'timetable_entry_id' => $entry->id,
+                'timetable_version_id' => $versionId,
+                'week_pattern' => $entry->week_pattern,
+                'weekday' => $entry->weekday,
+                'item_id' => $entry->item_id,
+            ];
+            $classPivots[] = [...$slot, 'school_class_id' => $entry->school_class_id];
+            $teacherPivots[] = [...$slot, 'teacher_id' => $entry->teacher_id];
+        }
+        foreach (array_chunk($classPivots, 300) as $chunk) {
+            DB::table('timetable_entry_classes')->insert($chunk);
+        }
+        foreach (array_chunk($teacherPivots, 300) as $chunk) {
+            DB::table('timetable_entry_teachers')->insert($chunk);
+        }
 
-        return count($entries);
+        return ['entry_count' => count($entries), 'version_id' => $versionId];
     }
 
     /**
-     * @param  list<array{id: int, school_class_id: int, course_id: int, course_name: string, teacher_id: int, weekly_items: int, actual_room_id: int, room_mode: string}>  $tasks
+     * @param  array{id: int, academic_year_id: int, academic_year_name: string, sequence: int, name: string, status: string}  $semester
+     * @param  list<int>  $courseItems
+     */
+    private function seedDailyOperations(
+        array $semester,
+        int $versionId,
+        array $courseItems,
+        int $creatorId,
+    ): void {
+        $timestamp = now();
+        $entriesByWeekday = [];
+        foreach (range(1, 5) as $weekday) {
+            $entriesByWeekday[$weekday] = DB::table('timetable_entries')
+                ->where('timetable_version_id', $versionId)
+                ->where('weekday', $weekday)
+                ->orderBy('id')
+                ->get();
+        }
+
+        $cancelEntry = $entriesByWeekday[2]->first();
+        if ($cancelEntry !== null) {
+            DB::table('calendar_exceptions')->insert([
+                'semester_id' => $semester['id'],
+                'timetable_version_id' => $versionId,
+                'effective_date' => $this->firstDateForWeekday($semester, 2),
+                'type' => 'cancel',
+                'original_entry_id' => $cancelEntry->id,
+                'status' => 'active',
+                'reason' => '年级统一体检，原课程当日暂停。',
+                'created_by' => $creatorId,
+                'created_at' => $timestamp,
+                'updated_at' => $timestamp,
+            ]);
+        }
+
+        $move = $this->findMovableEntry($entriesByWeekday[3], $versionId, $courseItems);
+        if ($move !== null) {
+            DB::table('calendar_exceptions')->insert([
+                'semester_id' => $semester['id'],
+                'timetable_version_id' => $versionId,
+                'effective_date' => $this->firstDateForWeekday($semester, 3),
+                'replacement_date' => $this->firstDateForWeekday($semester, 3),
+                'type' => 'move',
+                'original_entry_id' => $move['entry']->id,
+                'replacement_item_id' => $move['item_id'],
+                'status' => 'active',
+                'reason' => '教师参加教研活动，课程临时后移。',
+                'created_by' => $creatorId,
+                'created_at' => $timestamp,
+                'updated_at' => $timestamp,
+            ]);
+        }
+
+        $teacherChange = $this->findTeacherReplacement($entriesByWeekday[4], $versionId);
+        if ($teacherChange !== null) {
+            DB::table('calendar_exceptions')->insert([
+                'semester_id' => $semester['id'],
+                'timetable_version_id' => $versionId,
+                'effective_date' => $this->firstDateForWeekday($semester, 4),
+                'type' => 'teacher_change',
+                'original_entry_id' => $teacherChange['entry']->id,
+                'replacement_teacher_id' => $teacherChange['teacher_id'],
+                'status' => 'active',
+                'reason' => '校内公开课观摩，由同学科教师临时授课。',
+                'created_by' => $creatorId,
+                'created_at' => $timestamp,
+                'updated_at' => $timestamp,
+            ]);
+        }
+
+        $roomChange = $this->findRoomReplacement($entriesByWeekday[5], $versionId);
+        if ($roomChange !== null) {
+            DB::table('calendar_exceptions')->insert([
+                'semester_id' => $semester['id'],
+                'timetable_version_id' => $versionId,
+                'effective_date' => $this->firstDateForWeekday($semester, 5),
+                'type' => 'room_change',
+                'original_entry_id' => $roomChange['entry']->id,
+                'replacement_room_id' => $roomChange['room_id'],
+                'status' => 'active',
+                'reason' => '原教室设备检修，临时调整至备用教室。',
+                'created_by' => $creatorId,
+                'created_at' => $timestamp,
+                'updated_at' => $timestamp,
+            ]);
+        }
+
+        $leaveReplacement = $this->findTeacherReplacement($entriesByWeekday[1], $versionId);
+        if ($leaveReplacement !== null) {
+            $entry = $leaveReplacement['entry'];
+            $date = $this->firstDateForWeekday($semester, 1, 1);
+            $item = DB::table('items')->where('id', $entry->item_id)->firstOrFail();
+            $leaveId = DB::table('teacher_leaves')->insertGetId([
+                'semester_id' => $semester['id'],
+                'teacher_id' => $entry->teacher_id,
+                'starts_at' => $date.' '.CarbonImmutable::parse($item->start_time)->subMinutes(15)->format('H:i:s'),
+                'ends_at' => $date.' '.CarbonImmutable::parse($item->end_time)->addMinutes(15)->format('H:i:s'),
+                'type' => 'training',
+                'status' => 'active',
+                'reason' => '参加市级学科培训。',
+                'includes_non_course_items' => false,
+                'created_by' => $creatorId,
+                'created_at' => $timestamp,
+                'updated_at' => $timestamp,
+            ]);
+            DB::table('substitutions')->insert([
+                'teacher_leave_id' => $leaveId,
+                'original_entry_id' => $entry->id,
+                'effective_date' => $date,
+                'replacement_teacher_id' => $leaveReplacement['teacher_id'],
+                'status' => 'active',
+                'reason' => '同学科教师代课。',
+                'created_by' => $creatorId,
+                'created_at' => $timestamp,
+                'updated_at' => $timestamp,
+            ]);
+        }
+
+        $historicalEntry = $entriesByWeekday[2]->skip(1)->first();
+        if ($historicalEntry !== null) {
+            $date = $this->firstDateForWeekday($semester, 2, 2);
+            $item = DB::table('items')->where('id', $historicalEntry->item_id)->firstOrFail();
+            DB::table('teacher_leaves')->insert([
+                'semester_id' => $semester['id'],
+                'teacher_id' => $historicalEntry->teacher_id,
+                'starts_at' => $date.' '.$item->start_time,
+                'ends_at' => $date.' '.$item->end_time,
+                'type' => 'personal',
+                'status' => 'cancelled',
+                'reason' => '演示用已取消请假记录。',
+                'includes_non_course_items' => false,
+                'created_by' => $creatorId,
+                'created_at' => $timestamp,
+                'updated_at' => $timestamp,
+            ]);
+        }
+    }
+
+    /** @param  Collection<int, object>  $entries @param list<int> $itemIds */
+    private function findMovableEntry($entries, int $versionId, array $itemIds): ?array
+    {
+        foreach ($entries as $entry) {
+            foreach ($itemIds as $itemId) {
+                if ($itemId === $entry->item_id) {
+                    continue;
+                }
+                $occupied = DB::table('timetable_entries')
+                    ->where('timetable_version_id', $versionId)
+                    ->where('weekday', $entry->weekday)
+                    ->where('item_id', $itemId)
+                    ->where(function ($query) use ($entry): void {
+                        $query->where('school_class_id', $entry->school_class_id)
+                            ->orWhere('teacher_id', $entry->teacher_id)
+                            ->orWhere('actual_room_id', $entry->actual_room_id);
+                    })
+                    ->exists();
+                if (! $occupied) {
+                    return ['entry' => $entry, 'item_id' => $itemId];
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /** @param  Collection<int, object>  $entries */
+    private function findTeacherReplacement($entries, int $versionId): ?array
+    {
+        foreach ($entries as $entry) {
+            $teacherIds = DB::table('teacher_course')
+                ->join('teachers', 'teachers.id', '=', 'teacher_course.teacher_id')
+                ->where('teacher_course.course_id', $entry->course_id)
+                ->where('teachers.is_active', true)
+                ->where('teachers.id', '!=', $entry->teacher_id)
+                ->orderBy('teachers.id')
+                ->pluck('teachers.id');
+            foreach ($teacherIds as $teacherId) {
+                $occupied = DB::table('timetable_entries')
+                    ->where('timetable_version_id', $versionId)
+                    ->where('weekday', $entry->weekday)
+                    ->where('item_id', $entry->item_id)
+                    ->where('teacher_id', $teacherId)
+                    ->exists();
+                if (! $occupied) {
+                    return ['entry' => $entry, 'teacher_id' => (int) $teacherId];
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /** @param  Collection<int, object>  $entries */
+    private function findRoomReplacement($entries, int $versionId): ?array
+    {
+        foreach ($entries as $entry) {
+            $roomIds = DB::table('rooms')->where('is_active', true)
+                ->where('id', '!=', $entry->actual_room_id)->orderBy('id')->pluck('id');
+            foreach ($roomIds as $roomId) {
+                $occupied = DB::table('timetable_entries')
+                    ->where('timetable_version_id', $versionId)
+                    ->where('weekday', $entry->weekday)
+                    ->where('item_id', $entry->item_id)
+                    ->where('actual_room_id', $roomId)
+                    ->exists();
+                if (! $occupied) {
+                    return ['entry' => $entry, 'room_id' => (int) $roomId];
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array{id: int, academic_year_id: int, academic_year_name: string, sequence: int, name: string, status: string}  $semester
+     */
+    private function firstDateForWeekday(array $semester, int $weekday, int $weekOffset = 0): string
+    {
+        $date = CarbonImmutable::parse($semester['start_date'] ?? DB::table('semesters')->where('id', $semester['id'])->value('start_date'));
+        while ($date->dayOfWeekIso !== $weekday) {
+            $date = $date->addDay();
+        }
+
+        return $date->addWeeks($weekOffset)->toDateString();
+    }
+
+    /**
+     * @param  list<array{id: int, school_class_id: int, course_id: int, course_name: string, teacher_id: int, weekly_items: int, actual_room_id: int, room_mode: string}>  $assignments
      * @return array<int, list<array{id: int, school_class_id: int, course_id: int, course_name: string, teacher_id: int, weekly_items: int, actual_room_id: int, room_mode: string}>>
      */
-    private function assignLessonsToDays(array $tasks, int $dailyCapacity): array
+    private function assignLessonsToDays(array $assignments, int $dailyCapacity): array
     {
         $teacherLoads = [];
-        foreach ($tasks as $task) {
-            $teacherLoads[$task['teacher_id']] = ($teacherLoads[$task['teacher_id']] ?? 0) + $task['weekly_items'];
+        foreach ($assignments as $assignment) {
+            $teacherLoads[$assignment['teacher_id']] = ($teacherLoads[$assignment['teacher_id']] ?? 0) + $assignment['weekly_items'];
         }
 
         for ($attempt = 0; $attempt < 80; $attempt++) {
             $classDayLoads = [];
             $teacherDayLoads = [];
             $lessonsByDay = array_fill(1, 5, []);
-            $orderedTasks = $tasks;
-            usort($orderedTasks, function (array $left, array $right) use ($teacherLoads, $attempt): int {
+            $orderedAssignments = $assignments;
+            usort($orderedAssignments, function (array $left, array $right) use ($teacherLoads, $attempt): int {
                 $leftPriority = $left['weekly_items'] * 100 + $teacherLoads[$left['teacher_id']];
                 $rightPriority = $right['weekly_items'] * 100 + $teacherLoads[$right['teacher_id']];
                 if ($leftPriority !== $rightPriority) {
@@ -654,16 +1014,16 @@ class MediumSchoolSeeder extends Seeder
             });
             $failed = false;
 
-            foreach ($orderedTasks as $task) {
+            foreach ($orderedAssignments as $assignment) {
                 $days = range(1, 5);
-                usort($days, function (int $day, int $other) use ($classDayLoads, $teacherDayLoads, $task, $attempt): int {
-                    $score = ($classDayLoads[$task['school_class_id']][$day] ?? 0) * 100
-                        + ($teacherDayLoads[$task['teacher_id']][$day] ?? 0) * 12
-                        + $this->stableNoise($attempt, $task['id'], $day) % 17;
-                    $otherScore = ($classDayLoads[$task['school_class_id']][$other] ?? 0) * 100
-                        + ($teacherDayLoads[$task['teacher_id']][$other] ?? 0) * 12
-                        + $this->stableNoise($attempt, $task['id'], $other) % 17;
-                    if ($task['course_name'] === '班会') {
+                usort($days, function (int $day, int $other) use ($classDayLoads, $teacherDayLoads, $assignment, $attempt): int {
+                    $score = ($classDayLoads[$assignment['school_class_id']][$day] ?? 0) * 100
+                        + ($teacherDayLoads[$assignment['teacher_id']][$day] ?? 0) * 12
+                        + $this->stableNoise($attempt, $assignment['id'], $day) % 17;
+                    $otherScore = ($classDayLoads[$assignment['school_class_id']][$other] ?? 0) * 100
+                        + ($teacherDayLoads[$assignment['teacher_id']][$other] ?? 0) * 12
+                        + $this->stableNoise($attempt, $assignment['id'], $other) % 17;
+                    if ($assignment['course_name'] === '班会') {
                         $score += $day === 5 ? -35 : 20;
                         $otherScore += $other === 5 ? -35 : 20;
                     }
@@ -673,26 +1033,26 @@ class MediumSchoolSeeder extends Seeder
 
                 $selectedDays = [];
                 foreach ($days as $day) {
-                    if (($classDayLoads[$task['school_class_id']][$day] ?? 0) >= $dailyCapacity
-                        || ($teacherDayLoads[$task['teacher_id']][$day] ?? 0) >= $dailyCapacity) {
+                    if (($classDayLoads[$assignment['school_class_id']][$day] ?? 0) >= $dailyCapacity
+                        || ($teacherDayLoads[$assignment['teacher_id']][$day] ?? 0) >= $dailyCapacity) {
                         continue;
                     }
                     $selectedDays[] = $day;
-                    if (count($selectedDays) === $task['weekly_items']) {
+                    if (count($selectedDays) === $assignment['weekly_items']) {
                         break;
                     }
                 }
-                if (count($selectedDays) !== $task['weekly_items']) {
+                if (count($selectedDays) !== $assignment['weekly_items']) {
                     $failed = true;
                     break;
                 }
 
                 foreach ($selectedDays as $day) {
-                    $lessonsByDay[$day][] = $task;
-                    $classDayLoads[$task['school_class_id']][$day] =
-                        ($classDayLoads[$task['school_class_id']][$day] ?? 0) + 1;
-                    $teacherDayLoads[$task['teacher_id']][$day] =
-                        ($teacherDayLoads[$task['teacher_id']][$day] ?? 0) + 1;
+                    $lessonsByDay[$day][] = $assignment;
+                    $classDayLoads[$assignment['school_class_id']][$day] =
+                        ($classDayLoads[$assignment['school_class_id']][$day] ?? 0) + 1;
+                    $teacherDayLoads[$assignment['teacher_id']][$day] =
+                        ($teacherDayLoads[$assignment['teacher_id']][$day] ?? 0) + 1;
                 }
             }
 
@@ -701,12 +1061,12 @@ class MediumSchoolSeeder extends Seeder
             }
         }
 
-        throw new RuntimeException('无法把教学任务均匀分配到五个工作日。');
+        throw new RuntimeException('无法把任课关系均匀分配到五个工作日。');
     }
 
     /**
      * @param  list<array{id: int, school_class_id: int, course_id: int, course_name: string, teacher_id: int, weekly_items: int, actual_room_id: int, room_mode: string}>  $lessons
-     * @return list<array{color: int, task: array{id: int, school_class_id: int, course_id: int, course_name: string, teacher_id: int, weekly_items: int, actual_room_id: int, room_mode: string}}>
+     * @return list<array{color: int, assignment: array{id: int, school_class_id: int, course_id: int, course_name: string, teacher_id: int, weekly_items: int, actual_room_id: int, room_mode: string}}>
      */
     private function colorDayLessons(array $lessons, int $itemCount): array
     {
@@ -720,11 +1080,11 @@ class MediumSchoolSeeder extends Seeder
         $edgeBuckets = array_fill(0, $vertexCount, []);
         $edges = [];
 
-        foreach ($lessons as $task) {
-            $left = $classIndexes[$task['school_class_id']];
-            $right = $teacherIndexes[$task['teacher_id']];
+        foreach ($lessons as $assignment) {
+            $left = $classIndexes[$assignment['school_class_id']];
+            $right = $teacherIndexes[$assignment['teacher_id']];
             $edgeIndex = count($edges);
-            $edges[] = $task;
+            $edges[] = $assignment;
             $edgeBuckets[$left][$right][] = $edgeIndex;
             $leftDegrees[$left]++;
             $rightDegrees[$right]++;
@@ -732,7 +1092,7 @@ class MediumSchoolSeeder extends Seeder
 
         $degree = max(max($leftDegrees), max($rightDegrees));
         if ($degree > $itemCount) {
-            throw new RuntimeException('单日教学任务超过了作息容量。');
+            throw new RuntimeException('单日任课关系超过了作息容量。');
         }
 
         $leftDeficits = [];
@@ -765,7 +1125,7 @@ class MediumSchoolSeeder extends Seeder
                     throw new RuntimeException('课表匹配边不存在。');
                 }
                 if ($edges[$edgeIndex] !== null) {
-                    $coloredLessons[] = ['color' => $color, 'task' => $edges[$edgeIndex]];
+                    $coloredLessons[] = ['color' => $color, 'assignment' => $edges[$edgeIndex]];
                 }
             }
         }

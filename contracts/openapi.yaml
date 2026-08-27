@@ -27,10 +27,22 @@ tags:
     description: 学期参与班级、固定教室和迁移。
   - name: 作息
     description: 星期和课程课节模板。
-  - name: 教学任务
-    description: 教学任务、状态与教室迁移。
+  - name: 任课关系
+    description: 任课关系、状态与教室迁移。
+  - name: 教学组
+    description: 合班、拆班和走班教学组及其班级范围。
+  - name: 准备检查
+    description: 自动排课前的完整性、容量和阻塞问题检查。
+  - name: 规则约束
+    description: 硬约束、软规则与固定安排。
+  - name: 自动排课
+    description: 求解任务、进度、候选方案、诊断和采用。
+  - name: 课表版本
+    description: 草稿、当前课表和历史版本切换。
   - name: 课表
     description: 手工排课、冲突、锁定、校验与导出。
+  - name: 日常运行
+    description: 按实际日期处理临时调课、请假与代课，不修改基础周课表。
   - name: 运维
     description: 进程和数据库就绪状态。
 x-role-permission-matrix:
@@ -41,7 +53,7 @@ x-role-permission-matrix:
     description: 只读查看当前上下文及课表，并按班级、教师或教室导出 CSV；不能执行任何业务写入。
     operations: [authenticated reads, POST /api/v1/auth/logout, POST /api/v1/auth/change-password]
   scheduler:
-    description: 包含查看者权限，并可维护学年学期、基础资料、班级配置、作息、教学任务与课表。
+    description: 包含查看者权限，并可维护学年学期、基础资料、班级配置、作息、任课关系与课表。
     exclusions:
       [
         user administration,
@@ -143,6 +155,15 @@ paths:
           in: path
           required: true
           schema: { type: integer, minimum: 1 }
+        - $ref: "#/components/parameters/Search"
+        - name: grade_id
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - $ref: "#/components/parameters/ResourceStatus"
+        - $ref: "#/components/parameters/Sort"
+        - $ref: "#/components/parameters/Direction"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
       responses:
         "200": { $ref: "#/components/responses/Success" }
         "401": { $ref: "#/components/responses/Problem" }
@@ -203,6 +224,27 @@ paths:
         "422": { $ref: "#/components/responses/Problem" }
         "428": { $ref: "#/components/responses/Problem" }
   /api/v1/academic-years/{year}/classes/import/preview:
+    get:
+      operationId: getAcademicYearsYearClassesImportPreviewPage
+      tags: [学年学期]
+      summary: 分页读取 CSV 预检结果
+      parameters:
+        - name: year
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+        - name: token
+          in: query
+          required: true
+          schema: { type: string, minLength: 64, maxLength: 64 }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
     post:
       operationId: postacademicYearsYearClassesImportPreview
       tags: [学年学期]
@@ -516,6 +558,13 @@ paths:
       operationId: getgrades
       tags: [基础资料]
       summary: grades
+      parameters:
+        - $ref: "#/components/parameters/Search"
+        - $ref: "#/components/parameters/ResourceStatus"
+        - $ref: "#/components/parameters/Sort"
+        - $ref: "#/components/parameters/Direction"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
       responses:
         "200": { $ref: "#/components/responses/Success" }
         "401": { $ref: "#/components/responses/Problem" }
@@ -718,6 +767,15 @@ paths:
           in: path
           required: true
           schema: { type: integer, minimum: 1 }
+        - $ref: "#/components/parameters/Search"
+        - name: grade_id
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - $ref: "#/components/parameters/ResourceStatus"
+        - $ref: "#/components/parameters/Sort"
+        - $ref: "#/components/parameters/Direction"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
       responses:
         "200": { $ref: "#/components/responses/Success" }
         "401": { $ref: "#/components/responses/Problem" }
@@ -997,16 +1055,90 @@ paths:
         "412": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
         "428": { $ref: "#/components/responses/Problem" }
-  /api/v1/semesters/{semester}/teaching-tasks:
+  /api/v1/semesters/{semester}/teaching-groups:
     get:
-      operationId: getsemestersSemesterTeachingTasks
-      tags: [教学任务]
+      operationId: getSemesterTeachingGroups
+      tags: [教学组]
+      summary: 分页获取教学组
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - $ref: "#/components/parameters/Search"
+        - $ref: "#/components/parameters/ResourceStatus"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createSemesterTeachingGroup
+      tags: [教学组]
+      summary: 创建教学组
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TeachingGroupWrite"
+      responses:
+        "201": { $ref: "#/components/responses/Created" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "412": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/teaching-groups/{group}:
+    patch:
+      operationId: updateSemesterTeachingGroup
+      tags: [教学组]
+      summary: 修改教学组
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - $ref: "#/components/parameters/GroupPath"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TeachingGroupWrite"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "412": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteSemesterTeachingGroup
+      tags: [教学组]
+      summary: 删除未使用的教学组
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - $ref: "#/components/parameters/GroupPath"
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "412": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/teaching-assignments:
+    get:
+      operationId: getsemestersSemesterTeachingAssignments
+      tags: [任课关系]
       summary: index
       parameters:
-        - name: semester
-          in: path
-          required: true
-          schema: { type: integer, minimum: 1 }
+        - $ref: "#/components/parameters/SemesterPath"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
       responses:
         "200": { $ref: "#/components/responses/Success" }
         "401": { $ref: "#/components/responses/Problem" }
@@ -1016,8 +1148,8 @@ paths:
         "422": { $ref: "#/components/responses/Problem" }
         "428": { $ref: "#/components/responses/Problem" }
     post:
-      operationId: postsemestersSemesterTeachingTasks
-      tags: [教学任务]
+      operationId: postsemestersSemesterTeachingAssignments
+      tags: [任课关系]
       summary: store
       parameters:
         - name: semester
@@ -1030,7 +1162,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/WritePayload"
+              $ref: "#/components/schemas/TeachingAssignmentWrite"
       responses:
         "200": { $ref: "#/components/responses/Success" }
         "201": { $ref: "#/components/responses/Created" }
@@ -1040,10 +1172,10 @@ paths:
         "412": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
         "428": { $ref: "#/components/responses/Problem" }
-  /api/v1/semesters/{semester}/teaching-tasks/confirm:
+  /api/v1/semesters/{semester}/teaching-assignments/confirm:
     post:
-      operationId: postsemestersSemesterTeachingTasksConfirm
-      tags: [教学任务]
+      operationId: postsemestersSemesterTeachingAssignmentsConfirm
+      tags: [任课关系]
       summary: confirm
       parameters:
         - name: semester
@@ -1066,10 +1198,10 @@ paths:
         "412": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
         "428": { $ref: "#/components/responses/Problem" }
-  /api/v1/semesters/{semester}/teaching-tasks/copy:
+  /api/v1/semesters/{semester}/teaching-assignments/copy:
     post:
-      operationId: postsemestersSemesterTeachingTasksCopy
-      tags: [教学任务]
+      operationId: postsemestersSemesterTeachingAssignmentsCopy
+      tags: [任课关系]
       summary: copy
       parameters:
         - name: semester
@@ -1092,17 +1224,52 @@ paths:
         "412": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
         "428": { $ref: "#/components/responses/Problem" }
-  /api/v1/semesters/{semester}/teaching-tasks/{task}:
+  /api/v1/semesters/{semester}/teaching-assignments/bulk:
+    post:
+      operationId: bulkUpsertSemesterTeachingAssignments
+      tags: [任课关系]
+      summary: 原子批量新建或修改矩阵单元格
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [operations]
+              properties:
+                operations:
+                  type: array
+                  minItems: 1
+                  maxItems: 500
+                  items:
+                    allOf:
+                      - $ref: "#/components/schemas/TeachingAssignmentWrite"
+                      - type: object
+                        properties:
+                          assignment_id: { type: [integer, "null"], minimum: 1 }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "412": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/teaching-assignments/{assignment}:
     patch:
-      operationId: patchsemestersSemesterTeachingTasksTask
-      tags: [教学任务]
+      operationId: patchsemestersSemesterTeachingAssignmentsAssignment
+      tags: [任课关系]
       summary: update
       parameters:
         - name: semester
           in: path
           required: true
           schema: { type: integer, minimum: 1 }
-        - name: task
+        - name: assignment
           in: path
           required: true
           schema: { type: integer, minimum: 1 }
@@ -1122,15 +1289,15 @@ paths:
         "422": { $ref: "#/components/responses/Problem" }
         "428": { $ref: "#/components/responses/Problem" }
     delete:
-      operationId: deletesemestersSemesterTeachingTasksTask
-      tags: [教学任务]
+      operationId: deletesemestersSemesterTeachingAssignmentsAssignment
+      tags: [任课关系]
       summary: destroy
       parameters:
         - name: semester
           in: path
           required: true
           schema: { type: integer, minimum: 1 }
-        - name: task
+        - name: assignment
           in: path
           required: true
           schema: { type: integer, minimum: 1 }
@@ -1143,17 +1310,17 @@ paths:
         "412": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
         "428": { $ref: "#/components/responses/Problem" }
-  /api/v1/semesters/{semester}/teaching-tasks/{task}/deactivate:
+  /api/v1/semesters/{semester}/teaching-assignments/{assignment}/deactivate:
     post:
-      operationId: postsemestersSemesterTeachingTasksTaskDeactivate
-      tags: [教学任务]
+      operationId: postsemestersSemesterTeachingAssignmentsAssignmentDeactivate
+      tags: [任课关系]
       summary: deactivate
       parameters:
         - name: semester
           in: path
           required: true
           schema: { type: integer, minimum: 1 }
-        - name: task
+        - name: assignment
           in: path
           required: true
           schema: { type: integer, minimum: 1 }
@@ -1173,17 +1340,17 @@ paths:
         "412": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
         "428": { $ref: "#/components/responses/Problem" }
-  /api/v1/semesters/{semester}/teaching-tasks/{task}/migrate-room:
+  /api/v1/semesters/{semester}/teaching-assignments/{assignment}/migrate-room:
     post:
-      operationId: postsemestersSemesterTeachingTasksTaskMigrateRoom
-      tags: [教学任务]
+      operationId: postsemestersSemesterTeachingAssignmentsAssignmentMigrateRoom
+      tags: [任课关系]
       summary: migrateRoom
       parameters:
         - name: semester
           in: path
           required: true
           schema: { type: integer, minimum: 1 }
-        - name: task
+        - name: assignment
           in: path
           required: true
           schema: { type: integer, minimum: 1 }
@@ -1203,17 +1370,17 @@ paths:
         "412": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
         "428": { $ref: "#/components/responses/Problem" }
-  /api/v1/semesters/{semester}/teaching-tasks/{task}/restore:
+  /api/v1/semesters/{semester}/teaching-assignments/{assignment}/restore:
     post:
-      operationId: postsemestersSemesterTeachingTasksTaskRestore
-      tags: [教学任务]
+      operationId: postsemestersSemesterTeachingAssignmentsAssignmentRestore
+      tags: [任课关系]
       summary: restore
       parameters:
         - name: semester
           in: path
           required: true
           schema: { type: integer, minimum: 1 }
-        - name: task
+        - name: assignment
           in: path
           required: true
           schema: { type: integer, minimum: 1 }
@@ -1233,17 +1400,17 @@ paths:
         "412": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
         "428": { $ref: "#/components/responses/Problem" }
-  /api/v1/semesters/{semester}/teaching-tasks/{task}/unconfirm:
+  /api/v1/semesters/{semester}/teaching-assignments/{assignment}/unconfirm:
     post:
-      operationId: postsemestersSemesterTeachingTasksTaskUnconfirm
-      tags: [教学任务]
+      operationId: postsemestersSemesterTeachingAssignmentsAssignmentUnconfirm
+      tags: [任课关系]
       summary: unconfirm
       parameters:
         - name: semester
           in: path
           required: true
           schema: { type: integer, minimum: 1 }
-        - name: task
+        - name: assignment
           in: path
           required: true
           schema: { type: integer, minimum: 1 }
@@ -1259,6 +1426,437 @@ paths:
         "201": { $ref: "#/components/responses/Created" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "412": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/preparation-check:
+    get:
+      operationId: getSemesterPreparationCheck
+      tags: [准备检查]
+      summary: 获取自动排课准备状态与直接修复入口
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/scheduling-constraints:
+    get:
+      operationId: getSemesterSchedulingConstraints
+      tags: [规则约束]
+      summary: 分页查询规则与约束
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createSemesterSchedulingConstraint
+      tags: [规则约束]
+      summary: 创建规则或约束草稿
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WritePayload" }
+      responses:
+        "201": { $ref: "#/components/responses/Created" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "412": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/scheduling-constraints/{constraint}:
+    patch:
+      operationId: updateSemesterSchedulingConstraint
+      tags: [规则约束]
+      summary: 修改规则或约束
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - $ref: "#/components/parameters/ConstraintPath"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WritePayload" }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "412": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteSemesterSchedulingConstraint
+      tags: [规则约束]
+      summary: 删除未启用的用户规则
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - $ref: "#/components/parameters/ConstraintPath"
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "412": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/scheduling-constraints/{constraint}/activate:
+    post:
+      operationId: activateSemesterSchedulingConstraint
+      tags: [规则约束]
+      summary: 启用规则或约束
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - $ref: "#/components/parameters/ConstraintPath"
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "412": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/scheduling-constraints/{constraint}/deactivate:
+    post:
+      operationId: deactivateSemesterSchedulingConstraint
+      tags: [规则约束]
+      summary: 停用规则或约束
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - $ref: "#/components/parameters/ConstraintPath"
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "412": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/fixed-placements:
+    get:
+      operationId: getSemesterFixedPlacements
+      tags: [规则约束]
+      summary: 分页查询固定安排
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createSemesterFixedPlacement
+      tags: [规则约束]
+      summary: 创建固定安排
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WritePayload" }
+      responses:
+        "201": { $ref: "#/components/responses/Created" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "412": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/fixed-placements/{placement}:
+    patch:
+      operationId: updateSemesterFixedPlacement
+      tags: [规则约束]
+      summary: 修改固定安排
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - $ref: "#/components/parameters/PlacementPath"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WritePayload" }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "412": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteSemesterFixedPlacement
+      tags: [规则约束]
+      summary: 删除固定安排
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - $ref: "#/components/parameters/PlacementPath"
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "412": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/fixed-placements/{placement}/activate:
+    post:
+      operationId: activateSemesterFixedPlacement
+      tags: [规则约束]
+      summary: 启用固定安排
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - $ref: "#/components/parameters/PlacementPath"
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "412": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/fixed-placements/{placement}/deactivate:
+    post:
+      operationId: deactivateSemesterFixedPlacement
+      tags: [规则约束]
+      summary: 停用固定安排
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - $ref: "#/components/parameters/PlacementPath"
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "412": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/schedule-runs:
+    get:
+      operationId: getSemesterScheduleRuns
+      tags: [自动排课]
+      summary: 分页查询自动排课任务
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createSemesterScheduleRun
+      tags: [自动排课]
+      summary: 创建不可变的自动排课任务
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ScheduleRunRequest" }
+      responses:
+        "202": { $ref: "#/components/responses/Accepted" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "412": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/schedule-runs/{run}:
+    get:
+      operationId: getSemesterScheduleRun
+      tags: [自动排课]
+      summary: 查询求解进度、诊断与候选摘要
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - $ref: "#/components/parameters/RunPath"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/schedule-runs/{run}/cancel:
+    post:
+      operationId: cancelSemesterScheduleRun
+      tags: [自动排课]
+      summary: 取消尚未完成的自动排课任务
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - $ref: "#/components/parameters/RunPath"
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "412": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/schedule-runs/{run}/candidates/{candidate}:
+    get:
+      operationId: getSemesterScheduleCandidate
+      tags: [自动排课]
+      summary: 分页查看候选方案课程明细
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - $ref: "#/components/parameters/RunPath"
+        - $ref: "#/components/parameters/CandidatePath"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/schedule-runs/{run}/candidates/{candidate}/adopt:
+    post:
+      operationId: adoptSemesterScheduleCandidate
+      tags: [自动排课, 课表版本]
+      summary: 将候选方案采用为草稿或直接设为当前课表
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - $ref: "#/components/parameters/RunPath"
+        - $ref: "#/components/parameters/CandidatePath"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CandidateAdoptRequest" }
+      responses:
+        "201": { $ref: "#/components/responses/Created" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "412": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/timetable-versions:
+    get:
+      operationId: getSemesterTimetableVersions
+      tags: [课表版本]
+      summary: 分页查询课表版本
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createSemesterTimetableVersion
+      tags: [课表版本]
+      summary: 创建可编辑课表草稿
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WritePayload" }
+      responses:
+        "201": { $ref: "#/components/responses/Created" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "412": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/timetable-versions/compare:
+    get:
+      operationId: compareSemesterTimetableVersions
+      tags: [课表版本]
+      summary: 分页比较两个课表版本并解释逐条差异
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - name: left_version_id
+          in: query
+          required: true
+          schema: { type: integer, minimum: 1 }
+        - name: right_version_id
+          in: query
+          required: true
+          schema: { type: integer, minimum: 1 }
+        - name: change_type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [added, removed, moved, teacher_changed, room_changed, week_pattern_changed, lock_changed]
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/timetable-versions/{version}/activate:
+    post:
+      operationId: activateSemesterTimetableVersion
+      tags: [课表版本]
+      summary: 直接将完整无硬冲突草稿设为当前课表
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - $ref: "#/components/parameters/VersionPath"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VersionReasonRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "412": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/timetable-versions/{version}/restore:
+    post:
+      operationId: restoreSemesterTimetableVersion
+      tags: [课表版本]
+      summary: 从历史版本创建新的编辑草稿
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - $ref: "#/components/parameters/VersionPath"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VersionReasonRequest" }
+      responses:
+        "201": { $ref: "#/components/responses/Created" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "412": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
@@ -1295,6 +1893,83 @@ paths:
         "200": { $ref: "#/components/responses/Success" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "412": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/timetable/diagnose:
+    post:
+      operationId: diagnoseSemesterTimetablePlacement
+      tags: [课表]
+      summary: 在保存前诊断新增或移动课表条目的硬冲突与软规则影响
+      parameters:
+        - name: semester
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [weekday, item_id]
+              properties:
+                entry_id: { type: [integer, "null"], minimum: 1 }
+                teaching_assignment_id: { type: [integer, "null"], minimum: 1 }
+                weekday: { type: integer, minimum: 1, maximum: 7 }
+                item_id: { type: integer, minimum: 1 }
+                version_id: { type: [integer, "null"], minimum: 1 }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/timetable/swap/diagnose:
+    post:
+      operationId: diagnoseSemesterTimetableSwap
+      tags: [课表]
+      summary: 在保存前诊断两节课程能否安全交换
+      parameters:
+        - name: semester
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TimetableSwapPayload" }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/timetable/swap:
+    post:
+      operationId: swapSemesterTimetableEntries
+      tags: [课表]
+      summary: 在一个事务内交换两节课程的位置
+      parameters:
+        - name: semester
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TimetableSwapPayload" }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "412": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
@@ -1437,6 +2112,20 @@ paths:
           in: path
           required: true
           schema: { type: integer, minimum: 1 }
+        - name: view
+          in: query
+          required: true
+          schema: { type: string, enum: [class, teacher, room] }
+        - name: resource_id
+          in: query
+          required: true
+          schema: { type: integer, minimum: 1 }
+        - name: mode
+          in: query
+          schema: { type: string, enum: [official, full], default: official }
+        - name: version_id
+          in: query
+          schema: { type: integer, minimum: 1 }
       responses:
         "200":
           description: 带 UTF-8 BOM 的安全 CSV
@@ -1449,6 +2138,40 @@ paths:
         "412": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
         "428": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/timetable/export.xlsx:
+    get:
+      operationId: getSemestersSemesterTimetableExportXlsx
+      tags: [课表]
+      summary: 导出带元数据和格式的 Excel 课表
+      parameters:
+        - name: semester
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+        - name: view
+          in: query
+          required: true
+          schema: { type: string, enum: [class, teacher, room] }
+        - name: resource_id
+          in: query
+          required: true
+          schema: { type: integer, minimum: 1 }
+        - name: mode
+          in: query
+          schema: { type: string, enum: [official, full], default: official }
+        - name: version_id
+          in: query
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Office Open XML 工作簿
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
   /api/v1/semesters/{semester}/timetable/validation:
     get:
       operationId: getsemestersSemesterTimetableValidation
@@ -1467,11 +2190,275 @@ paths:
         "412": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
         "428": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/daily-timetable:
+    get:
+      operationId: getSemesterDailyTimetable
+      tags: [日常运行]
+      summary: 查看叠加日期例外与代课后的实际日期课表
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - name: date
+          in: query
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/calendar-exceptions:
+    get:
+      operationId: getSemesterCalendarExceptions
+      tags: [日常运行]
+      summary: 分页查询临时调课记录
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+        - name: date_from
+          in: query
+          schema: { type: string, format: date }
+        - name: date_to
+          in: query
+          schema: { type: string, format: date }
+        - name: type
+          in: query
+          schema: { $ref: "#/components/schemas/CalendarExceptionType" }
+        - name: status
+          in: query
+          schema: { $ref: "#/components/schemas/OperationalStatus" }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createSemesterCalendarException
+      tags: [日常运行]
+      summary: 保存已通过影响与冲突预览的日期例外
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CalendarExceptionWrite" }
+      responses:
+        "201": { $ref: "#/components/responses/Created" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "412": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/calendar-exceptions/preview:
+    post:
+      operationId: previewSemesterCalendarException
+      tags: [日常运行]
+      summary: 保存前预览临时调课的资源冲突、影响对象与通知范围
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CalendarExceptionWrite" }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/calendar-exceptions/{exception}/cancel:
+    post:
+      operationId: cancelSemesterCalendarException
+      tags: [日常运行]
+      summary: 取消日期例外并恢复该日期的基础安排
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - name: exception
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "412": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/teacher-leaves:
+    get:
+      operationId: getSemesterTeacherLeaves
+      tags: [日常运行]
+      summary: 分页查询教师请假与代课完成情况
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+        - name: teacher_id
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - name: status
+          in: query
+          schema: { $ref: "#/components/schemas/OperationalStatus" }
+        - name: date_from
+          in: query
+          schema: { type: string, format: date }
+        - name: date_to
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createSemesterTeacherLeave
+      tags: [日常运行]
+      summary: 保存已预览影响课程的教师请假
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TeacherLeaveWrite" }
+      responses:
+        "201": { $ref: "#/components/responses/Created" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "412": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/teacher-leaves/preview:
+    post:
+      operationId: previewSemesterTeacherLeave
+      tags: [日常运行]
+      summary: 保存前列出请假时间内实际受影响的课程
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TeacherLeaveWrite" }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/teacher-leaves/{leave}:
+    get:
+      operationId: getSemesterTeacherLeave
+      tags: [日常运行]
+      summary: 查看请假影响课程与已安排代课
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - name: leave
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/teacher-leaves/{leave}/recommendations:
+    get:
+      operationId: getSemesterSubstituteRecommendations
+      tags: [日常运行]
+      summary: 返回带评分与可解释理由的可用代课教师
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - name: leave
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+        - name: entry_id
+          in: query
+          required: true
+          schema: { type: integer, minimum: 1 }
+        - name: date
+          in: query
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/teacher-leaves/{leave}/substitutions:
+    post:
+      operationId: createSemesterSubstitutions
+      tags: [日常运行]
+      summary: 批量保存请假期间的代课安排
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - name: leave
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SubstitutionBatchWrite" }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "412": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/teacher-leaves/{leave}/cancel:
+    post:
+      operationId: cancelSemesterTeacherLeave
+      tags: [日常运行]
+      summary: 取消请假并同时取消关联代课
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - name: leave
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "412": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
   /api/v1/courses:
     get:
       operationId: getcourses
       tags: [基础资料]
       summary: courses
+      parameters:
+        - $ref: "#/components/parameters/Search"
+        - $ref: "#/components/parameters/ResourceStatus"
+        - $ref: "#/components/parameters/Sort"
+        - $ref: "#/components/parameters/Direction"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
       responses:
         "200": { $ref: "#/components/responses/Success" }
         "401": { $ref: "#/components/responses/Problem" }
@@ -1549,6 +2536,16 @@ paths:
       operationId: getteachers
       tags: [基础资料]
       summary: teachers
+      parameters:
+        - $ref: "#/components/parameters/Search"
+        - name: course_id
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - $ref: "#/components/parameters/ResourceStatus"
+        - $ref: "#/components/parameters/Sort"
+        - $ref: "#/components/parameters/Direction"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
       responses:
         "200": { $ref: "#/components/responses/Success" }
         "401": { $ref: "#/components/responses/Problem" }
@@ -1651,6 +2648,16 @@ paths:
       operationId: getusers
       tags: [用户]
       summary: index
+      parameters:
+        - $ref: "#/components/parameters/Search"
+        - name: role
+          in: query
+          schema: { type: string, enum: [admin, scheduler, viewer] }
+        - $ref: "#/components/parameters/ResourceStatus"
+        - $ref: "#/components/parameters/Sort"
+        - $ref: "#/components/parameters/Direction"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
       responses:
         "200": { $ref: "#/components/responses/Success" }
         "401": { $ref: "#/components/responses/Problem" }
@@ -1732,6 +2739,18 @@ paths:
       operationId: getrooms
       tags: [基础资料]
       summary: rooms
+      parameters:
+        - $ref: "#/components/parameters/Search"
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [classroom, playground, music_room, art_room, laboratory, computer_room, other]
+        - $ref: "#/components/parameters/ResourceStatus"
+        - $ref: "#/components/parameters/Sort"
+        - $ref: "#/components/parameters/Direction"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
       responses:
         "200": { $ref: "#/components/responses/Success" }
         "401": { $ref: "#/components/responses/Problem" }
@@ -1812,6 +2831,74 @@ components:
       name: timetable_session
       description: 同源 Laravel Sanctum Session；非安全方法同时要求 XSRF-TOKEN/X-XSRF-TOKEN。
   parameters:
+    SemesterPath:
+      name: semester
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1 }
+    ConstraintPath:
+      name: constraint
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1 }
+    PlacementPath:
+      name: placement
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1 }
+    RunPath:
+      name: run
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1 }
+    CandidatePath:
+      name: candidate
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1 }
+    GroupPath:
+      name: group
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1 }
+    VersionPath:
+      name: version
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1 }
+    Page:
+      name: page
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, default: 1 }
+    PerPage:
+      name: per_page
+      in: query
+      required: false
+      schema:
+        type: integer
+        enum: [20, 50, 100]
+        default: 20
+    Search:
+      name: search
+      in: query
+      required: false
+      schema: { type: string, maxLength: 100 }
+    ResourceStatus:
+      name: status
+      in: query
+      required: false
+      schema: { type: string, enum: [active, inactive] }
+    Sort:
+      name: sort
+      in: query
+      required: false
+      schema: { type: string }
+    Direction:
+      name: direction
+      in: query
+      required: false
+      schema: { type: string, enum: [asc, desc], default: asc }
     IfMatch:
       name: If-Match
       in: header
@@ -1825,6 +2912,160 @@ components:
       type: object
       additionalProperties: true
       description: 各操作的字段由对应业务端点校验；客户端生成的 paths 类型保留端点与并发头约束。
+    TimetableSwapPayload:
+      type: object
+      additionalProperties: false
+      required: [entry_id, target_entry_id, version_id]
+      properties:
+        entry_id: { type: integer, minimum: 1 }
+        target_entry_id: { type: integer, minimum: 1 }
+        version_id: { type: integer, minimum: 1 }
+    CalendarExceptionType:
+      type: string
+      enum: [move, swap, teacher_change, room_change, cancel, makeup, activity]
+    OperationalStatus:
+      type: string
+      enum: [draft, active, cancelled]
+    CalendarExceptionWrite:
+      type: object
+      additionalProperties: false
+      required: [effective_date, type, reason]
+      properties:
+        effective_date: { type: string, format: date }
+        replacement_date: { type: [string, "null"], format: date }
+        type: { $ref: "#/components/schemas/CalendarExceptionType" }
+        original_entry_id: { type: [integer, "null"], minimum: 1 }
+        related_entry_id: { type: [integer, "null"], minimum: 1 }
+        replacement_assignment_id: { type: [integer, "null"], minimum: 1 }
+        replacement_teacher_id: { type: [integer, "null"], minimum: 1 }
+        replacement_room_id: { type: [integer, "null"], minimum: 1 }
+        replacement_item_id: { type: [integer, "null"], minimum: 1 }
+        title: { type: [string, "null"], maxLength: 120 }
+        reason: { type: string, minLength: 2, maxLength: 1000 }
+    TeacherLeaveWrite:
+      type: object
+      additionalProperties: false
+      required: [teacher_id, starts_at, ends_at, type]
+      properties:
+        teacher_id: { type: integer, minimum: 1 }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+        type: { type: string, enum: [sick, personal, training, official, other] }
+        reason: { type: [string, "null"], maxLength: 1000 }
+        includes_non_course_items: { type: boolean, default: false }
+    SubstitutionBatchWrite:
+      type: object
+      additionalProperties: false
+      required: [substitutions]
+      properties:
+        substitutions:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            type: object
+            additionalProperties: false
+            required: [entry_id, date, replacement_teacher_id]
+            properties:
+              entry_id: { type: integer, minimum: 1 }
+              date: { type: string, format: date }
+              replacement_teacher_id: { type: integer, minimum: 1 }
+              reason: { type: [string, "null"], maxLength: 500 }
+    TeachingGroupWrite:
+      type: object
+      additionalProperties: false
+      required: [name, mode, school_class_ids]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        mode: { type: string, enum: [combined, split, roaming] }
+        status: { type: string, enum: [active, inactive] }
+        school_class_ids:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { type: integer, minimum: 1 }
+    TeachingAssignmentWrite:
+      type: object
+      additionalProperties: false
+      required: [course_id, teacher_id, weekly_items, room_mode]
+      oneOf:
+        - required: [school_class_id]
+        - required: [teaching_group_id]
+      properties:
+        school_class_id: { type: [integer, "null"], minimum: 1 }
+        teaching_group_id: { type: [integer, "null"], minimum: 1 }
+        course_id: { type: integer, minimum: 1 }
+        teacher_id: { type: integer, minimum: 1 }
+        collaborator_ids:
+          type: array
+          uniqueItems: true
+          items: { type: integer, minimum: 1 }
+        weekly_items: { type: integer, minimum: 1, maximum: 100 }
+        items_per_session: { type: integer, minimum: 1, maximum: 10, default: 1 }
+        week_pattern: { type: string, enum: [all, a, b, specified], default: all }
+        active_weeks:
+          type: [array, "null"]
+          uniqueItems: true
+          items: { type: integer, minimum: 1, maximum: 60 }
+        room_mode: { type: string, enum: [class_default, specified] }
+        specified_room_id: { type: [integer, "null"], minimum: 1 }
+        allows_substitution: { type: boolean, default: true }
+    ScheduleRunRequest:
+      type: object
+      additionalProperties: false
+      required: [scope, strategy, candidate_count]
+      properties:
+        scope:
+          type: object
+          additionalProperties: false
+          required: [type]
+          properties:
+            type:
+              type: string
+              enum: [all, grade, class, assignment]
+            ids:
+              type: array
+              maxItems: 500
+              uniqueItems: true
+              items: { type: integer, minimum: 1 }
+        preservation:
+          type: object
+          additionalProperties: false
+          properties:
+            keep_locked: { type: boolean, default: true }
+            keep_current: { type: boolean, default: false }
+            base_version_id: { type: [integer, "null"], minimum: 1 }
+        strategy:
+          type: object
+          additionalProperties: false
+          required: [profile]
+          properties:
+            profile:
+              type: string
+              enum: [balanced, class_distribution, teacher_experience, room_utilization, custom]
+            weights:
+              type: object
+              additionalProperties:
+                type: integer
+                minimum: 0
+                maximum: 100
+        candidate_count:
+          type: integer
+          enum: [1, 3]
+    CandidateAdoptRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: [string, "null"], maxLength: 120 }
+        activate: { type: boolean, default: false }
+        reason: { type: [string, "null"], minLength: 2, maxLength: 500 }
+    VersionReasonRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        name: { type: [string, "null"], maxLength: 120 }
+        reason: { type: string, minLength: 2, maxLength: 500 }
     Envelope:
       type: object
       required: [data]
@@ -1856,6 +3097,15 @@ components:
       headers:
         ETag:
           description: 创建后的当前聚合版本。
+          schema: { type: string }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Envelope" }
+    Accepted:
+      description: 任务已创建并进入后台处理队列
+      headers:
+        ETag:
+          description: 创建任务时对应的当前聚合版本。
           schema: { type: string }
       content:
         application/json:

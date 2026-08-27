@@ -2,14 +2,14 @@
 
 namespace App\Modules\Resources\Services;
 
+use App\Enums\AssignmentStatus;
 use App\Enums\LifecycleStatus;
 use App\Enums\RoomMode;
-use App\Enums\TaskStatus;
 use App\Modules\AcademicCalendar\Models\AppSetting;
 use App\Modules\AcademicCalendar\Models\Semester;
 use App\Modules\Resources\Models\SchoolClass;
 use App\Modules\SemesterClassSetting\Models\SemesterClassSetting;
-use App\Modules\TeachingTask\Models\TeachingTask;
+use App\Modules\TeachingAssignment\Models\TeachingAssignment;
 use App\Modules\Timetable\Models\TimetableEntry;
 use App\Support\ApiProblemException;
 use Illuminate\Http\Request;
@@ -48,12 +48,12 @@ class CatalogImpactService
         foreach ($semesters as $semester) {
             $classIds = $this->classIds($type, $id, $semester->academic_year_id);
             $settingIds = $this->settingIds($type, $id, $semester->id, $classIds);
-            $taskIds = $this->taskIds($type, $id, $semester->id, $classIds, $settingIds);
-            $entryCount = $this->entryCount($type, $id, $semester->id, $classIds, $taskIds);
-            $tasks = TeachingTask::query()->whereIn('id', $taskIds)
-                ->where('status', TaskStatus::Confirmed->value)->withCount('entries')->get();
-            $unplaced = (int) $tasks->sum(fn (TeachingTask $task): int => max(0, $task->weekly_items - $task->entries_count));
-            if ($classIds->isEmpty() && $settingIds->isEmpty() && $taskIds->isEmpty() && $entryCount === 0) {
+            $assignmentIds = $this->assignmentIds($type, $id, $semester->id, $classIds, $settingIds);
+            $entryCount = $this->entryCount($type, $id, $semester->id, $classIds, $assignmentIds);
+            $assignments = TeachingAssignment::query()->whereIn('id', $assignmentIds)
+                ->where('status', AssignmentStatus::Confirmed->value)->withCount('entries')->get();
+            $unplaced = (int) $assignments->sum(fn (TeachingAssignment $assignment): int => max(0, $assignment->weekly_items - $assignment->entries_count));
+            if ($classIds->isEmpty() && $settingIds->isEmpty() && $assignmentIds->isEmpty() && $entryCount === 0) {
                 continue;
             }
             $result[] = [
@@ -62,7 +62,7 @@ class CatalogImpactService
                 'timetable_revision' => (string) $semester->getRawOriginal('timetable_revision'),
                 'classes' => $classIds->count(),
                 'class_settings' => $settingIds->count(),
-                'confirmed_tasks' => $tasks->count(),
+                'confirmed_assignments' => $assignments->count(),
                 'unplaced_items' => $unplaced,
                 'timetable_entries' => $entryCount,
             ];
@@ -108,9 +108,9 @@ class CatalogImpactService
      * @param  Collection<int, int>  $settingIds
      * @return Collection<int, int>
      */
-    private function taskIds(string $type, int $id, int $semesterId, Collection $classIds, Collection $settingIds): Collection
+    private function assignmentIds(string $type, int $id, int $semesterId, Collection $classIds, Collection $settingIds): Collection
     {
-        $query = TeachingTask::query()->where('semester_id', $semesterId);
+        $query = TeachingAssignment::query()->where('semester_id', $semesterId);
         if ($classIds->isNotEmpty()) {
             $query->whereIn('school_class_id', $classIds);
         } elseif ($type === 'teacher') {
@@ -140,9 +140,9 @@ class CatalogImpactService
     }
 
     /** @param Collection<int, int> $classIds
-     * @param  Collection<int, int>  $taskIds
+     * @param  Collection<int, int>  $assignmentIds
      */
-    private function entryCount(string $type, int $id, int $semesterId, Collection $classIds, Collection $taskIds): int
+    private function entryCount(string $type, int $id, int $semesterId, Collection $classIds, Collection $assignmentIds): int
     {
         $query = TimetableEntry::query()->where('semester_id', $semesterId);
         if ($classIds->isNotEmpty()) {
@@ -152,10 +152,10 @@ class CatalogImpactService
         } elseif ($type === 'course') {
             $query->where('course_id', $id);
         } elseif ($type === 'room') {
-            $query->where(function ($inner) use ($id, $taskIds): void {
+            $query->where(function ($inner) use ($id, $assignmentIds): void {
                 $inner->where('actual_room_id', $id);
-                if ($taskIds->isNotEmpty()) {
-                    $inner->orWhereIn('teaching_task_id', $taskIds);
+                if ($assignmentIds->isNotEmpty()) {
+                    $inner->orWhereIn('teaching_assignment_id', $assignmentIds);
                 }
             });
         } else {

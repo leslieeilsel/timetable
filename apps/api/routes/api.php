@@ -3,15 +3,24 @@
 use App\Modules\AcademicCalendar\Http\Controllers\AcademicCalendarController;
 use App\Modules\AcademicCalendar\Http\Controllers\ContextController;
 use App\Modules\AcademicCalendar\Http\Controllers\SchoolSettingsController;
+use App\Modules\DailyOperations\Http\Controllers\CalendarExceptionController;
+use App\Modules\DailyOperations\Http\Controllers\TeacherLeaveController;
 use App\Modules\Identity\Http\Controllers\AuthController;
 use App\Modules\Identity\Http\Controllers\MeController;
 use App\Modules\Identity\Http\Controllers\UserController;
 use App\Modules\Resources\Http\Controllers\CatalogController;
 use App\Modules\Resources\Http\Controllers\SchoolClassController;
 use App\Modules\ScheduleTemplate\Http\Controllers\ScheduleTemplateController;
+use App\Modules\Scheduling\Http\Controllers\FixedPlacementController;
+use App\Modules\Scheduling\Http\Controllers\PreparationCheckController;
+use App\Modules\Scheduling\Http\Controllers\ScheduleCandidateController;
+use App\Modules\Scheduling\Http\Controllers\ScheduleRunController;
+use App\Modules\Scheduling\Http\Controllers\SchedulingConstraintController;
 use App\Modules\SemesterClassSetting\Http\Controllers\SemesterClassSettingController;
-use App\Modules\TeachingTask\Http\Controllers\TeachingTaskController;
+use App\Modules\TeachingAssignment\Http\Controllers\TeachingAssignmentController;
+use App\Modules\TeachingAssignment\Http\Controllers\TeachingGroupController;
 use App\Modules\Timetable\Http\Controllers\TimetableController;
+use App\Modules\Timetable\Http\Controllers\TimetableVersionController;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
@@ -88,6 +97,7 @@ Route::prefix('v1')->group(function (): void {
         Route::post('/academic-years/{year}/classes', [SchoolClassController::class, 'store']);
         Route::patch('/academic-years/{year}/classes/{schoolClass}', [SchoolClassController::class, 'update']);
         Route::delete('/academic-years/{year}/classes/{schoolClass}', [SchoolClassController::class, 'destroy']);
+        Route::get('/academic-years/{year}/classes/import/preview', [SchoolClassController::class, 'previewPage']);
         Route::post('/academic-years/{year}/classes/import/preview', [SchoolClassController::class, 'preview']);
         Route::post('/academic-years/{year}/classes/import/commit', [SchoolClassController::class, 'commit']);
 
@@ -101,18 +111,53 @@ Route::prefix('v1')->group(function (): void {
         Route::delete('/semesters/{semester}/schedule-template', [ScheduleTemplateController::class, 'destroy']);
         Route::post('/semesters/{semester}/schedule-template/copy', [ScheduleTemplateController::class, 'copy']);
 
-        Route::get('/semesters/{semester}/teaching-tasks', [TeachingTaskController::class, 'index']);
-        Route::post('/semesters/{semester}/teaching-tasks', [TeachingTaskController::class, 'store']);
-        Route::post('/semesters/{semester}/teaching-tasks/copy', [TeachingTaskController::class, 'copy']);
-        Route::post('/semesters/{semester}/teaching-tasks/confirm', [TeachingTaskController::class, 'confirm']);
-        Route::patch('/semesters/{semester}/teaching-tasks/{task}', [TeachingTaskController::class, 'update']);
-        Route::delete('/semesters/{semester}/teaching-tasks/{task}', [TeachingTaskController::class, 'destroy']);
-        Route::post('/semesters/{semester}/teaching-tasks/{task}/unconfirm', [TeachingTaskController::class, 'unconfirm']);
-        Route::post('/semesters/{semester}/teaching-tasks/{task}/deactivate', [TeachingTaskController::class, 'deactivate']);
-        Route::post('/semesters/{semester}/teaching-tasks/{task}/restore', [TeachingTaskController::class, 'restore']);
-        Route::post('/semesters/{semester}/teaching-tasks/{task}/migrate-room', [TeachingTaskController::class, 'migrateRoom']);
+        Route::get('/semesters/{semester}/teaching-assignments', [TeachingAssignmentController::class, 'index']);
+        Route::post('/semesters/{semester}/teaching-assignments', [TeachingAssignmentController::class, 'store']);
+        Route::post('/semesters/{semester}/teaching-assignments/copy', [TeachingAssignmentController::class, 'copy']);
+        Route::post('/semesters/{semester}/teaching-assignments/bulk', [TeachingAssignmentController::class, 'bulkUpsert']);
+        Route::post('/semesters/{semester}/teaching-assignments/confirm', [TeachingAssignmentController::class, 'confirm']);
+        Route::patch('/semesters/{semester}/teaching-assignments/{assignment}', [TeachingAssignmentController::class, 'update']);
+        Route::delete('/semesters/{semester}/teaching-assignments/{assignment}', [TeachingAssignmentController::class, 'destroy']);
+        Route::post('/semesters/{semester}/teaching-assignments/{assignment}/unconfirm', [TeachingAssignmentController::class, 'unconfirm']);
+        Route::post('/semesters/{semester}/teaching-assignments/{assignment}/deactivate', [TeachingAssignmentController::class, 'deactivate']);
+        Route::post('/semesters/{semester}/teaching-assignments/{assignment}/restore', [TeachingAssignmentController::class, 'restore']);
+        Route::post('/semesters/{semester}/teaching-assignments/{assignment}/migrate-room', [TeachingAssignmentController::class, 'migrateRoom']);
+
+        Route::get('/semesters/{semester}/teaching-groups', [TeachingGroupController::class, 'index']);
+        Route::post('/semesters/{semester}/teaching-groups', [TeachingGroupController::class, 'store']);
+        Route::patch('/semesters/{semester}/teaching-groups/{group}', [TeachingGroupController::class, 'update']);
+        Route::delete('/semesters/{semester}/teaching-groups/{group}', [TeachingGroupController::class, 'destroy']);
+
+        Route::get('/semesters/{semester}/scheduling-constraints', [SchedulingConstraintController::class, 'index']);
+        Route::get('/semesters/{semester}/preparation-check', PreparationCheckController::class);
+        Route::post('/semesters/{semester}/scheduling-constraints', [SchedulingConstraintController::class, 'store']);
+        Route::patch('/semesters/{semester}/scheduling-constraints/{constraint}', [SchedulingConstraintController::class, 'update']);
+        Route::delete('/semesters/{semester}/scheduling-constraints/{constraint}', [SchedulingConstraintController::class, 'destroy']);
+        Route::post('/semesters/{semester}/scheduling-constraints/{constraint}/activate', [SchedulingConstraintController::class, 'activate']);
+        Route::post('/semesters/{semester}/scheduling-constraints/{constraint}/deactivate', [SchedulingConstraintController::class, 'deactivate']);
+        Route::get('/semesters/{semester}/fixed-placements', [FixedPlacementController::class, 'index']);
+        Route::post('/semesters/{semester}/fixed-placements', [FixedPlacementController::class, 'store']);
+        Route::patch('/semesters/{semester}/fixed-placements/{placement}', [FixedPlacementController::class, 'update']);
+        Route::delete('/semesters/{semester}/fixed-placements/{placement}', [FixedPlacementController::class, 'destroy']);
+        Route::post('/semesters/{semester}/fixed-placements/{placement}/activate', [FixedPlacementController::class, 'activate']);
+        Route::post('/semesters/{semester}/fixed-placements/{placement}/deactivate', [FixedPlacementController::class, 'deactivate']);
+        Route::get('/semesters/{semester}/schedule-runs', [ScheduleRunController::class, 'index']);
+        Route::post('/semesters/{semester}/schedule-runs', [ScheduleRunController::class, 'store']);
+        Route::get('/semesters/{semester}/schedule-runs/{run}', [ScheduleRunController::class, 'show']);
+        Route::post('/semesters/{semester}/schedule-runs/{run}/cancel', [ScheduleRunController::class, 'cancel']);
+        Route::get('/semesters/{semester}/schedule-runs/{run}/candidates/{candidate}', [ScheduleCandidateController::class, 'show']);
+        Route::post('/semesters/{semester}/schedule-runs/{run}/candidates/{candidate}/adopt', [ScheduleCandidateController::class, 'adopt']);
+
+        Route::get('/semesters/{semester}/timetable-versions', [TimetableVersionController::class, 'index']);
+        Route::get('/semesters/{semester}/timetable-versions/compare', [TimetableVersionController::class, 'compare']);
+        Route::post('/semesters/{semester}/timetable-versions', [TimetableVersionController::class, 'store']);
+        Route::post('/semesters/{semester}/timetable-versions/{version}/activate', [TimetableVersionController::class, 'activate']);
+        Route::post('/semesters/{semester}/timetable-versions/{version}/restore', [TimetableVersionController::class, 'restore']);
 
         Route::get('/semesters/{semester}/timetable', [TimetableController::class, 'index']);
+        Route::post('/semesters/{semester}/timetable/diagnose', [TimetableController::class, 'diagnose']);
+        Route::post('/semesters/{semester}/timetable/swap/diagnose', [TimetableController::class, 'diagnoseSwap']);
+        Route::post('/semesters/{semester}/timetable/swap', [TimetableController::class, 'swap']);
         Route::post('/semesters/{semester}/timetable/entries', [TimetableController::class, 'store']);
         Route::patch('/semesters/{semester}/timetable/entries/{entry}', [TimetableController::class, 'update']);
         Route::delete('/semesters/{semester}/timetable/entries/{entry}', [TimetableController::class, 'destroy']);
@@ -121,5 +166,19 @@ Route::prefix('v1')->group(function (): void {
         Route::get('/semesters/{semester}/timetable/validation', [TimetableController::class, 'validation']);
         Route::get('/semesters/{semester}/timetable/completeness', [TimetableController::class, 'completeness']);
         Route::get('/semesters/{semester}/timetable/export.csv', [TimetableController::class, 'export']);
+        Route::get('/semesters/{semester}/timetable/export.xlsx', [TimetableController::class, 'exportXlsx']);
+
+        Route::get('/semesters/{semester}/daily-timetable', [CalendarExceptionController::class, 'timetable']);
+        Route::get('/semesters/{semester}/calendar-exceptions', [CalendarExceptionController::class, 'index']);
+        Route::post('/semesters/{semester}/calendar-exceptions/preview', [CalendarExceptionController::class, 'preview']);
+        Route::post('/semesters/{semester}/calendar-exceptions', [CalendarExceptionController::class, 'store']);
+        Route::post('/semesters/{semester}/calendar-exceptions/{exception}/cancel', [CalendarExceptionController::class, 'cancel']);
+        Route::get('/semesters/{semester}/teacher-leaves', [TeacherLeaveController::class, 'index']);
+        Route::post('/semesters/{semester}/teacher-leaves/preview', [TeacherLeaveController::class, 'preview']);
+        Route::post('/semesters/{semester}/teacher-leaves', [TeacherLeaveController::class, 'store']);
+        Route::get('/semesters/{semester}/teacher-leaves/{leave}', [TeacherLeaveController::class, 'show']);
+        Route::get('/semesters/{semester}/teacher-leaves/{leave}/recommendations', [TeacherLeaveController::class, 'recommendations']);
+        Route::post('/semesters/{semester}/teacher-leaves/{leave}/substitutions', [TeacherLeaveController::class, 'substitute']);
+        Route::post('/semesters/{semester}/teacher-leaves/{leave}/cancel', [TeacherLeaveController::class, 'cancel']);
     });
 });

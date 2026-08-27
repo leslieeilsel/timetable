@@ -1,5 +1,5 @@
 import { useEffect, useRef, type ReactNode } from "react"
-import { SearchIcon } from "lucide-react"
+import { ChevronDownIcon, SearchIcon } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 
@@ -39,30 +39,30 @@ export function ListToolbar({
   return (
     <div
       className={cn(
-        "data-toolbar flex flex-col gap-3 border-b px-4 py-4 lg:flex-row lg:flex-wrap lg:items-center",
+        "data-toolbar flex flex-col gap-2.5 border-b px-4 py-3 lg:flex-row lg:flex-wrap lg:items-center",
         !hasFilters && "py-3",
         className,
       )}
     >
       {onSearchChange && (
         <label className="relative block w-full lg:max-w-80">
-          <SearchIcon className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground" />
+          <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             ref={searchRef}
             value={search}
             onChange={(event) => onSearchChange(event.target.value)}
             placeholder={searchPlaceholder}
             aria-label={searchPlaceholder}
-            className="pl-10 pr-12"
+            className="pl-9 pr-11"
           />
-          <kbd className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 rounded border bg-muted/60 px-1.5 py-0.5 font-sans text-[11px] text-muted-foreground">
+          <kbd className="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 rounded border bg-muted/60 px-1.5 py-0.5 font-sans text-[11px] text-muted-foreground">
             ⌘K
           </kbd>
         </label>
       )}
       {children}
       {summary && (
-        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground lg:ml-auto">
+        <div className="flex shrink-0 flex-wrap items-center gap-2 text-sm text-muted-foreground lg:ml-auto">
           {summary}
         </div>
       )}
@@ -94,16 +94,19 @@ export function ToolbarSelect({
   className?: string
 }) {
   return (
-    <select
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-      aria-label={label}
-      className={cn(
-        "h-11 min-w-40 rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none transition-colors hover:bg-muted/40 focus:border-ring focus:ring-3 focus:ring-ring/20",
-        className,
-      )}
-    >
-      {children}
-    </select>
+    <span className="relative inline-flex shrink-0">
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        aria-label={label}
+        className={cn(
+          "h-9 min-w-36 appearance-none rounded-md border border-input bg-background py-1 pr-9 pl-3 text-sm text-foreground outline-none transition-colors hover:bg-muted/40 focus:border-ring focus:ring-3 focus:ring-ring/20",
+          className,
+        )}
+      >
+        {children}
+      </select>
+      <ChevronDownIcon className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+    </span>
   )
 }

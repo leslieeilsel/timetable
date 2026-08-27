@@ -1,6 +1,7 @@
-import { lazy, Suspense, type ReactNode } from "react"
-import { Navigate, Route, Routes } from "react-router"
+import { lazy, Suspense, useEffect, type ReactNode } from "react"
+import { Navigate, Route, Routes, useLocation } from "react-router"
 import { useAuth } from "@/lib/auth"
+import { pageTitleForPath, SYSTEM_NAME } from "@/lib/brand"
 import { WorkspaceShell } from "@/components/workspace-shell"
 import { LoadingState } from "@/components/page"
 
@@ -36,11 +37,38 @@ const AcademicYearDetailPage = lazy(() =>
 const SemesterSetupPage = lazy(() =>
   import("@/pages/semester-setup-page").then((module) => ({ default: module.SemesterSetupPage })),
 )
-const TeachingTasksPage = lazy(() =>
-  import("@/pages/teaching-tasks-page").then((module) => ({ default: module.TeachingTasksPage })),
+const TeachingAssignmentsPage = lazy(() =>
+  import("@/pages/course-assignment-matrix-page").then((module) => ({
+    default: module.CourseAssignmentMatrixPage,
+  })),
+)
+const PreparationCheckPage = lazy(() =>
+  import("@/pages/preparation-check-page").then((module) => ({
+    default: module.PreparationCheckPage,
+  })),
+)
+const SchedulingConstraintsPage = lazy(() =>
+  import("@/pages/scheduling-constraints-page").then((module) => ({
+    default: module.SchedulingConstraintsPage,
+  })),
+)
+const ScheduleGenerationPage = lazy(() =>
+  import("@/pages/schedule-generation-page").then((module) => ({
+    default: module.ScheduleGenerationPage,
+  })),
 )
 const TimetablePage = lazy(() =>
   import("@/pages/timetable-page").then((module) => ({ default: module.TimetablePage })),
+)
+const DailyAdjustmentsPage = lazy(() =>
+  import("@/pages/daily-adjustments-page").then((module) => ({
+    default: module.DailyAdjustmentsPage,
+  })),
+)
+const TeacherLeavesPage = lazy(() =>
+  import("@/pages/teacher-leaves-page").then((module) => ({
+    default: module.TeacherLeavesPage,
+  })),
 )
 const UsersPage = lazy(() =>
   import("@/pages/system-pages").then((module) => ({ default: module.UsersPage })),
@@ -68,116 +96,176 @@ function RequireRole({
   return user && roles.includes(user.role) ? children : <Navigate to="/" replace />
 }
 
+function DocumentTitle() {
+  const { pathname } = useLocation()
+  useEffect(() => {
+    document.title = `${SYSTEM_NAME} · ${pageTitleForPath(pathname)}`
+  }, [pathname])
+  return null
+}
+
 export default function App() {
   return (
-    <Suspense fallback={<LoadingState />}>
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/change-password" element={<ChangePasswordPage />} />
-        <Route element={<ProtectedWorkspace />}>
-          <Route index element={<DashboardPage />} />
-          <Route path="resources" element={<Navigate to="/resources/grades" replace />} />
-          <Route
-            path="resources/grades"
-            element={
-              <RequireRole roles={["admin", "scheduler"]}>
-                <GradesPage />
-              </RequireRole>
-            }
-          />
-          <Route
-            path="resources/teachers"
-            element={
-              <RequireRole roles={["admin", "scheduler"]}>
-                <TeachersPage />
-              </RequireRole>
-            }
-          />
-          <Route
-            path="resources/courses"
-            element={
-              <RequireRole roles={["admin", "scheduler"]}>
-                <CoursesPage />
-              </RequireRole>
-            }
-          />
-          <Route
-            path="resources/rooms"
-            element={
-              <RequireRole roles={["admin", "scheduler"]}>
-                <RoomsPage />
-              </RequireRole>
-            }
-          />
-          <Route
-            path="years"
-            element={
-              <RequireRole roles={["admin", "scheduler"]}>
-                <AcademicYearsPage />
-              </RequireRole>
-            }
-          />
-          <Route
-            path="years/:yearId"
-            element={
-              <RequireRole roles={["admin", "scheduler"]}>
-                <AcademicYearDetailPage />
-              </RequireRole>
-            }
-          />
-          <Route
-            path="semester/setup"
-            element={
-              <RequireRole roles={["admin", "scheduler"]}>
-                <SemesterSetupPage />
-              </RequireRole>
-            }
-          />
-          <Route
-            path="semester/tasks"
-            element={
-              <RequireRole roles={["admin", "scheduler"]}>
-                <TeachingTasksPage />
-              </RequireRole>
-            }
-          />
-          <Route path="semester/timetable" element={<TimetablePage />} />
-          <Route
-            path="semesters/:semesterId/setup"
-            element={
-              <RequireRole roles={["admin", "scheduler"]}>
-                <SemesterSetupPage />
-              </RequireRole>
-            }
-          />
-          <Route
-            path="semesters/:semesterId/tasks"
-            element={
-              <RequireRole roles={["admin", "scheduler"]}>
-                <TeachingTasksPage />
-              </RequireRole>
-            }
-          />
-          <Route path="semesters/:semesterId/timetable" element={<TimetablePage />} />
-          <Route
-            path="users"
-            element={
-              <RequireRole roles={["admin"]}>
-                <UsersPage />
-              </RequireRole>
-            }
-          />
-          <Route
-            path="settings"
-            element={
-              <RequireRole roles={["admin"]}>
-                <SettingsPage />
-              </RequireRole>
-            }
-          />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Route>
-      </Routes>
-    </Suspense>
+    <>
+      <DocumentTitle />
+      <Suspense fallback={<LoadingState />}>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/change-password" element={<ChangePasswordPage />} />
+          <Route element={<ProtectedWorkspace />}>
+            <Route index element={<DashboardPage />} />
+            <Route path="resources" element={<Navigate to="/resources/grades" replace />} />
+            <Route
+              path="resources/grades"
+              element={
+                <RequireRole roles={["admin", "scheduler"]}>
+                  <GradesPage />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="resources/teachers"
+              element={
+                <RequireRole roles={["admin", "scheduler"]}>
+                  <TeachersPage />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="resources/courses"
+              element={
+                <RequireRole roles={["admin", "scheduler"]}>
+                  <CoursesPage />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="resources/rooms"
+              element={
+                <RequireRole roles={["admin", "scheduler"]}>
+                  <RoomsPage />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="years"
+              element={
+                <RequireRole roles={["admin", "scheduler"]}>
+                  <AcademicYearsPage />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="years/:yearId"
+              element={
+                <RequireRole roles={["admin", "scheduler"]}>
+                  <AcademicYearDetailPage />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="semester/setup"
+              element={
+                <RequireRole roles={["admin", "scheduler"]}>
+                  <SemesterSetupPage />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="semester/assignments"
+              element={
+                <RequireRole roles={["admin", "scheduler"]}>
+                  <TeachingAssignmentsPage />
+                </RequireRole>
+              }
+            />
+            <Route path="semester/timetable" element={<TimetablePage />} />
+            <Route
+              path="scheduling/preparation"
+              element={
+                <RequireRole roles={["admin", "scheduler"]}>
+                  <PreparationCheckPage />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="scheduling/assignments"
+              element={
+                <RequireRole roles={["admin", "scheduler"]}>
+                  <TeachingAssignmentsPage />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="scheduling/constraints"
+              element={
+                <RequireRole roles={["admin", "scheduler"]}>
+                  <SchedulingConstraintsPage />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="scheduling/generate"
+              element={
+                <RequireRole roles={["admin", "scheduler"]}>
+                  <ScheduleGenerationPage />
+                </RequireRole>
+              }
+            />
+            <Route path="scheduling/timetable" element={<TimetablePage />} />
+            <Route
+              path="daily/adjustments"
+              element={
+                <RequireRole roles={["admin", "scheduler"]}>
+                  <DailyAdjustmentsPage />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="daily/leaves"
+              element={
+                <RequireRole roles={["admin", "scheduler"]}>
+                  <TeacherLeavesPage />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="semesters/:semesterId/setup"
+              element={
+                <RequireRole roles={["admin", "scheduler"]}>
+                  <SemesterSetupPage />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="semesters/:semesterId/assignments"
+              element={
+                <RequireRole roles={["admin", "scheduler"]}>
+                  <TeachingAssignmentsPage />
+                </RequireRole>
+              }
+            />
+            <Route path="semesters/:semesterId/timetable" element={<TimetablePage />} />
+            <Route
+              path="users"
+              element={
+                <RequireRole roles={["admin"]}>
+                  <UsersPage />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="settings"
+              element={
+                <RequireRole roles={["admin"]}>
+                  <SettingsPage />
+                </RequireRole>
+              }
+            />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        </Routes>
+      </Suspense>
+    </>
   )
 }

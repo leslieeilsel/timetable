@@ -82,7 +82,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** 分页读取 CSV 预检结果 */
+        get: operations["getAcademicYearsYearClassesImportPreviewPage"];
         put?: never;
         /** preview */
         post: operations["postacademicYearsYearClassesImportPreview"];
@@ -544,7 +545,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/semesters/{semester}/teaching-tasks": {
+    "/api/v1/semesters/{semester}/teaching-groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 分页获取教学组 */
+        get: operations["getSemesterTeachingGroups"];
+        put?: never;
+        /** 创建教学组 */
+        post: operations["createSemesterTeachingGroup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/teaching-groups/{group}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 删除未使用的教学组 */
+        delete: operations["deleteSemesterTeachingGroup"];
+        options?: never;
+        head?: never;
+        /** 修改教学组 */
+        patch: operations["updateSemesterTeachingGroup"];
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/teaching-assignments": {
         parameters: {
             query?: never;
             header?: never;
@@ -552,17 +589,17 @@ export interface paths {
             cookie?: never;
         };
         /** index */
-        get: operations["getsemestersSemesterTeachingTasks"];
+        get: operations["getsemestersSemesterTeachingAssignments"];
         put?: never;
         /** store */
-        post: operations["postsemestersSemesterTeachingTasks"];
+        post: operations["postsemestersSemesterTeachingAssignments"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/semesters/{semester}/teaching-tasks/confirm": {
+    "/api/v1/semesters/{semester}/teaching-assignments/confirm": {
         parameters: {
             query?: never;
             header?: never;
@@ -572,14 +609,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** confirm */
-        post: operations["postsemestersSemesterTeachingTasksConfirm"];
+        post: operations["postsemestersSemesterTeachingAssignmentsConfirm"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/semesters/{semester}/teaching-tasks/copy": {
+    "/api/v1/semesters/{semester}/teaching-assignments/copy": {
         parameters: {
             query?: never;
             header?: never;
@@ -589,14 +626,31 @@ export interface paths {
         get?: never;
         put?: never;
         /** copy */
-        post: operations["postsemestersSemesterTeachingTasksCopy"];
+        post: operations["postsemestersSemesterTeachingAssignmentsCopy"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/semesters/{semester}/teaching-tasks/{task}": {
+    "/api/v1/semesters/{semester}/teaching-assignments/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 原子批量新建或修改矩阵单元格 */
+        post: operations["bulkUpsertSemesterTeachingAssignments"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/teaching-assignments/{assignment}": {
         parameters: {
             query?: never;
             header?: never;
@@ -607,14 +661,14 @@ export interface paths {
         put?: never;
         post?: never;
         /** destroy */
-        delete: operations["deletesemestersSemesterTeachingTasksTask"];
+        delete: operations["deletesemestersSemesterTeachingAssignmentsAssignment"];
         options?: never;
         head?: never;
         /** update */
-        patch: operations["patchsemestersSemesterTeachingTasksTask"];
+        patch: operations["patchsemestersSemesterTeachingAssignmentsAssignment"];
         trace?: never;
     };
-    "/api/v1/semesters/{semester}/teaching-tasks/{task}/deactivate": {
+    "/api/v1/semesters/{semester}/teaching-assignments/{assignment}/deactivate": {
         parameters: {
             query?: never;
             header?: never;
@@ -624,14 +678,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** deactivate */
-        post: operations["postsemestersSemesterTeachingTasksTaskDeactivate"];
+        post: operations["postsemestersSemesterTeachingAssignmentsAssignmentDeactivate"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/semesters/{semester}/teaching-tasks/{task}/migrate-room": {
+    "/api/v1/semesters/{semester}/teaching-assignments/{assignment}/migrate-room": {
         parameters: {
             query?: never;
             header?: never;
@@ -641,14 +695,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** migrateRoom */
-        post: operations["postsemestersSemesterTeachingTasksTaskMigrateRoom"];
+        post: operations["postsemestersSemesterTeachingAssignmentsAssignmentMigrateRoom"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/semesters/{semester}/teaching-tasks/{task}/restore": {
+    "/api/v1/semesters/{semester}/teaching-assignments/{assignment}/restore": {
         parameters: {
             query?: never;
             header?: never;
@@ -658,14 +712,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** restore */
-        post: operations["postsemestersSemesterTeachingTasksTaskRestore"];
+        post: operations["postsemestersSemesterTeachingAssignmentsAssignmentRestore"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/semesters/{semester}/teaching-tasks/{task}/unconfirm": {
+    "/api/v1/semesters/{semester}/teaching-assignments/{assignment}/unconfirm": {
         parameters: {
             query?: never;
             header?: never;
@@ -675,7 +729,319 @@ export interface paths {
         get?: never;
         put?: never;
         /** unconfirm */
-        post: operations["postsemestersSemesterTeachingTasksTaskUnconfirm"];
+        post: operations["postsemestersSemesterTeachingAssignmentsAssignmentUnconfirm"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/preparation-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取自动排课准备状态与直接修复入口 */
+        get: operations["getSemesterPreparationCheck"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/scheduling-constraints": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 分页查询规则与约束 */
+        get: operations["getSemesterSchedulingConstraints"];
+        put?: never;
+        /** 创建规则或约束草稿 */
+        post: operations["createSemesterSchedulingConstraint"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/scheduling-constraints/{constraint}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 删除未启用的用户规则 */
+        delete: operations["deleteSemesterSchedulingConstraint"];
+        options?: never;
+        head?: never;
+        /** 修改规则或约束 */
+        patch: operations["updateSemesterSchedulingConstraint"];
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/scheduling-constraints/{constraint}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 启用规则或约束 */
+        post: operations["activateSemesterSchedulingConstraint"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/scheduling-constraints/{constraint}/deactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 停用规则或约束 */
+        post: operations["deactivateSemesterSchedulingConstraint"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/fixed-placements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 分页查询固定安排 */
+        get: operations["getSemesterFixedPlacements"];
+        put?: never;
+        /** 创建固定安排 */
+        post: operations["createSemesterFixedPlacement"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/fixed-placements/{placement}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 删除固定安排 */
+        delete: operations["deleteSemesterFixedPlacement"];
+        options?: never;
+        head?: never;
+        /** 修改固定安排 */
+        patch: operations["updateSemesterFixedPlacement"];
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/fixed-placements/{placement}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 启用固定安排 */
+        post: operations["activateSemesterFixedPlacement"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/fixed-placements/{placement}/deactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 停用固定安排 */
+        post: operations["deactivateSemesterFixedPlacement"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/schedule-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 分页查询自动排课任务 */
+        get: operations["getSemesterScheduleRuns"];
+        put?: never;
+        /** 创建不可变的自动排课任务 */
+        post: operations["createSemesterScheduleRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/schedule-runs/{run}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 查询求解进度、诊断与候选摘要 */
+        get: operations["getSemesterScheduleRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/schedule-runs/{run}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 取消尚未完成的自动排课任务 */
+        post: operations["cancelSemesterScheduleRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/schedule-runs/{run}/candidates/{candidate}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 分页查看候选方案课程明细 */
+        get: operations["getSemesterScheduleCandidate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/schedule-runs/{run}/candidates/{candidate}/adopt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 将候选方案采用为草稿或直接设为当前课表 */
+        post: operations["adoptSemesterScheduleCandidate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/timetable-versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 分页查询课表版本 */
+        get: operations["getSemesterTimetableVersions"];
+        put?: never;
+        /** 创建可编辑课表草稿 */
+        post: operations["createSemesterTimetableVersion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/timetable-versions/compare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 分页比较两个课表版本并解释逐条差异 */
+        get: operations["compareSemesterTimetableVersions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/timetable-versions/{version}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 直接将完整无硬冲突草稿设为当前课表 */
+        post: operations["activateSemesterTimetableVersion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/timetable-versions/{version}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 从历史版本创建新的编辑草稿 */
+        post: operations["restoreSemesterTimetableVersion"];
         delete?: never;
         options?: never;
         head?: never;
@@ -710,6 +1076,57 @@ export interface paths {
         get: operations["getsemestersSemesterTimetableCompleteness"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/timetable/diagnose": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 在保存前诊断新增或移动课表条目的硬冲突与软规则影响 */
+        post: operations["diagnoseSemesterTimetablePlacement"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/timetable/swap/diagnose": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 在保存前诊断两节课程能否安全交换 */
+        post: operations["diagnoseSemesterTimetableSwap"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/timetable/swap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 在一个事务内交换两节课程的位置 */
+        post: operations["swapSemesterTimetableEntries"];
         delete?: never;
         options?: never;
         head?: never;
@@ -786,6 +1203,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/semesters/{semester}/timetable/export.xlsx": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 导出带元数据和格式的 Excel 课表 */
+        get: operations["getSemestersSemesterTimetableExportXlsx"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/semesters/{semester}/timetable/validation": {
         parameters: {
             query?: never;
@@ -797,6 +1231,178 @@ export interface paths {
         get: operations["getsemestersSemesterTimetableValidation"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/daily-timetable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 查看叠加日期例外与代课后的实际日期课表 */
+        get: operations["getSemesterDailyTimetable"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/calendar-exceptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 分页查询临时调课记录 */
+        get: operations["getSemesterCalendarExceptions"];
+        put?: never;
+        /** 保存已通过影响与冲突预览的日期例外 */
+        post: operations["createSemesterCalendarException"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/calendar-exceptions/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 保存前预览临时调课的资源冲突、影响对象与通知范围 */
+        post: operations["previewSemesterCalendarException"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/calendar-exceptions/{exception}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 取消日期例外并恢复该日期的基础安排 */
+        post: operations["cancelSemesterCalendarException"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/teacher-leaves": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 分页查询教师请假与代课完成情况 */
+        get: operations["getSemesterTeacherLeaves"];
+        put?: never;
+        /** 保存已预览影响课程的教师请假 */
+        post: operations["createSemesterTeacherLeave"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/teacher-leaves/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 保存前列出请假时间内实际受影响的课程 */
+        post: operations["previewSemesterTeacherLeave"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/teacher-leaves/{leave}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 查看请假影响课程与已安排代课 */
+        get: operations["getSemesterTeacherLeave"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/teacher-leaves/{leave}/recommendations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 返回带评分与可解释理由的可用代课教师 */
+        get: operations["getSemesterSubstituteRecommendations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/teacher-leaves/{leave}/substitutions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 批量保存请假期间的代课安排 */
+        post: operations["createSemesterSubstitutions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/teacher-leaves/{leave}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 取消请假并同时取消关联代课 */
+        post: operations["cancelSemesterTeacherLeave"];
         delete?: never;
         options?: never;
         head?: never;
@@ -988,6 +1594,113 @@ export interface components {
         WritePayload: {
             [key: string]: unknown;
         };
+        TimetableSwapPayload: {
+            entry_id: number;
+            target_entry_id: number;
+            version_id: number;
+        };
+        /** @enum {string} */
+        CalendarExceptionType: "move" | "swap" | "teacher_change" | "room_change" | "cancel" | "makeup" | "activity";
+        /** @enum {string} */
+        OperationalStatus: "draft" | "active" | "cancelled";
+        CalendarExceptionWrite: {
+            /** Format: date */
+            effective_date: string;
+            /** Format: date */
+            replacement_date?: string | null;
+            type: components["schemas"]["CalendarExceptionType"];
+            original_entry_id?: number | null;
+            related_entry_id?: number | null;
+            replacement_assignment_id?: number | null;
+            replacement_teacher_id?: number | null;
+            replacement_room_id?: number | null;
+            replacement_item_id?: number | null;
+            title?: string | null;
+            reason: string;
+        };
+        TeacherLeaveWrite: {
+            teacher_id: number;
+            /** Format: date-time */
+            starts_at: string;
+            /** Format: date-time */
+            ends_at: string;
+            /** @enum {string} */
+            type: "sick" | "personal" | "training" | "official" | "other";
+            reason?: string | null;
+            /** @default false */
+            includes_non_course_items: boolean;
+        };
+        SubstitutionBatchWrite: {
+            substitutions: {
+                entry_id: number;
+                /** Format: date */
+                date: string;
+                replacement_teacher_id: number;
+                reason?: string | null;
+            }[];
+        };
+        TeachingGroupWrite: {
+            name: string;
+            /** @enum {string} */
+            mode: "combined" | "split" | "roaming";
+            /** @enum {string} */
+            status?: "active" | "inactive";
+            school_class_ids: number[];
+        };
+        TeachingAssignmentWrite: {
+            school_class_id?: number | null;
+            teaching_group_id?: number | null;
+            course_id: number;
+            teacher_id: number;
+            collaborator_ids?: number[];
+            weekly_items: number;
+            /** @default 1 */
+            items_per_session: number;
+            /**
+             * @default all
+             * @enum {string}
+             */
+            week_pattern: "all" | "a" | "b" | "specified";
+            active_weeks?: number[] | null;
+            /** @enum {string} */
+            room_mode: "class_default" | "specified";
+            specified_room_id?: number | null;
+            /** @default true */
+            allows_substitution: boolean;
+        } & (unknown | unknown);
+        ScheduleRunRequest: {
+            scope: {
+                /** @enum {string} */
+                type: "all" | "grade" | "class" | "assignment";
+                ids?: number[];
+            };
+            preservation?: {
+                /** @default true */
+                keep_locked: boolean;
+                /** @default false */
+                keep_current: boolean;
+                base_version_id?: number | null;
+            };
+            strategy: {
+                /** @enum {string} */
+                profile: "balanced" | "class_distribution" | "teacher_experience" | "room_utilization" | "custom";
+                weights?: {
+                    [key: string]: number;
+                };
+            };
+            /** @enum {integer} */
+            candidate_count: 1 | 3;
+        };
+        CandidateAdoptRequest: {
+            name?: string | null;
+            /** @default false */
+            activate: boolean;
+            reason?: string | null;
+        };
+        VersionReasonRequest: {
+            name?: string | null;
+            reason: string;
+        };
         Envelope: {
             data: unknown;
             meta?: {
@@ -1025,6 +1738,17 @@ export interface components {
                 "application/json": components["schemas"]["Envelope"];
             };
         };
+        /** @description 任务已创建并进入后台处理队列 */
+        Accepted: {
+            headers: {
+                /** @description 创建任务时对应的当前聚合版本。 */
+                ETag?: string;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Envelope"];
+            };
+        };
         /** @description 结构化业务或验证错误 */
         Problem: {
             headers: {
@@ -1036,6 +1760,19 @@ export interface components {
         };
     };
     parameters: {
+        SemesterPath: number;
+        ConstraintPath: number;
+        PlacementPath: number;
+        RunPath: number;
+        CandidatePath: number;
+        GroupPath: number;
+        VersionPath: number;
+        Page: number;
+        PerPage: 20 | 50 | 100;
+        Search: string;
+        ResourceStatus: "active" | "inactive";
+        Sort: string;
+        Direction: "asc" | "desc";
         /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
         IfMatch: string;
     };
@@ -1141,7 +1878,15 @@ export interface operations {
     };
     getacademicYearsYearClasses: {
         parameters: {
-            query?: never;
+            query?: {
+                search?: components["parameters"]["Search"];
+                grade_id?: number;
+                status?: components["parameters"]["ResourceStatus"];
+                sort?: components["parameters"]["Sort"];
+                direction?: components["parameters"]["Direction"];
+                page?: components["parameters"]["Page"];
+                per_page?: components["parameters"]["PerPage"];
+            };
             header?: never;
             path: {
                 year: number;
@@ -1213,6 +1958,28 @@ export interface operations {
             412: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
             428: components["responses"]["Problem"];
+        };
+    };
+    getAcademicYearsYearClassesImportPreviewPage: {
+        parameters: {
+            query: {
+                token: string;
+                page?: components["parameters"]["Page"];
+                per_page?: components["parameters"]["PerPage"];
+            };
+            header?: never;
+            path: {
+                year: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
         };
     };
     postacademicYearsYearClassesImportPreview: {
@@ -1557,7 +2324,14 @@ export interface operations {
     };
     getgrades: {
         parameters: {
-            query?: never;
+            query?: {
+                search?: components["parameters"]["Search"];
+                status?: components["parameters"]["ResourceStatus"];
+                sort?: components["parameters"]["Sort"];
+                direction?: components["parameters"]["Direction"];
+                page?: components["parameters"]["Page"];
+                per_page?: components["parameters"]["PerPage"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -1800,7 +2574,15 @@ export interface operations {
     };
     getsemestersSemesterClassSettings: {
         parameters: {
-            query?: never;
+            query?: {
+                search?: components["parameters"]["Search"];
+                grade_id?: number;
+                status?: components["parameters"]["ResourceStatus"];
+                sort?: components["parameters"]["Sort"];
+                direction?: components["parameters"]["Direction"];
+                page?: components["parameters"]["Page"];
+                per_page?: components["parameters"]["PerPage"];
+            };
             header?: never;
             path: {
                 semester: number;
@@ -2109,12 +2891,536 @@ export interface operations {
             428: components["responses"]["Problem"];
         };
     };
-    getsemestersSemesterTeachingTasks: {
+    getSemesterTeachingGroups: {
+        parameters: {
+            query?: {
+                search?: components["parameters"]["Search"];
+                status?: components["parameters"]["ResourceStatus"];
+                page?: components["parameters"]["Page"];
+                per_page?: components["parameters"]["PerPage"];
+            };
+            header?: never;
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    createSemesterTeachingGroup: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeachingGroupWrite"];
+            };
+        };
+        responses: {
+            201: components["responses"]["Created"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+        };
+    };
+    deleteSemesterTeachingGroup: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+                group: components["parameters"]["GroupPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+        };
+    };
+    updateSemesterTeachingGroup: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+                group: components["parameters"]["GroupPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeachingGroupWrite"];
+            };
+        };
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+        };
+    };
+    getsemestersSemesterTeachingAssignments: {
+        parameters: {
+            query?: {
+                page?: components["parameters"]["Page"];
+                per_page?: components["parameters"]["PerPage"];
+            };
+            header?: never;
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+        };
+    };
+    postsemestersSemesterTeachingAssignments: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                semester: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeachingAssignmentWrite"];
+            };
+        };
+        responses: {
+            200: components["responses"]["Success"];
+            201: components["responses"]["Created"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+        };
+    };
+    postsemestersSemesterTeachingAssignmentsConfirm: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                semester: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WritePayload"];
+            };
+        };
+        responses: {
+            200: components["responses"]["Success"];
+            201: components["responses"]["Created"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+        };
+    };
+    postsemestersSemesterTeachingAssignmentsCopy: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                semester: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WritePayload"];
+            };
+        };
+        responses: {
+            200: components["responses"]["Success"];
+            201: components["responses"]["Created"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+        };
+    };
+    bulkUpsertSemesterTeachingAssignments: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    operations: (components["schemas"]["TeachingAssignmentWrite"] & {
+                        assignment_id?: number | null;
+                    })[];
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+        };
+    };
+    deletesemestersSemesterTeachingAssignmentsAssignment: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                semester: number;
+                assignment: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+        };
+    };
+    patchsemestersSemesterTeachingAssignmentsAssignment: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                semester: number;
+                assignment: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["WritePayload"];
+            };
+        };
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+        };
+    };
+    postsemestersSemesterTeachingAssignmentsAssignmentDeactivate: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                semester: number;
+                assignment: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["WritePayload"];
+            };
+        };
+        responses: {
+            200: components["responses"]["Success"];
+            201: components["responses"]["Created"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+        };
+    };
+    postsemestersSemesterTeachingAssignmentsAssignmentMigrateRoom: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                semester: number;
+                assignment: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WritePayload"];
+            };
+        };
+        responses: {
+            200: components["responses"]["Success"];
+            201: components["responses"]["Created"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+        };
+    };
+    postsemestersSemesterTeachingAssignmentsAssignmentRestore: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                semester: number;
+                assignment: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["WritePayload"];
+            };
+        };
+        responses: {
+            200: components["responses"]["Success"];
+            201: components["responses"]["Created"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+        };
+    };
+    postsemestersSemesterTeachingAssignmentsAssignmentUnconfirm: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                semester: number;
+                assignment: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["WritePayload"];
+            };
+        };
+        responses: {
+            200: components["responses"]["Success"];
+            201: components["responses"]["Created"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+        };
+    };
+    getSemesterPreparationCheck: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                semester: number;
+                semester: components["parameters"]["SemesterPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+        };
+    };
+    getSemesterSchedulingConstraints: {
+        parameters: {
+            query?: {
+                page?: components["parameters"]["Page"];
+                per_page?: components["parameters"]["PerPage"];
+            };
+            header?: never;
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    createSemesterSchedulingConstraint: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WritePayload"];
+            };
+        };
+        responses: {
+            201: components["responses"]["Created"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+        };
+    };
+    deleteSemesterSchedulingConstraint: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+                constraint: components["parameters"]["ConstraintPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+        };
+    };
+    updateSemesterSchedulingConstraint: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+                constraint: components["parameters"]["ConstraintPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WritePayload"];
+            };
+        };
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+        };
+    };
+    activateSemesterSchedulingConstraint: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+                constraint: components["parameters"]["ConstraintPath"];
             };
             cookie?: never;
         };
@@ -2129,7 +3435,7 @@ export interface operations {
             428: components["responses"]["Problem"];
         };
     };
-    postsemestersSemesterTeachingTasks: {
+    deactivateSemesterSchedulingConstraint: {
         parameters: {
             query?: never;
             header: {
@@ -2137,92 +3443,8 @@ export interface operations {
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
-                semester: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WritePayload"];
-            };
-        };
-        responses: {
-            200: components["responses"]["Success"];
-            201: components["responses"]["Created"];
-            401: components["responses"]["Problem"];
-            403: components["responses"]["Problem"];
-            409: components["responses"]["Problem"];
-            412: components["responses"]["Problem"];
-            422: components["responses"]["Problem"];
-            428: components["responses"]["Problem"];
-        };
-    };
-    postsemestersSemesterTeachingTasksConfirm: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
-                "If-Match": components["parameters"]["IfMatch"];
-            };
-            path: {
-                semester: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WritePayload"];
-            };
-        };
-        responses: {
-            200: components["responses"]["Success"];
-            201: components["responses"]["Created"];
-            401: components["responses"]["Problem"];
-            403: components["responses"]["Problem"];
-            409: components["responses"]["Problem"];
-            412: components["responses"]["Problem"];
-            422: components["responses"]["Problem"];
-            428: components["responses"]["Problem"];
-        };
-    };
-    postsemestersSemesterTeachingTasksCopy: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
-                "If-Match": components["parameters"]["IfMatch"];
-            };
-            path: {
-                semester: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WritePayload"];
-            };
-        };
-        responses: {
-            200: components["responses"]["Success"];
-            201: components["responses"]["Created"];
-            401: components["responses"]["Problem"];
-            403: components["responses"]["Problem"];
-            409: components["responses"]["Problem"];
-            412: components["responses"]["Problem"];
-            422: components["responses"]["Problem"];
-            428: components["responses"]["Problem"];
-        };
-    };
-    deletesemestersSemesterTeachingTasksTask: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
-                "If-Match": components["parameters"]["IfMatch"];
-            };
-            path: {
-                semester: number;
-                task: number;
+                semester: components["parameters"]["SemesterPath"];
+                constraint: components["parameters"]["ConstraintPath"];
             };
             cookie?: never;
         };
@@ -2233,39 +3455,30 @@ export interface operations {
             403: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             412: components["responses"]["Problem"];
-            422: components["responses"]["Problem"];
             428: components["responses"]["Problem"];
         };
     };
-    patchsemestersSemesterTeachingTasksTask: {
+    getSemesterFixedPlacements: {
         parameters: {
-            query?: never;
-            header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
-                "If-Match": components["parameters"]["IfMatch"];
+            query?: {
+                page?: components["parameters"]["Page"];
+                per_page?: components["parameters"]["PerPage"];
             };
+            header?: never;
             path: {
-                semester: number;
-                task: number;
+                semester: components["parameters"]["SemesterPath"];
             };
             cookie?: never;
         };
-        requestBody?: {
-            content: {
-                "application/json": components["schemas"]["WritePayload"];
-            };
-        };
+        requestBody?: never;
         responses: {
             200: components["responses"]["Success"];
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
-            409: components["responses"]["Problem"];
-            412: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
-            428: components["responses"]["Problem"];
         };
     };
-    postsemestersSemesterTeachingTasksTaskDeactivate: {
+    createSemesterFixedPlacement: {
         parameters: {
             query?: never;
             header: {
@@ -2273,18 +3486,16 @@ export interface operations {
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
-                semester: number;
-                task: number;
+                semester: components["parameters"]["SemesterPath"];
             };
             cookie?: never;
         };
-        requestBody?: {
+        requestBody: {
             content: {
                 "application/json": components["schemas"]["WritePayload"];
             };
         };
         responses: {
-            200: components["responses"]["Success"];
             201: components["responses"]["Created"];
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
@@ -2294,7 +3505,7 @@ export interface operations {
             428: components["responses"]["Problem"];
         };
     };
-    postsemestersSemesterTeachingTasksTaskMigrateRoom: {
+    deleteSemesterFixedPlacement: {
         parameters: {
             query?: never;
             header: {
@@ -2302,8 +3513,31 @@ export interface operations {
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
-                semester: number;
-                task: number;
+                semester: components["parameters"]["SemesterPath"];
+                placement: components["parameters"]["PlacementPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+        };
+    };
+    updateSemesterFixedPlacement: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+                placement: components["parameters"]["PlacementPath"];
             };
             cookie?: never;
         };
@@ -2314,7 +3548,6 @@ export interface operations {
         };
         responses: {
             200: components["responses"]["Success"];
-            201: components["responses"]["Created"];
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
@@ -2323,7 +3556,7 @@ export interface operations {
             428: components["responses"]["Problem"];
         };
     };
-    postsemestersSemesterTeachingTasksTaskRestore: {
+    activateSemesterFixedPlacement: {
         parameters: {
             query?: never;
             header: {
@@ -2331,8 +3564,214 @@ export interface operations {
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
-                semester: number;
-                task: number;
+                semester: components["parameters"]["SemesterPath"];
+                placement: components["parameters"]["PlacementPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+        };
+    };
+    deactivateSemesterFixedPlacement: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+                placement: components["parameters"]["PlacementPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+        };
+    };
+    getSemesterScheduleRuns: {
+        parameters: {
+            query?: {
+                page?: components["parameters"]["Page"];
+                per_page?: components["parameters"]["PerPage"];
+            };
+            header?: never;
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    createSemesterScheduleRun: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScheduleRunRequest"];
+            };
+        };
+        responses: {
+            202: components["responses"]["Accepted"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+        };
+    };
+    getSemesterScheduleRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+                run: components["parameters"]["RunPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+        };
+    };
+    cancelSemesterScheduleRun: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+                run: components["parameters"]["RunPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+        };
+    };
+    getSemesterScheduleCandidate: {
+        parameters: {
+            query?: {
+                page?: components["parameters"]["Page"];
+                per_page?: components["parameters"]["PerPage"];
+            };
+            header?: never;
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+                run: components["parameters"]["RunPath"];
+                candidate: components["parameters"]["CandidatePath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    adoptSemesterScheduleCandidate: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+                run: components["parameters"]["RunPath"];
+                candidate: components["parameters"]["CandidatePath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CandidateAdoptRequest"];
+            };
+        };
+        responses: {
+            201: components["responses"]["Created"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+        };
+    };
+    getSemesterTimetableVersions: {
+        parameters: {
+            query?: {
+                page?: components["parameters"]["Page"];
+                per_page?: components["parameters"]["PerPage"];
+            };
+            header?: never;
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    createSemesterTimetableVersion: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                semester: components["parameters"]["SemesterPath"];
             };
             cookie?: never;
         };
@@ -2342,7 +3781,6 @@ export interface operations {
             };
         };
         responses: {
-            200: components["responses"]["Success"];
             201: components["responses"]["Created"];
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
@@ -2352,7 +3790,31 @@ export interface operations {
             428: components["responses"]["Problem"];
         };
     };
-    postsemestersSemesterTeachingTasksTaskUnconfirm: {
+    compareSemesterTimetableVersions: {
+        parameters: {
+            query: {
+                left_version_id: number;
+                right_version_id: number;
+                change_type?: "added" | "removed" | "moved" | "teacher_changed" | "room_changed" | "week_pattern_changed" | "lock_changed";
+                page?: components["parameters"]["Page"];
+                per_page?: components["parameters"]["PerPage"];
+            };
+            header?: never;
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    activateSemesterTimetableVersion: {
         parameters: {
             query?: never;
             header: {
@@ -2360,21 +3822,50 @@ export interface operations {
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
-                semester: number;
-                task: number;
+                semester: components["parameters"]["SemesterPath"];
+                version: components["parameters"]["VersionPath"];
             };
             cookie?: never;
         };
-        requestBody?: {
+        requestBody: {
             content: {
-                "application/json": components["schemas"]["WritePayload"];
+                "application/json": components["schemas"]["VersionReasonRequest"];
             };
         };
         responses: {
             200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+        };
+    };
+    restoreSemesterTimetableVersion: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+                version: components["parameters"]["VersionPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VersionReasonRequest"];
+            };
+        };
+        responses: {
             201: components["responses"]["Created"];
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             412: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
@@ -2415,6 +3906,86 @@ export interface operations {
             200: components["responses"]["Success"];
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+        };
+    };
+    diagnoseSemesterTimetablePlacement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                semester: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    entry_id?: number | null;
+                    teaching_assignment_id?: number | null;
+                    weekday: number;
+                    item_id: number;
+                    version_id?: number | null;
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    diagnoseSemesterTimetableSwap: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                semester: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimetableSwapPayload"];
+            };
+        };
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    swapSemesterTimetableEntries: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                semester: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimetableSwapPayload"];
+            };
+        };
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             412: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
@@ -2555,7 +4126,12 @@ export interface operations {
     };
     getsemestersSemesterTimetableExportCsv: {
         parameters: {
-            query?: never;
+            query: {
+                view: "class" | "teacher" | "room";
+                resource_id: number;
+                mode?: "official" | "full";
+                version_id?: number;
+            };
             header?: never;
             path: {
                 semester: number;
@@ -2581,6 +4157,37 @@ export interface operations {
             428: components["responses"]["Problem"];
         };
     };
+    getSemestersSemesterTimetableExportXlsx: {
+        parameters: {
+            query: {
+                view: "class" | "teacher" | "room";
+                resource_id: number;
+                mode?: "official" | "full";
+                version_id?: number;
+            };
+            header?: never;
+            path: {
+                semester: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Office Open XML 工作簿 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
     getsemestersSemesterTimetableValidation: {
         parameters: {
             query?: never;
@@ -2601,9 +4208,304 @@ export interface operations {
             428: components["responses"]["Problem"];
         };
     };
-    getcourses: {
+    getSemesterDailyTimetable: {
+        parameters: {
+            query: {
+                date: string;
+            };
+            header?: never;
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    getSemesterCalendarExceptions: {
+        parameters: {
+            query?: {
+                page?: components["parameters"]["Page"];
+                per_page?: components["parameters"]["PerPage"];
+                date_from?: string;
+                date_to?: string;
+                type?: components["schemas"]["CalendarExceptionType"];
+                status?: components["schemas"]["OperationalStatus"];
+            };
+            header?: never;
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    createSemesterCalendarException: {
         parameters: {
             query?: never;
+            header: {
+                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CalendarExceptionWrite"];
+            };
+        };
+        responses: {
+            201: components["responses"]["Created"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+        };
+    };
+    previewSemesterCalendarException: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CalendarExceptionWrite"];
+            };
+        };
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    cancelSemesterCalendarException: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+                exception: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+        };
+    };
+    getSemesterTeacherLeaves: {
+        parameters: {
+            query?: {
+                page?: components["parameters"]["Page"];
+                per_page?: components["parameters"]["PerPage"];
+                teacher_id?: number;
+                status?: components["schemas"]["OperationalStatus"];
+                date_from?: string;
+                date_to?: string;
+            };
+            header?: never;
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    createSemesterTeacherLeave: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeacherLeaveWrite"];
+            };
+        };
+        responses: {
+            201: components["responses"]["Created"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+        };
+    };
+    previewSemesterTeacherLeave: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeacherLeaveWrite"];
+            };
+        };
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    getSemesterTeacherLeave: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+                leave: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    getSemesterSubstituteRecommendations: {
+        parameters: {
+            query: {
+                entry_id: number;
+                date: string;
+            };
+            header?: never;
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+                leave: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    createSemesterSubstitutions: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+                leave: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubstitutionBatchWrite"];
+            };
+        };
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+        };
+    };
+    cancelSemesterTeacherLeave: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+                leave: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+        };
+    };
+    getcourses: {
+        parameters: {
+            query?: {
+                search?: components["parameters"]["Search"];
+                status?: components["parameters"]["ResourceStatus"];
+                sort?: components["parameters"]["Sort"];
+                direction?: components["parameters"]["Direction"];
+                page?: components["parameters"]["Page"];
+                per_page?: components["parameters"]["PerPage"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -2697,7 +4599,15 @@ export interface operations {
     };
     getteachers: {
         parameters: {
-            query?: never;
+            query?: {
+                search?: components["parameters"]["Search"];
+                course_id?: number;
+                status?: components["parameters"]["ResourceStatus"];
+                sort?: components["parameters"]["Sort"];
+                direction?: components["parameters"]["Direction"];
+                page?: components["parameters"]["Page"];
+                per_page?: components["parameters"]["PerPage"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -2818,7 +4728,15 @@ export interface operations {
     };
     getusers: {
         parameters: {
-            query?: never;
+            query?: {
+                search?: components["parameters"]["Search"];
+                role?: "admin" | "scheduler" | "viewer";
+                status?: components["parameters"]["ResourceStatus"];
+                sort?: components["parameters"]["Sort"];
+                direction?: components["parameters"]["Direction"];
+                page?: components["parameters"]["Page"];
+                per_page?: components["parameters"]["PerPage"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -2908,7 +4826,15 @@ export interface operations {
     };
     getrooms: {
         parameters: {
-            query?: never;
+            query?: {
+                search?: components["parameters"]["Search"];
+                type?: "classroom" | "playground" | "music_room" | "art_room" | "laboratory" | "computer_room" | "other";
+                status?: components["parameters"]["ResourceStatus"];
+                sort?: components["parameters"]["Sort"];
+                direction?: components["parameters"]["Direction"];
+                page?: components["parameters"]["Page"];
+                per_page?: components["parameters"]["PerPage"];
+            };
             header?: never;
             path?: never;
             cookie?: never;

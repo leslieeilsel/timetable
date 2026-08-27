@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <title>日序：课表容器中的编排路径</title>
+  <rect x="9" y="9" width="46" height="46" rx="12" stroke="currentColor" stroke-width="6"/>
+  <path d="M16 27h13v10h19" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

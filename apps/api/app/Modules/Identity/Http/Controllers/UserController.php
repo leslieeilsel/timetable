@@ -24,9 +24,37 @@ class UserController
     public function index(Request $request): JsonResponse
     {
         $this->assertAdmin($request);
-        $users = User::query()->orderBy('name')->get()->map(fn (User $user) => $this->data($user));
+        $filters = $request->validate([
+            'search' => ['sometimes', 'string', 'max:100'],
+            'role' => ['sometimes', Rule::enum(Role::class)],
+            'status' => ['sometimes', Rule::in(['active', 'inactive'])],
+            'sort' => ['sometimes', Rule::in(['name', 'email', 'role', 'created_at'])],
+            'direction' => ['sometimes', Rule::in(['asc', 'desc'])],
+            'page' => ['sometimes', 'integer', 'min:1'],
+            'per_page' => ['sometimes', 'integer', Rule::in([20, 50, 100])],
+        ]);
+        $query = User::query()
+            ->when(isset($filters['search']), function ($query) use ($filters): void {
+                $search = '%'.Normalizer::text($filters['search']).'%';
+                $query->where(fn ($match) => $match->where('name', 'like', $search)
+                    ->orWhere('email', 'like', $search));
+            })
+            ->when(isset($filters['role']), fn ($query) => $query->where('role', $filters['role']))
+            ->when(isset($filters['status']), fn ($query) => $query->where('is_active', $filters['status'] === 'active'));
+        $paginator = $query
+            ->orderBy((string) ($filters['sort'] ?? 'name'), (string) ($filters['direction'] ?? 'asc'))
+            ->orderBy('id')
+            ->paginate((int) ($filters['per_page'] ?? 20));
+        $users = collect($paginator->items())->map(fn (User $user) => $this->data($user));
 
-        return response()->json(['data' => $users]);
+        return response()->json(['data' => $users, 'meta' => ['pagination' => [
+            'page' => $paginator->currentPage(),
+            'per_page' => $paginator->perPage(),
+            'total' => $paginator->total(),
+            'last_page' => $paginator->lastPage(),
+            'from' => $paginator->firstItem(),
+            'to' => $paginator->lastItem(),
+        ]]]);
     }
 
     public function store(Request $request): JsonResponse

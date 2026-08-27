@@ -1,11 +1,11 @@
 <?php
 
+use App\Enums\AssignmentStatus;
 use App\Enums\LifecycleStatus;
 use App\Enums\ResourceStatus;
 use App\Enums\Role;
 use App\Enums\RoomMode;
 use App\Enums\RoomType;
-use App\Enums\TaskStatus;
 use App\Models\User;
 use App\Modules\AcademicCalendar\Models\AcademicYear;
 use App\Modules\AcademicCalendar\Models\Semester;
@@ -15,7 +15,7 @@ use App\Modules\Resources\Models\Room;
 use App\Modules\Resources\Models\SchoolClass;
 use App\Modules\Resources\Models\Teacher;
 use App\Modules\SemesterClassSetting\Models\SemesterClassSetting;
-use App\Modules\TeachingTask\Models\TeachingTask;
+use App\Modules\TeachingAssignment\Models\TeachingAssignment;
 
 beforeEach(function (): void {
     $this->withHeaders(['Origin' => 'http://localhost:5173', 'Referer' => 'http://localhost:5173/']);
@@ -58,7 +58,7 @@ it('requires a fresh impact confirmation before deactivating a used resource', f
         'fixed_room_id' => $room->id,
         'status' => ResourceStatus::Active,
     ]);
-    TeachingTask::query()->create([
+    TeachingAssignment::query()->create([
         'semester_id' => $semester->id,
         'academic_year_id' => $year->id,
         'school_class_id' => $class->id,
@@ -66,7 +66,7 @@ it('requires a fresh impact confirmation before deactivating a used resource', f
         'teacher_id' => $teacher->id,
         'weekly_items' => 2,
         'room_mode' => RoomMode::ClassDefault,
-        'status' => TaskStatus::Confirmed,
+        'status' => AssignmentStatus::Confirmed,
     ]);
 
     $etag = $this->getJson('/api/v1/grades')->assertOk()->headers->get('ETag');
@@ -74,7 +74,7 @@ it('requires a fresh impact confirmation before deactivating a used resource', f
         'is_active' => false,
     ])->assertStatus(409)
         ->assertJsonPath('code', 'ACTIVE_RESOURCE_IN_USE')
-        ->assertJsonPath('impacts.0.confirmed_tasks', 1)
+        ->assertJsonPath('impacts.0.confirmed_assignments', 1)
         ->assertJsonPath('impacts.0.unplaced_items', 2);
 
     $this->withHeader('If-Match', $etag)->patchJson("/api/v1/grades/{$grade->id}", [

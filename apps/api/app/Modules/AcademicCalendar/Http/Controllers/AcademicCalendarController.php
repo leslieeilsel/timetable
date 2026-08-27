@@ -181,6 +181,7 @@ class AcademicCalendarController
             $locked->fill(['start_date' => $start, 'end_date' => $end]);
             if ($locked->isDirty()) {
                 $locked->save();
+                $locked->increment('input_revision');
                 $locked->increment('timetable_revision');
                 $locked->refresh();
                 $this->audit->record($request, $actor, 'update', 'semester', $locked->id, $before, $this->semesterData($locked, $settings));
@@ -197,7 +198,7 @@ class AcademicCalendarController
             [$actor, $settings, $locked] = $this->guard->semester($request, $semester, true);
             $hasData = $locked->classSettings()->exists()
                 || $locked->scheduleTemplate()->exists()
-                || $locked->teachingTasks()->exists()
+                || $locked->teachingAssignments()->exists()
                 || $locked->timetableEntries()->exists();
             if ($locked->status !== LifecycleStatus::Draft || $hasData || $settings->current_semester_id === $locked->id) {
                 throw new ApiProblemException('SEMESTER_NOT_EMPTY', '只有未开放且完全空的草稿学期可以删除', 409);
@@ -315,10 +316,13 @@ class AcademicCalendarController
                 }
             }
             if ($target === LifecycleStatus::Closed) {
-                $incomplete = $locked->teachingTasks()->where('status', 'draft')->exists()
-                    || $locked->teachingTasks()->where('status', 'confirmed')->withCount('entries')->get()->contains(fn ($task) => $task->entries_count !== $task->weekly_items);
+                $incomplete = $locked->teachingAssignments()->where('status', 'draft')->exists()
+                    || $locked->current_timetable_version_id === null
+                    || $locked->teachingAssignments()->where('status', 'confirmed')
+                        ->withCount(['entries' => fn ($query) => $query->where('timetable_version_id', $locked->current_timetable_version_id)])
+                        ->get()->contains(fn ($assignment) => $assignment->entries_count !== $assignment->weekly_items);
                 if ($incomplete && ! ($request->user()->role->value === 'admin' && $request->filled('reason'))) {
-                    throw new ApiProblemException('SEMESTER_INCOMPLETE', '存在草稿或未排满教学任务，不能关闭学期', 409);
+                    throw new ApiProblemException('SEMESTER_INCOMPLETE', '存在草稿或未排满任课关系，不能关闭学期', 409);
                 }
                 if ($settings->current_semester_id === $locked->id) {
                     $replacementId = $request->input('replacement_semester_id');
@@ -400,6 +404,7 @@ class AcademicCalendarController
         return [
             'semester_id' => $semester->id,
             'timetable_revision' => (string) $semester->getRawOriginal('timetable_revision'),
+            'input_revision' => (string) $semester->getRawOriginal('input_revision'),
             'catalog_revision' => (string) $settings->getRawOriginal('catalog_revision'),
         ];
     }

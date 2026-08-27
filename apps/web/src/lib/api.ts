@@ -46,6 +46,31 @@ export async function api<T>(
   return request<T>(path, options, true)
 }
 
+export async function apiAllPages<T>(path: string): Promise<ApiResult<T[]>> {
+  const url = new URL(path, window.location.origin)
+  url.searchParams.set("per_page", "100")
+  let page = 1
+  let lastPage = 1
+  let etag: string | null = null
+  let meta: Record<string, unknown> | undefined
+  const items: T[] = []
+  do {
+    url.searchParams.set("page", String(page))
+    const result = await api<T[]>(`${url.pathname}${url.search}`)
+    items.push(...result.data)
+    etag = result.etag
+    meta = result.meta
+    const pagination = result.meta?.pagination
+    lastPage =
+      pagination && typeof pagination === "object" && "last_page" in pagination
+        ? Number(pagination.last_page) || 1
+        : 1
+    page += 1
+  } while (page <= lastPage)
+
+  return { data: items, etag, meta }
+}
+
 async function request<T>(
   path: string,
   options: RequestInit & { etag?: string | null; formData?: boolean },

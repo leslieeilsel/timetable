@@ -33,12 +33,39 @@ class SchoolClassController
         private readonly HistoricalReferenceService $history,
     ) {}
 
-    public function index(AcademicYear $year): JsonResponse
+    public function index(Request $request, AcademicYear $year): JsonResponse
     {
+        $filters = $request->validate([
+            'search' => ['sometimes', 'string', 'max:100'],
+            'grade_id' => ['sometimes', 'integer', 'exists:grades,id'],
+            'status' => ['sometimes', Rule::enum(ResourceStatus::class)],
+            'sort' => ['sometimes', Rule::in(['name', 'code', 'grade_id', 'created_at'])],
+            'direction' => ['sometimes', Rule::in(['asc', 'desc'])],
+            'page' => ['sometimes', 'integer', 'min:1'],
+            'per_page' => ['sometimes', 'integer', Rule::in([20, 50, 100])],
+        ]);
         $settings = AppSetting::query()->findOrFail(1);
-        $classes = $year->schoolClasses()->with('grade:id,name')->orderBy('name')->get();
+        $query = $year->schoolClasses()->with('grade:id,name')
+            ->when(isset($filters['search']), function ($query) use ($filters): void {
+                $search = '%'.Normalizer::text($filters['search']).'%';
+                $query->where(fn ($match) => $match->where('name', 'like', $search)
+                    ->orWhere('code', 'like', $search));
+            })
+            ->when(isset($filters['grade_id']), fn ($query) => $query->where('grade_id', $filters['grade_id']))
+            ->when(isset($filters['status']), fn ($query) => $query->where('status', $filters['status']));
+        $paginator = $query
+            ->orderBy((string) ($filters['sort'] ?? 'name'), (string) ($filters['direction'] ?? 'asc'))
+            ->orderBy('id')
+            ->paginate((int) ($filters['per_page'] ?? 20));
 
-        return response()->json(['data' => $classes])->header('ETag', $this->etags->catalog($settings));
+        return response()->json(['data' => $paginator->items(), 'meta' => ['pagination' => [
+            'page' => $paginator->currentPage(),
+            'per_page' => $paginator->perPage(),
+            'total' => $paginator->total(),
+            'last_page' => $paginator->lastPage(),
+            'from' => $paginator->firstItem(),
+            'to' => $paginator->lastItem(),
+        ]]])->header('ETag', $this->etags->catalog($settings));
     }
 
     public function store(Request $request, AcademicYear $year): JsonResponse
@@ -226,7 +253,52 @@ class SchoolClassController
             'created_at' => now(),
         ]);
 
-        return response()->json(['data' => ['token' => $token, 'rows' => $rows]])->header('ETag', $this->etags->catalog($settings));
+        $validRows = collect($rows)->where('valid', true)->pluck('row')->map(fn ($row) => (int) $row)->values()->all();
+
+        return response()->json([
+            'data' => [
+                'token' => $token,
+                'rows' => array_slice($rows, 0, 20),
+                'valid_rows' => $validRows,
+                'summary' => $this->previewSummary($rows),
+            ],
+            'meta' => ['pagination' => $this->paginationMeta(count($rows), 1, 20)],
+        ])->header('ETag', $this->etags->catalog($settings));
+    }
+
+    public function previewPage(Request $request, AcademicYear $year): JsonResponse
+    {
+        $data = $request->validate([
+            'token' => ['required', 'string', 'size:64'],
+            'page' => ['sometimes', 'integer', 'min:1'],
+            'per_page' => ['sometimes', 'integer', Rule::in([20, 50, 100])],
+        ]);
+        $actor = $this->guard->actor($request);
+        $preview = ClassImportPreview::query()
+            ->where('token_hash', hash('sha256', $data['token']))
+            ->first();
+        if ($preview === null || $preview->user_id !== $actor->id || $preview->academic_year_id !== $year->id) {
+            throw new ApiProblemException('IMPORT_TOKEN_INVALID', '导入预检令牌无效', 409);
+        }
+        if ($preview->expires_at->isPast()) {
+            throw new ApiProblemException('IMPORT_TOKEN_EXPIRED', '导入预检已过期，请重新预检', 409);
+        }
+        if ($preview->consumed_at !== null) {
+            throw new ApiProblemException('IMPORT_ALREADY_COMMITTED', '该导入已经提交', 409, ['commit_result' => $preview->commit_result]);
+        }
+
+        $page = (int) ($data['page'] ?? 1);
+        $perPage = (int) ($data['per_page'] ?? 20);
+        $rows = $preview->normalized_rows;
+        $settings = AppSetting::query()->findOrFail(1);
+
+        return response()->json([
+            'data' => [
+                'rows' => array_slice($rows, ($page - 1) * $perPage, $perPage),
+                'summary' => $this->previewSummary($rows),
+            ],
+            'meta' => ['pagination' => $this->paginationMeta(count($rows), $page, $perPage)],
+        ])->header('ETag', $this->etags->catalog($settings));
     }
 
     public function commit(Request $request, AcademicYear $year): JsonResponse
@@ -305,5 +377,32 @@ class SchoolClassController
         }
 
         return array_map(static fn (mixed $item): int => (int) $item, array_values($value));
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return array{total: int, valid: int, invalid: int}
+     */
+    private function previewSummary(array $rows): array
+    {
+        $valid = collect($rows)->where('valid', true)->count();
+
+        return ['total' => count($rows), 'valid' => $valid, 'invalid' => count($rows) - $valid];
+    }
+
+    /** @return array{page: int, per_page: int, total: int, last_page: int, from: int|null, to: int|null} */
+    private function paginationMeta(int $total, int $page, int $perPage): array
+    {
+        $from = $total === 0 || ($page - 1) * $perPage >= $total ? null : (($page - 1) * $perPage) + 1;
+        $to = $from === null ? null : min($total, $page * $perPage);
+
+        return [
+            'page' => $page,
+            'per_page' => $perPage,
+            'total' => $total,
+            'last_page' => max(1, (int) ceil($total / $perPage)),
+            'from' => $from,
+            'to' => $to,
+        ];
     }
 }

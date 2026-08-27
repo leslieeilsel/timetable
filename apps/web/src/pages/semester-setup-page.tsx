@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react"
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { useSearchParams } from "react-router"
 import { ArrowRightLeftIcon, CopyIcon, PlusIcon, Settings2Icon } from "lucide-react"
 import { toast } from "sonner"
-import { api, apiMessage, jsonBody } from "@/lib/api"
+import { api, apiAllPages, apiMessage, jsonBody } from "@/lib/api"
 import { useResolvedSemesterId } from "@/lib/semester"
 import type {
   ClassSetting,
@@ -11,14 +12,16 @@ import type {
   Semester,
   Teacher,
   Room,
+  PaginationMeta,
 } from "@/lib/types"
 import { EmptyList, ErrorState, Field, LoadingState, PageHeader } from "@/components/page"
 import { ListToolbar, ToolbarSelect } from "@/components/list-toolbar"
 import { StatusBadge } from "@/components/status-badge"
-import { TablePagination, useTablePagination } from "@/components/table-pagination"
+import { TablePagination } from "@/components/table-pagination"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
+import { enumParam, mergeSearchParams, positiveIntegerParam } from "@/lib/url-state"
 import {
   Dialog,
   DialogContent,
@@ -42,12 +45,23 @@ const weekdays = ["周一", "周二", "周三", "周四", "周五", "周六", "�
 export function SemesterSetupPage() {
   const { semesterId, context } = useResolvedSemesterId()
   const client = useQueryClient()
+  const [urlParams, setUrlParams] = useSearchParams()
   const [settingOpen, setSettingOpen] = useState(false)
   const [templateOpen, setTemplateOpen] = useState(false)
   const [migratingSetting, setMigratingSetting] = useState<ClassSetting | null>(null)
-  const [search, setSearch] = useState("")
-  const [gradeFilter, setGradeFilter] = useState("all")
-  const [statusFilter, setStatusFilter] = useState("all")
+  const [search, setSearch] = useState(() => urlParams.get("q") ?? "")
+  const [gradeFilter, setGradeFilter] = useState(() => {
+    const value = urlParams.get("grade")
+    return value && /^\d+$/.test(value) ? value : "all"
+  })
+  const [statusFilter, setStatusFilter] = useState(() =>
+    enumParam(urlParams, "status", ["all", "active", "inactive"], "all"),
+  )
+  const [page, setPage] = useState(() => positiveIntegerParam(urlParams, "page", 1))
+  const [pageSize, setPageSize] = useState(() =>
+    positiveIntegerParam(urlParams, "per_page", 20, [20, 50, 100]),
+  )
+  const deferredSearch = useDeferredValue(search.trim())
   const semester = useQuery({
     queryKey: ["semester", semesterId],
     queryFn: () => api<Semester>(`/api/v1/semesters/${semesterId}`),
@@ -56,12 +70,31 @@ export function SemesterSetupPage() {
   const yearId = semester.data?.data.academic_year_id
   const classes = useQuery({
     queryKey: ["classes", yearId],
-    queryFn: () => api<SchoolClass[]>(`/api/v1/academic-years/${yearId}/classes`),
+    queryFn: () => apiAllPages<SchoolClass>(`/api/v1/academic-years/${yearId}/classes`),
     enabled: Boolean(yearId),
   })
   const settings = useQuery({
-    queryKey: ["class-settings", semesterId],
-    queryFn: () => api<ClassSetting[]>(`/api/v1/semesters/${semesterId}/class-settings`),
+    queryKey: [
+      "class-settings",
+      semesterId,
+      page,
+      pageSize,
+      deferredSearch,
+      gradeFilter,
+      statusFilter,
+    ],
+    queryFn: () => {
+      const query = new URLSearchParams({ page: String(page), per_page: String(pageSize) })
+      if (deferredSearch) query.set("search", deferredSearch)
+      if (gradeFilter !== "all") query.set("grade_id", gradeFilter)
+      if (statusFilter !== "all") query.set("status", statusFilter)
+      return api<ClassSetting[]>(`/api/v1/semesters/${semesterId}/class-settings?${query}`)
+    },
+    enabled: semesterId !== null,
+  })
+  const allSettings = useQuery({
+    queryKey: ["class-settings", semesterId, "all", "editor"],
+    queryFn: () => apiAllPages<ClassSetting>(`/api/v1/semesters/${semesterId}/class-settings`),
     enabled: semesterId !== null,
   })
   const template = useQuery({
@@ -72,29 +105,51 @@ export function SemesterSetupPage() {
   })
   const teachers = useQuery({
     queryKey: ["teachers"],
-    queryFn: () => api<Teacher[]>("/api/v1/teachers"),
+    queryFn: () => apiAllPages<Teacher>("/api/v1/teachers"),
   })
   const rooms = useQuery({
     queryKey: ["rooms"],
-    queryFn: () => api<Room[]>("/api/v1/rooms"),
+    queryFn: () => apiAllPages<Room>("/api/v1/rooms"),
   })
   const siblings = useQuery({
     queryKey: ["semesters", yearId],
     queryFn: async () => (await api<Semester[]>(`/api/v1/academic-years/${yearId}/semesters`)).data,
     enabled: Boolean(yearId),
   })
-  const filteredSettings = useMemo(() => {
-    const query = search.trim().toLocaleLowerCase("zh-CN")
-    return (settings.data?.data ?? []).filter((item) => {
-      const matchesSearch =
-        !query || item.school_class.name.toLocaleLowerCase("zh-CN").includes(query)
-      const matchesGrade =
-        gradeFilter === "all" || String(item.school_class.grade_id) === gradeFilter
-      const matchesStatus = statusFilter === "all" || item.status === statusFilter
-      return matchesSearch && matchesGrade && matchesStatus
-    })
-  }, [gradeFilter, search, settings.data?.data, statusFilter])
-  const settingsPagination = useTablePagination(filteredSettings)
+  const settingsPagination = settings.data?.meta?.pagination as PaginationMeta | undefined
+  const settingsSummary = settings.data?.meta?.summary as
+    | { total: number; fixed_room_count: number; homeroom_teacher_count: number }
+    | undefined
+  const settingsTotal = settingsSummary?.total ?? settingsPagination?.total ?? 0
+  const hasSettingFilters = Boolean(
+    deferredSearch || gradeFilter !== "all" || statusFilter !== "all",
+  )
+  const didMountFilters = useRef(false)
+  useEffect(() => {
+    if (!didMountFilters.current) {
+      didMountFilters.current = true
+      return
+    }
+    setPage(1)
+  }, [deferredSearch, gradeFilter, statusFilter])
+  useEffect(() => {
+    setUrlParams(
+      (current) =>
+        mergeSearchParams(current, {
+          q: search.trim() || null,
+          grade: gradeFilter === "all" ? null : gradeFilter,
+          status: statusFilter === "all" ? null : statusFilter,
+          page: page === 1 ? null : page,
+          per_page: pageSize === 20 ? null : pageSize,
+        }),
+      { replace: true },
+    )
+  }, [gradeFilter, page, pageSize, search, setUrlParams, statusFilter])
+  useEffect(() => {
+    if (settingsPagination && page > Math.max(1, settingsPagination.last_page)) {
+      setPage(Math.max(1, settingsPagination.last_page))
+    }
+  }, [page, settingsPagination])
   const source = siblings.data?.find((item) => item.sequence < (semester.data?.data.sequence ?? 1))
   const refresh = async () => {
     await Promise.all([
@@ -147,7 +202,7 @@ export function SemesterSetupPage() {
       <div className="p-5 md:p-7">
         <Tabs defaultValue="classes">
           <TabsList>
-            <TabsTrigger value="classes">班级配置（{settings.data?.data.length ?? 0}）</TabsTrigger>
+            <TabsTrigger value="classes">班级配置（{settingsTotal}）</TabsTrigger>
             <TabsTrigger value="template">作息模板</TabsTrigger>
           </TabsList>
           <TabsContent
@@ -157,12 +212,9 @@ export function SemesterSetupPage() {
             <div className="flex items-center justify-between border-b p-3">
               <div>
                 <p className="font-medium">参与本学期排课的班级</p>
-                <p className="text-sm text-muted-foreground">
-                  固定教室是“使用班级默认教室”教学任务的实际教室。
-                </p>
               </div>
               <div className="flex gap-2">
-                {source && !settings.data?.data.length && (
+                {source && settingsTotal === 0 && (
                   <Button variant="outline" onClick={() => void copy("class-settings")}>
                     <CopyIcon />
                     复制上学期
@@ -174,7 +226,7 @@ export function SemesterSetupPage() {
                 </Button>
               </div>
             </div>
-            {!settings.data?.data.length ? (
+            {!settings.data?.data.length && !hasSettingFilters ? (
               <EmptyList
                 title="还没有班级配置"
                 description="从本学年班级中选择本学期实际参与排课的班级。"
@@ -188,13 +240,11 @@ export function SemesterSetupPage() {
                   summary={
                     <>
                       <span>
-                        固定教室 {settings.data.data.filter((item) => item.fixed_room).length}/
-                        {settings.data.data.length}
+                        固定教室 {settingsSummary?.fixed_room_count ?? 0}/{settingsTotal}
                       </span>
                       <span>·</span>
                       <span>
-                        班主任 {settings.data.data.filter((item) => item.homeroom_teacher).length}/
-                        {settings.data.data.length}
+                        班主任 {settingsSummary?.homeroom_teacher_count ?? 0}/{settingsTotal}
                       </span>
                     </>
                   }
@@ -203,10 +253,7 @@ export function SemesterSetupPage() {
                     <option value="all">全部年级</option>
                     {Array.from(
                       new Map(
-                        (settings.data?.data ?? []).map((item) => [
-                          item.school_class.grade_id,
-                          item.school_class.grade,
-                        ]),
+                        (classes.data?.data ?? []).map((item) => [item.grade_id, item.grade]),
                       ).values(),
                     ).map((grade) => (
                       <option key={grade.id} value={grade.id}>
@@ -220,49 +267,65 @@ export function SemesterSetupPage() {
                     <option value="inactive">已停用</option>
                   </ToolbarSelect>
                 </ListToolbar>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>班级</TableHead>
-                      <TableHead>固定教室</TableHead>
-                      <TableHead>班主任</TableHead>
-                      <TableHead>状态</TableHead>
-                      <TableHead className="text-right">操作</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {settingsPagination.items.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell className="font-medium">{item.school_class.name}</TableCell>
-                        <TableCell>
-                          {item.fixed_room?.name ?? (
-                            <span className="text-destructive">未设置</span>
-                          )}
-                        </TableCell>
-                        <TableCell>{item.homeroom_teacher?.name ?? "—"}</TableCell>
-                        <TableCell>
-                          <StatusBadge value={item.status} />
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setMigratingSetting(item)}
-                            disabled={current.status === "closed"}
-                          >
-                            <ArrowRightLeftIcon />
-                            迁移教室
-                          </Button>
-                          <Button variant="ghost" size="sm" onClick={() => setSettingOpen(true)}>
-                            <Settings2Icon />
-                            调整
-                          </Button>
-                        </TableCell>
+                {settings.data?.data.length ? (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>班级</TableHead>
+                        <TableHead>固定教室</TableHead>
+                        <TableHead>班主任</TableHead>
+                        <TableHead>状态</TableHead>
+                        <TableHead className="text-right">操作</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                <TablePagination {...settingsPagination} />
+                    </TableHeader>
+                    <TableBody>
+                      {settings.data?.data.map((item) => (
+                        <TableRow key={item.id}>
+                          <TableCell className="font-medium">{item.school_class.name}</TableCell>
+                          <TableCell>
+                            {item.fixed_room?.name ?? (
+                              <span className="text-destructive">未设置</span>
+                            )}
+                          </TableCell>
+                          <TableCell>{item.homeroom_teacher?.name ?? "—"}</TableCell>
+                          <TableCell>
+                            <StatusBadge value={item.status} />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setMigratingSetting(item)}
+                              disabled={current.status === "closed"}
+                            >
+                              <ArrowRightLeftIcon />
+                              迁移教室
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => setSettingOpen(true)}>
+                              <Settings2Icon />
+                              调整
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                ) : (
+                  <EmptyList title="没有匹配的班级配置" description="请调整搜索词或筛选条件。" />
+                )}
+                {settingsPagination && settingsPagination.total > 0 && (
+                  <TablePagination
+                    page={settingsPagination.page}
+                    pageSize={settingsPagination.per_page}
+                    totalItems={settingsPagination.total}
+                    totalPages={settingsPagination.last_page}
+                    onPageChange={setPage}
+                    onPageSizeChange={(value) => {
+                      setPageSize(value)
+                      setPage(1)
+                    }}
+                  />
+                )}
               </>
             )}
           </TabsContent>
@@ -273,9 +336,6 @@ export function SemesterSetupPage() {
             <div className="flex items-center justify-between border-b p-3">
               <div>
                 <p className="font-medium">全学期统一作息</p>
-                <p className="text-sm text-muted-foreground">
-                  只有课表使用二维网格，作息本身用列表维护。
-                </p>
               </div>
               <div className="flex gap-2">
                 {source && !template.data?.data && (
@@ -344,7 +404,7 @@ export function SemesterSetupPage() {
         semesterId={current.id}
         etag={settings.data?.etag ?? null}
         classes={classes.data?.data ?? []}
-        settings={settings.data?.data ?? []}
+        settings={allSettings.data?.data ?? []}
         teachers={teachers.data?.data ?? []}
         rooms={rooms.data?.data ?? []}
         onClose={() => setSettingOpen(false)}

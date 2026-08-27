@@ -1,13 +1,15 @@
-import { useEffect, useMemo, useState } from "react"
+import { useDeferredValue, useEffect, useRef, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { CopyIcon, KeyRoundIcon, MoreHorizontalIcon, PlusIcon } from "lucide-react"
+import { useSearchParams } from "react-router"
+import { CopyIcon, PlusIcon } from "lucide-react"
 import { toast } from "sonner"
 import { api, apiMessage, jsonBody } from "@/lib/api"
-import type { AcademicYear, Semester, User } from "@/lib/types"
-import { EmptyList, Field, LoadingState, PageHeader } from "@/components/page"
+import type { AcademicYear, PaginationMeta, Semester, User } from "@/lib/types"
+import { EmptyList, ErrorState, Field, LoadingState, PageHeader } from "@/components/page"
 import { ListToolbar, ToolbarSelect } from "@/components/list-toolbar"
 import { StatusBadge } from "@/components/status-badge"
-import { TablePagination, useTablePagination } from "@/components/table-pagination"
+import { TableActionButton } from "@/components/table-action-button"
+import { TablePagination } from "@/components/table-pagination"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -27,35 +29,63 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { useSchoolContext } from "@/lib/queries"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+import { enumParam, mergeSearchParams, positiveIntegerParam } from "@/lib/url-state"
 
 export function UsersPage() {
   const client = useQueryClient()
+  const [urlParams, setUrlParams] = useSearchParams()
   const [editing, setEditing] = useState<User | null | undefined>(undefined)
   const [resetting, setResetting] = useState<User | null>(null)
-  const [search, setSearch] = useState("")
-  const [roleFilter, setRoleFilter] = useState("all")
-  const [statusFilter, setStatusFilter] = useState("all")
+  const [search, setSearch] = useState(() => urlParams.get("q") ?? "")
+  const [roleFilter, setRoleFilter] = useState(() =>
+    enumParam(urlParams, "role", ["all", "admin", "scheduler", "viewer"], "all"),
+  )
+  const [statusFilter, setStatusFilter] = useState(() =>
+    enumParam(urlParams, "status", ["all", "active", "inactive"], "all"),
+  )
+  const [page, setPage] = useState(() => positiveIntegerParam(urlParams, "page", 1))
+  const [pageSize, setPageSize] = useState(() =>
+    positiveIntegerParam(urlParams, "per_page", 20, [20, 50, 100]),
+  )
+  const deferredSearch = useDeferredValue(search.trim())
   const users = useQuery({
-    queryKey: ["users"],
-    queryFn: async () => (await api<User[]>("/api/v1/users")).data,
+    queryKey: ["users", page, pageSize, deferredSearch, roleFilter, statusFilter],
+    queryFn: () => {
+      const query = new URLSearchParams({ page: String(page), per_page: String(pageSize) })
+      if (deferredSearch) query.set("search", deferredSearch)
+      if (roleFilter !== "all") query.set("role", roleFilter)
+      if (statusFilter !== "all") query.set("status", statusFilter)
+      return api<User[]>(`/api/v1/users?${query}`)
+    },
   })
-  const filteredUsers = useMemo(() => {
-    const query = search.trim().toLocaleLowerCase("zh-CN")
-    return (users.data ?? []).filter((user) => {
-      const matchesSearch =
-        !query || `${user.name} ${user.email}`.toLocaleLowerCase("zh-CN").includes(query)
-      const matchesRole = roleFilter === "all" || user.role === roleFilter
-      const matchesStatus = statusFilter === "all" || (statusFilter === "active") === user.is_active
-      return matchesSearch && matchesRole && matchesStatus
-    })
-  }, [roleFilter, search, statusFilter, users.data])
-  const pagination = useTablePagination(filteredUsers)
+  const pagination = users.data?.meta?.pagination as PaginationMeta | undefined
+  const hasFilters = Boolean(deferredSearch || roleFilter !== "all" || statusFilter !== "all")
+  const didMountFilters = useRef(false)
+  useEffect(() => {
+    if (!didMountFilters.current) {
+      didMountFilters.current = true
+      return
+    }
+    setPage(1)
+  }, [deferredSearch, roleFilter, statusFilter])
+  useEffect(() => {
+    setUrlParams(
+      (current) =>
+        mergeSearchParams(current, {
+          q: search.trim() || null,
+          role: roleFilter === "all" ? null : roleFilter,
+          status: statusFilter === "all" ? null : statusFilter,
+          page: page === 1 ? null : page,
+          per_page: pageSize === 20 ? null : pageSize,
+        }),
+      { replace: true },
+    )
+  }, [page, pageSize, roleFilter, search, setUrlParams, statusFilter])
+  useEffect(() => {
+    if (pagination && page > Math.max(1, pagination.last_page)) {
+      setPage(Math.max(1, pagination.last_page))
+    }
+  }, [page, pagination])
   const refresh = async () => {
     await client.invalidateQueries({ queryKey: ["users"] })
   }
@@ -66,6 +96,7 @@ export function UsersPage() {
     </Button>
   )
   if (users.isLoading) return <LoadingState />
+  if (users.isError) return <ErrorState retry={() => void users.refetch()} />
   return (
     <>
       <PageHeader
@@ -73,7 +104,7 @@ export function UsersPage() {
         description="账号权限分为管理员、排课员和查看者；敏感变更会撤销该账号的现有会话。"
       />
       <div className="p-5 md:p-7">
-        {!users.data?.length ? (
+        {!users.data?.data.length && !hasFilters ? (
           <EmptyList
             title="没有用户"
             description="至少应保留一个启用的管理员。"
@@ -85,7 +116,7 @@ export function UsersPage() {
               search={search}
               onSearchChange={setSearch}
               searchPlaceholder="搜索姓名或邮箱"
-              summary={<span>共 {filteredUsers.length} 个用户</span>}
+              summary={<span>共 {pagination?.total ?? users.data?.data.length ?? 0} 个用户</span>}
               actions={addUserButton}
             >
               <ToolbarSelect value={roleFilter} onChange={setRoleFilter} label="角色筛选">
@@ -100,94 +131,90 @@ export function UsersPage() {
                 <option value="inactive">已停用</option>
               </ToolbarSelect>
             </ListToolbar>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>姓名</TableHead>
-                  <TableHead>邮箱</TableHead>
-                  <TableHead>角色</TableHead>
-                  <TableHead>状态</TableHead>
-                  <TableHead>密码</TableHead>
-                  <TableHead className="text-right">操作</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pagination.items.map((user) => (
-                  <TableRow key={user.id}>
-                    <TableCell className="font-medium">
-                      <span className="inline-flex items-center gap-3">
-                        <span
-                          className={`flex size-9 items-center justify-center rounded-full text-sm ${avatarTone(user.id)}`}
-                        >
-                          {user.name.slice(0, 1)}
-                        </span>
-                        {user.name}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <span className="inline-flex items-center gap-2">
-                        {user.email}
-                        <button
-                          type="button"
-                          aria-label={`复制${user.name}的邮箱`}
-                          className="text-muted-foreground hover:text-foreground"
-                          onClick={() => {
-                            void navigator.clipboard.writeText(user.email)
-                            toast.success("邮箱已复制")
-                          }}
-                        >
-                          <CopyIcon className="size-3.5" />
-                        </button>
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge value={user.role} />
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge value={user.is_active ? "active" : "inactive"} />
-                    </TableCell>
-                    <TableCell>
-                      {user.must_change_password ? (
-                        <span className="text-xs text-amber-700">待修改临时密码</span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">已设置</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button size="sm" variant="ghost" onClick={() => setEditing(user)}>
-                        编辑
-                      </Button>
-                      <Button
-                        size="icon-sm"
-                        variant="ghost"
-                        aria-label="重置密码"
-                        onClick={() => setResetting(user)}
-                      >
-                        <KeyRoundIcon />
-                      </Button>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger
-                          render={
-                            <Button size="icon-sm" variant="ghost" aria-label="更多用户操作" />
-                          }
-                        >
-                          <MoreHorizontalIcon />
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => setEditing(user)}>
-                            编辑账号
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => setResetting(user)}>
-                            重置密码
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
+            {!users.data?.data.length ? (
+              <EmptyList title="没有匹配的用户" description="请调整搜索词或筛选条件。" />
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>姓名</TableHead>
+                    <TableHead>邮箱</TableHead>
+                    <TableHead>角色</TableHead>
+                    <TableHead>状态</TableHead>
+                    <TableHead>密码</TableHead>
+                    <TableHead className="text-right">操作</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <TablePagination {...pagination} />
+                </TableHeader>
+                <TableBody>
+                  {users.data.data.map((user) => (
+                    <TableRow key={user.id}>
+                      <TableCell className="font-medium">
+                        <span className="inline-flex items-center gap-3">
+                          <span
+                            className={`flex size-9 items-center justify-center rounded-full text-sm ${avatarTone(user.id)}`}
+                          >
+                            {user.name.slice(0, 1)}
+                          </span>
+                          {user.name}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="inline-flex items-center gap-2">
+                          {user.email}
+                          <button
+                            type="button"
+                            aria-label={`复制${user.name}的邮箱`}
+                            className="text-muted-foreground hover:text-foreground"
+                            onClick={() => {
+                              void navigator.clipboard.writeText(user.email)
+                              toast.success("邮箱已复制")
+                            }}
+                          >
+                            <CopyIcon className="size-3.5" />
+                          </button>
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge value={user.role} />
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge value={user.is_active ? "active" : "inactive"} />
+                      </TableCell>
+                      <TableCell>
+                        {user.must_change_password ? (
+                          <span className="text-xs text-amber-700">待修改临时密码</span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">已设置</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-0.5">
+                          <TableActionButton intent="edit" onClick={() => setEditing(user)}>
+                            编辑
+                          </TableActionButton>
+                          <Button size="sm" variant="ghost" onClick={() => setResetting(user)}>
+                            重置密码
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+            {pagination && (
+              <TablePagination
+                page={pagination.page}
+                pageSize={pagination.per_page}
+                totalItems={pagination.total}
+                totalPages={pagination.last_page}
+                onPageChange={setPage}
+                onPageSizeChange={(value) => {
+                  setPageSize(value)
+                  setPage(1)
+                }}
+              />
+            )}
           </div>
         )}
       </div>
@@ -462,17 +489,12 @@ export function SettingsPage() {
       />
       <div className="max-w-6xl p-5 md:p-7">
         <section className="border-b pb-7">
-          <div>
-            <p className="text-lg font-semibold">当前学期</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              侧边栏的学期配置、教学任务和排课工作台会默认打开该学期。
-            </p>
-          </div>
+          <p className="text-lg font-semibold">当前学期</p>
           <div className="mt-7 grid gap-5 sm:grid-cols-[140px_minmax(0,1fr)] sm:items-start">
             <p className="pt-3 text-sm font-medium">开放学期</p>
             <div className="max-w-2xl">
               <select
-                className="h-12 w-full rounded-lg border bg-background px-4 text-sm outline-none focus:border-ring focus:ring-3 focus:ring-ring/20"
+                className="h-9 w-full rounded-md border bg-background px-3 text-sm outline-none focus:border-ring focus:ring-3 focus:ring-ring/20"
                 value={selected}
                 onChange={(event) => setSelected(event.target.value)}
               >
@@ -484,16 +506,10 @@ export function SettingsPage() {
                 ))}
               </select>
               {selectedSemester && (
-                <div className="mt-4 space-y-2 text-sm text-muted-foreground">
-                  <p>
-                    {selectedSemester.start_date} 至 {selectedSemester.end_date}
-                  </p>
-                  <p>切换不会修改历史数据，只会改变默认工作上下文。</p>
-                </div>
+                <p className="mt-4 text-sm text-muted-foreground">
+                  {selectedSemester.start_date} 至 {selectedSemester.end_date}
+                </p>
               )}
-              <p className="mt-5 text-sm text-amber-600">
-                切换前请确认教务人员没有正在处理其他学期的数据。
-              </p>
             </div>
           </div>
           <div className="mt-7 flex justify-end">
@@ -501,40 +517,27 @@ export function SettingsPage() {
           </div>
         </section>
         <section className="pt-7">
-          <div>
-            <p className="text-lg font-semibold">学校时区</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              用于系统日期、审计时间和服务端业务时间解释。建议初始化后保持稳定。
-            </p>
-          </div>
+          <p className="text-lg font-semibold">学校时区</p>
           <div className="mt-7 grid gap-5 sm:grid-cols-[140px_minmax(0,1fr)] sm:items-start">
             <p className="pt-3 text-sm font-medium">IANA 时区</p>
             <div className="max-w-2xl">
               <select
                 value={timezone}
                 onChange={(event) => setTimezone(event.target.value)}
-                className="h-12 w-full rounded-lg border bg-background px-4 text-sm outline-none focus:border-ring focus:ring-3 focus:ring-ring/20"
+                className="h-9 w-full rounded-md border bg-background px-3 text-sm outline-none focus:border-ring focus:ring-3 focus:ring-ring/20"
               >
                 <option value="Asia/Shanghai">Asia/Shanghai</option>
                 <option value="Asia/Hong_Kong">Asia/Hong_Kong</option>
                 <option value="Asia/Taipei">Asia/Taipei</option>
                 <option value="Asia/Singapore">Asia/Singapore</option>
               </select>
-              <p className="mt-3 text-sm text-muted-foreground">
-                {timezone === "Asia/Shanghai"
-                  ? "中国标准时间（UTC+08:00）"
-                  : "请确认该时区与学校所在地一致。"}
-              </p>
               <div className="mt-5 flex items-center gap-4 border-y py-4 text-sm">
                 <span className="font-medium">当前学校时间</span>
                 <span className="text-muted-foreground">{schoolTime}</span>
               </div>
             </div>
           </div>
-          <div className="mt-7 flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">
-              已创建学年：{years.data?.data.length ?? 0}
-            </span>
+          <div className="mt-7 flex justify-end">
             <Button onClick={() => void saveTimezone()}>保存时区</Button>
           </div>
         </section>
