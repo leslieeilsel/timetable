@@ -57,7 +57,11 @@ class TeachingAssignmentController
             'page' => ['sometimes', 'integer', 'min:1'],
             'per_page' => ['sometimes', 'integer', Rule::in([20, 50, 100])],
         ]);
-        $version = $this->versions->resolveForRead($semester, isset($filters['version_id']) ? (int) $filters['version_id'] : null);
+        $version = $this->versions->resolveForRead(
+            $semester,
+            isset($filters['version_id']) ? (int) $filters['version_id'] : null,
+            $request->user()->role->canEdit(),
+        );
         $versionId = $version === null ? 0 : $version->id;
         $query = $semester->teachingAssignments()->with([
             'schoolClass.grade:id,name', 'teachingGroup.schoolClasses.grade:id,name',

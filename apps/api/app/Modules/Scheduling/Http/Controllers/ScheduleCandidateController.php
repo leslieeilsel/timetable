@@ -85,12 +85,15 @@ class ScheduleCandidateController
         $paginator = $query->orderBy('weekday')->orderBy('item_id')->orderBy('id')
             ->paginate((int) ($filters['per_page'] ?? 50));
         $settings = AppSetting::query()->findOrFail(1);
+        $isStale = ! $run->hasCompleteInputSnapshot()
+            || $run->revisionDifferences($semester, $settings) !== []
+            || ! $run->baselineMatches();
 
         return response()->json([
             'data' => [
                 'candidate' => $candidate->load('run.creator:id,name'),
                 'entries' => $paginator->items(),
-                'is_stale' => $run->input_revision !== (int) $semester->getRawOriginal('input_revision'),
+                'is_stale' => $isStale,
             ],
             'meta' => array_merge($this->meta($semester, $settings), [
                 'pagination' => [

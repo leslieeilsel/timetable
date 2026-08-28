@@ -1773,7 +1773,7 @@ export interface components {
         ResourceStatus: "active" | "inactive";
         Sort: string;
         Direction: "asc" | "desc";
-        /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+        /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
         IfMatch: string;
     };
     requestBodies: never;
@@ -1804,7 +1804,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path?: never;
@@ -1830,7 +1830,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -1853,7 +1853,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -1908,7 +1908,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -1936,7 +1936,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -2015,7 +2015,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -2039,7 +2039,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -2067,7 +2067,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -2095,7 +2095,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -2123,7 +2123,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -2171,7 +2171,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -2351,7 +2351,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path?: never;
@@ -2377,7 +2377,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -2400,7 +2400,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -2481,7 +2481,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path?: never;
@@ -2526,7 +2526,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -2549,7 +2549,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -2604,7 +2604,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -2632,7 +2632,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -2660,7 +2660,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -2684,7 +2684,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -2713,7 +2713,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -2741,7 +2741,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -2769,7 +2769,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -2817,7 +2817,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -2844,7 +2844,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -2867,7 +2867,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -2917,7 +2917,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -2944,7 +2944,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -2967,7 +2967,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -3018,7 +3018,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -3046,7 +3046,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -3074,7 +3074,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -3102,7 +3102,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -3133,7 +3133,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -3157,7 +3157,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -3185,7 +3185,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -3214,7 +3214,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -3243,7 +3243,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -3272,7 +3272,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -3337,7 +3337,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -3364,7 +3364,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -3387,7 +3387,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -3415,7 +3415,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -3439,7 +3439,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -3482,7 +3482,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -3509,7 +3509,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -3532,7 +3532,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -3560,7 +3560,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -3583,7 +3583,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -3626,7 +3626,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -3671,7 +3671,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -3717,7 +3717,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -3767,7 +3767,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -3818,7 +3818,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -3847,7 +3847,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -3968,7 +3968,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -3996,7 +3996,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -4024,7 +4024,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -4048,7 +4048,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -4076,7 +4076,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -4104,7 +4104,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -4257,7 +4257,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -4307,7 +4307,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -4355,7 +4355,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -4447,7 +4447,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -4476,7 +4476,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -4525,7 +4525,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path?: never;
@@ -4551,7 +4551,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -4574,7 +4574,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -4627,7 +4627,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path?: never;
@@ -4653,7 +4653,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -4676,7 +4676,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -4703,7 +4703,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -4778,7 +4778,10 @@ export interface operations {
     patchusersUser: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
             path: {
                 user: number;
             };
@@ -4791,6 +4794,7 @@ export interface operations {
         };
         responses: {
             200: components["responses"]["Success"];
+            400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
@@ -4802,7 +4806,10 @@ export interface operations {
     postusersUserResetPassword: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
             path: {
                 user: number;
             };
@@ -4816,6 +4823,7 @@ export interface operations {
         responses: {
             200: components["responses"]["Success"];
             201: components["responses"]["Created"];
+            400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
@@ -4854,7 +4862,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path?: never;
@@ -4880,7 +4888,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
@@ -4903,7 +4911,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。 */
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {

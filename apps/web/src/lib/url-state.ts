@@ -1,3 +1,35 @@
+import { useCallback } from "react"
+import {
+  createSearchParams,
+  useLocation,
+  useNavigate,
+  useSearchParams,
+  type SetURLSearchParams,
+} from "react-router"
+
+export function useHashPreservingSearchParams(): [URLSearchParams, SetURLSearchParams] {
+  const [params] = useSearchParams()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const setParams = useCallback<SetURLSearchParams>(
+    (nextInit, options) => {
+      const next = typeof nextInit === "function" ? nextInit(params) : nextInit
+      const serialized = createSearchParams(next).toString()
+      void navigate(
+        {
+          pathname: location.pathname,
+          search: serialized ? `?${serialized}` : "",
+          hash: location.hash,
+        },
+        options,
+      )
+    },
+    [location.hash, location.pathname, navigate, params],
+  )
+
+  return [params, setParams]
+}
+
 export function positiveIntegerParam(
   params: URLSearchParams,
   key: string,

@@ -17,6 +17,7 @@ class PreparationCheckService
 {
     public function __construct(
         private readonly WeekPatternService $weekPatterns,
+        private readonly ConstraintPayloadValidator $constraintPayloads,
     ) {}
 
     /**
@@ -131,12 +132,23 @@ class PreparationCheckService
             $fixedIssues,
         );
 
-        $hardCount = $semester->schedulingConstraints()
-            ->where('kind', ConstraintKind::Hard->value)
-            ->where('status', ConstraintStatus::Active->value)->count();
-        $softCount = $semester->schedulingConstraints()
-            ->where('kind', ConstraintKind::Soft->value)
-            ->where('status', ConstraintStatus::Active->value)->count();
+        $activeConstraints = $semester->schedulingConstraints()
+            ->where('status', ConstraintStatus::Active->value)
+            ->get();
+        $hardCount = $activeConstraints->where('kind', ConstraintKind::Hard)->count();
+        $softCount = $activeConstraints->where('kind', ConstraintKind::Soft)->count();
+        $constraintIssues = $this->constraintPayloads->activeIssues($semester, $activeConstraints);
+        $checks[] = $this->check(
+            'constraint_integrity',
+            '启用规则均可执行',
+            $constraintIssues === [] ? 'passed' : 'blocking',
+            count($constraintIssues),
+            $constraintIssues === []
+                ? '启用规则的强度、类型和参数均受求解器与手工诊断支持。'
+                : '存在当前求解器或手工诊断无法按声明执行的启用规则，请先修正规则或将其停用。',
+            '/scheduling/constraints',
+            array_slice($constraintIssues, 0, 50),
+        );
         $checks[] = $this->check(
             'active_constraints',
             '规则与约束已配置',

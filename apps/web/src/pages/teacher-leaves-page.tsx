@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { useSearchParams } from "react-router"
 import {
   AlertTriangleIcon,
   CalendarDaysIcon,
@@ -29,7 +28,12 @@ import { EmptyList, ErrorState, Field, LoadingState, PageHeader } from "@/compon
 import { ListToolbar, ToolbarSelect } from "@/components/list-toolbar"
 import { StatusBadge } from "@/components/status-badge"
 import { TablePagination } from "@/components/table-pagination"
-import { enumParam, mergeSearchParams, positiveIntegerParam } from "@/lib/url-state"
+import {
+  enumParam,
+  mergeSearchParams,
+  positiveIntegerParam,
+  useHashPreservingSearchParams,
+} from "@/lib/url-state"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -63,7 +67,7 @@ const leaveTypeLabels: Record<TeacherLeave["type"], string> = {
 export function TeacherLeavesPage() {
   const { semesterId, context } = useResolvedSemesterId()
   const client = useQueryClient()
-  const [urlParams, setUrlParams] = useSearchParams()
+  const [urlParams, setUrlParams] = useHashPreservingSearchParams()
   const [page, setPage] = useState(() => positiveIntegerParam(urlParams, "page", 1))
   const [pageSize, setPageSize] = useState(() =>
     positiveIntegerParam(urlParams, "per_page", 20, [20, 50, 100]),

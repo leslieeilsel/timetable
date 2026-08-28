@@ -188,6 +188,143 @@ it('previews leave impact, explains substitute recommendations and supports mult
         ->toBe(2);
 });
 
+it('keeps independent substitutions when two teachers on the same entry are absent', function (): void {
+    $fixture = dailyOperationsFixture($this->scheduler->id);
+    $now = now();
+    $entry = DB::table('timetable_entries')->where('id', $fixture['entry_id'])->first();
+    $collaboratorId = DB::table('teachers')->insertGetId([
+        'employee_no' => 'T-COLLABORATOR', 'name' => '胡静', 'is_active' => true,
+        'created_at' => $now, 'updated_at' => $now,
+    ]);
+    $secondReplacementId = DB::table('teachers')->insertGetId([
+        'employee_no' => 'T-SECOND-SUBSTITUTE', 'name' => '陈敏', 'is_active' => true,
+        'created_at' => $now, 'updated_at' => $now,
+    ]);
+    DB::table('teacher_course')->insert([
+        ['teacher_id' => $collaboratorId, 'course_id' => $entry->course_id],
+        ['teacher_id' => $secondReplacementId, 'course_id' => $entry->course_id],
+    ]);
+    DB::table('teaching_assignment_collaborators')->insert([
+        'teaching_assignment_id' => $entry->teaching_assignment_id,
+        'teacher_id' => $collaboratorId,
+        'role' => 'collaborator',
+    ]);
+    DB::table('timetable_entry_teachers')->insert([
+        'timetable_entry_id' => $fixture['entry_id'],
+        'timetable_version_id' => $fixture['version_id'],
+        'teacher_id' => $collaboratorId,
+        'week_pattern' => $entry->week_pattern,
+        'weekday' => $entry->weekday,
+        'item_id' => $entry->item_id,
+    ]);
+
+    $etag = $this->getJson("/api/v1/semesters/{$fixture['semester_id']}")->headers->get('ETag');
+    $leave = fn (int $teacherId, string $reason): array => [
+        'teacher_id' => $teacherId,
+        'starts_at' => '2026-09-07 07:00:00',
+        'ends_at' => '2026-09-07 10:00:00',
+        'type' => 'training',
+        'reason' => $reason,
+        'includes_non_course_items' => false,
+    ];
+    $primaryLeave = $this->withHeader('If-Match', $etag)
+        ->postJson(
+            "/api/v1/semesters/{$fixture['semester_id']}/teacher-leaves",
+            $leave($fixture['teacher_id'], '主讲教师培训'),
+        )->assertCreated();
+    $collaboratorLeave = $this->withHeader('If-Match', $primaryLeave->headers->get('ETag'))
+        ->postJson(
+            "/api/v1/semesters/{$fixture['semester_id']}/teacher-leaves",
+            $leave($collaboratorId, '协同教师培训'),
+        )->assertCreated();
+
+    $primaryLeaveId = (int) $primaryLeave->json('data.leave.id');
+    $collaboratorLeaveId = (int) $collaboratorLeave->json('data.leave.id');
+    $primaryRecommendations = $this->getJson(
+        "/api/v1/semesters/{$fixture['semester_id']}/teacher-leaves/{$primaryLeaveId}/recommendations"
+        ."?entry_id={$fixture['entry_id']}&date=2026-09-07",
+    )->assertOk();
+    $primarySubstitution = $this->withHeader('If-Match', $primaryRecommendations->headers->get('ETag'))
+        ->postJson(
+            "/api/v1/semesters/{$fixture['semester_id']}/teacher-leaves/{$primaryLeaveId}/substitutions",
+            ['substitutions' => [[
+                'entry_id' => $fixture['entry_id'],
+                'date' => '2026-09-07',
+                'replacement_teacher_id' => $fixture['substitute_teacher_id'],
+                'reason' => '主讲教师由同名教师代课',
+            ]]],
+        )->assertOk()
+        ->assertJsonPath('data.0.replaced_teacher_id', $fixture['teacher_id']);
+    $primarySubstitutionId = (int) $primarySubstitution->json('data.0.id');
+
+    $collaboratorRecommendations = $this->getJson(
+        "/api/v1/semesters/{$fixture['semester_id']}/teacher-leaves/{$collaboratorLeaveId}/recommendations"
+        ."?entry_id={$fixture['entry_id']}&date=2026-09-07",
+    )->assertOk();
+    $collaboratorSubstitution = $this->withHeader('If-Match', $collaboratorRecommendations->headers->get('ETag'))
+        ->postJson(
+            "/api/v1/semesters/{$fixture['semester_id']}/teacher-leaves/{$collaboratorLeaveId}/substitutions",
+            ['substitutions' => [[
+                'entry_id' => $fixture['entry_id'],
+                'date' => '2026-09-07',
+                'replacement_teacher_id' => $secondReplacementId,
+                'reason' => '协同教师由同名教师代课',
+            ]]],
+        )->assertOk()
+        ->assertJsonPath('data.0.replaced_teacher_id', $collaboratorId);
+    $collaboratorSubstitutionId = (int) $collaboratorSubstitution->json('data.0.id');
+
+    $rows = $this->getJson(
+        "/api/v1/semesters/{$fixture['semester_id']}/daily-timetable?date=2026-09-07",
+    )->assertOk()->json('data.rows');
+    expect($rows)->toHaveCount(1)
+        ->and($rows[0]['teacher_id'])->toBe($fixture['substitute_teacher_id'])
+        ->and($rows[0]['teacher_ids'])->toContain($fixture['substitute_teacher_id'], $secondReplacementId)
+        ->not->toContain($fixture['teacher_id'], $collaboratorId)
+        ->and($rows[0]['teacher_names'])->toBe(['陈敏', '陈敏'])
+        ->and(count($rows[0]['teacher_ids']))->toBe(count($rows[0]['teacher_names']))
+        ->and(array_combine($rows[0]['teacher_ids'], $rows[0]['teacher_names']))->toBe([
+            $fixture['substitute_teacher_id'] => '陈敏',
+            $secondReplacementId => '陈敏',
+        ])
+        ->and($rows[0]['substitution_id'])->toBe($collaboratorSubstitutionId)
+        ->and($rows[0]['substitution_ids'])->toBe([$primarySubstitutionId, $collaboratorSubstitutionId])
+        ->and($rows[0]['substitution_notes'])->toBe([
+            '主讲教师由同名教师代课',
+            '协同教师由同名教师代课',
+        ])
+        ->and($rows[0]['note'])->toBe('协同教师由同名教师代课');
+    expect(DB::table('substitutions')->where('original_entry_id', $fixture['entry_id'])->count())->toBe(2)
+        ->and(DB::table('substitutions')->pluck('teacher_leave_id')->all())
+        ->toContain($primaryLeaveId, $collaboratorLeaveId)
+        ->and(DB::table('substitutions')->pluck('replaced_teacher_id')->all())
+        ->toContain($fixture['teacher_id'], $collaboratorId);
+
+    $this->withHeader('If-Match', $collaboratorSubstitution->headers->get('ETag'))
+        ->postJson(
+            "/api/v1/semesters/{$fixture['semester_id']}/teacher-leaves/{$primaryLeaveId}/cancel",
+        )->assertOk();
+    $afterPrimaryCancellation = $this->getJson(
+        "/api/v1/semesters/{$fixture['semester_id']}/daily-timetable?date=2026-09-07",
+    )->assertOk()->json('data.rows.0');
+    expect($afterPrimaryCancellation['teacher_id'])->toBe($fixture['teacher_id'])
+        ->and($afterPrimaryCancellation['teacher_ids'])->toContain($fixture['teacher_id'], $secondReplacementId)
+        ->not->toContain($fixture['substitute_teacher_id'], $collaboratorId)
+        ->and(array_combine(
+            $afterPrimaryCancellation['teacher_ids'],
+            $afterPrimaryCancellation['teacher_names'],
+        ))->toBe([
+            $fixture['teacher_id'] => '胡静',
+            $secondReplacementId => '陈敏',
+        ])
+        ->and($afterPrimaryCancellation['substitution_ids'])->toBe([$collaboratorSubstitutionId])
+        ->and($afterPrimaryCancellation['substitution_notes'])->toBe(['协同教师由同名教师代课']);
+    expect(DB::table('substitutions')->where('teacher_leave_id', $primaryLeaveId)->value('status'))
+        ->toBe('cancelled')
+        ->and(DB::table('substitutions')->where('teacher_leave_id', $collaboratorLeaveId)->value('status'))
+        ->toBe('active');
+});
+
 it('rejects an unqualified teacher in a temporary teacher change preview', function (): void {
     $fixture = dailyOperationsFixture($this->scheduler->id);
     $unqualifiedTeacherId = DB::table('teachers')->insertGetId([

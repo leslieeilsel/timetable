@@ -36,9 +36,11 @@ class TimetableVersionController
             'per_page' => ['sometimes', 'integer', Rule::in([20, 50, 100])],
         ]);
         $perPage = (int) ($filters['per_page'] ?? 20);
+        $allowDrafts = $request->user()->role->canEdit();
         $paginator = $semester->timetableVersions()
             ->with(['creator:id,name', 'sourceCandidate:id,name,rank'])
             ->withCount('entries')
+            ->when(! $allowDrafts, fn ($query) => $query->where('status', '!=', TimetableVersionStatus::Draft->value))
             ->when(isset($filters['status']), fn ($query) => $query->where('status', $filters['status']))
             ->orderByDesc('version_no')
             ->paginate($perPage);
@@ -95,8 +97,17 @@ class TimetableVersionController
             'page' => ['sometimes', 'integer', 'min:1'],
             'per_page' => ['sometimes', 'integer', Rule::in([20, 50, 100])],
         ]);
-        $left = $this->versions->findForSemester($semester, (int) $filters['left_version_id']);
-        $right = $this->versions->findForSemester($semester, (int) $filters['right_version_id']);
+        $allowDrafts = $request->user()->role->canEdit();
+        $left = $this->versions->findReadableForSemester(
+            $semester,
+            (int) $filters['left_version_id'],
+            $allowDrafts,
+        );
+        $right = $this->versions->findReadableForSemester(
+            $semester,
+            (int) $filters['right_version_id'],
+            $allowDrafts,
+        );
         $comparison = $this->comparisons->compare($semester, $left, $right);
         $changes = isset($filters['change_type'])
             ? array_values(array_filter(

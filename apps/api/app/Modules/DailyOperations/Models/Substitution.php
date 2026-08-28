@@ -15,6 +15,7 @@ use Illuminate\Support\Carbon;
  * @property int|null $teacher_leave_id
  * @property int|null $calendar_exception_id
  * @property int $original_entry_id
+ * @property int|null $replaced_teacher_id
  * @property Carbon $effective_date
  * @property int $replacement_teacher_id
  * @property OperationalStatus $status
@@ -23,6 +24,7 @@ use Illuminate\Support\Carbon;
  * @property-read TeacherLeave|null $teacherLeave
  * @property-read CalendarException|null $calendarException
  * @property-read TimetableEntry $originalEntry
+ * @property-read Teacher|null $replacedTeacher
  * @property-read Teacher $replacementTeacher
  * @property-read User $creator
  */
@@ -30,7 +32,7 @@ class Substitution extends Model
 {
     protected $fillable = [
         'teacher_leave_id', 'calendar_exception_id', 'original_entry_id', 'effective_date',
-        'replacement_teacher_id', 'status', 'reason', 'created_by',
+        'replaced_teacher_id', 'replacement_teacher_id', 'status', 'reason', 'created_by',
     ];
 
     protected function casts(): array
@@ -54,6 +56,12 @@ class Substitution extends Model
     public function originalEntry(): BelongsTo
     {
         return $this->belongsTo(TimetableEntry::class, 'original_entry_id');
+    }
+
+    /** @return BelongsTo<Teacher, $this> */
+    public function replacedTeacher(): BelongsTo
+    {
+        return $this->belongsTo(Teacher::class, 'replaced_teacher_id');
     }
 
     /** @return BelongsTo<Teacher, $this> */

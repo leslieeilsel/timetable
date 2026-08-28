@@ -19,6 +19,13 @@ import {
 } from "lucide-react"
 import { useAuth } from "@/lib/auth"
 import { SYSTEM_NAME, SYSTEM_TAGLINE } from "@/lib/brand"
+import {
+  isDailySemesterPath,
+  isSchedulingSemesterPath,
+  semesterPathOrCurrent,
+  useResolvedSemesterId,
+  type SemesterDestination,
+} from "@/lib/semester"
 import { LogoMark } from "@/components/brand"
 import { Button } from "@/components/ui/button"
 import {
@@ -47,25 +54,42 @@ const resourceItems = [
   { title: "年级与班级", to: "/years", icon: CalendarDaysIcon },
 ]
 const schedulingItems = [
-  { title: "① 准备检查", to: "/scheduling/preparation", icon: BookOpenCheckIcon },
-  { title: "② 课程与任课矩阵", to: "/scheduling/assignments", icon: ClipboardListIcon },
-  { title: "③ 规则与约束", to: "/scheduling/constraints", icon: SettingsIcon },
-  { title: "④ 方案生成", to: "/scheduling/generate", icon: GalleryVerticalEndIcon },
-  { title: "⑤ 课表调整与诊断", to: "/scheduling/timetable", icon: BookOpenTextIcon },
-]
+  { title: "① 准备检查", destination: "preparation", icon: BookOpenCheckIcon },
+  { title: "② 课程与任课矩阵", destination: "assignments", icon: ClipboardListIcon },
+  { title: "③ 规则与约束", destination: "constraints", icon: SettingsIcon },
+  { title: "④ 方案生成", destination: "generate", icon: GalleryVerticalEndIcon },
+  { title: "⑤ 课表调整与诊断", destination: "timetable", icon: BookOpenTextIcon },
+] satisfies Array<{
+  title: string
+  destination: SemesterDestination
+  icon: typeof BookOpenCheckIcon
+}>
 const dailyItems = [
-  { title: "临时调课", to: "/daily/adjustments", icon: CalendarDaysIcon },
-  { title: "请假与代课", to: "/daily/leaves", icon: CalendarCheck2Icon },
-]
+  { title: "临时调课", destination: "adjustments", icon: CalendarDaysIcon },
+  { title: "请假与代课", destination: "leaves", icon: CalendarCheck2Icon },
+] satisfies Array<{
+  title: string
+  destination: SemesterDestination
+  icon: typeof CalendarDaysIcon
+}>
 const SIDEBAR_TOOLTIP_DELAY = 150
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { pathname } = useLocation()
   const { user } = useAuth()
+  const { semesterId } = useResolvedSemesterId()
   const sidebar = useSidebar()
   const resourcesActive = pathname.startsWith("/resources") || pathname.startsWith("/years")
-  const schedulingActive = pathname.startsWith("/scheduling") || pathname.startsWith("/semester/")
-  const dailyActive = pathname.startsWith("/daily/")
+  const schedulingActive = isSchedulingSemesterPath(pathname)
+  const dailyActive = isDailySemesterPath(pathname)
+  const schedulingMenuItems = schedulingItems.map((item) => ({
+    ...item,
+    to: semesterPathOrCurrent(semesterId, item.destination),
+  }))
+  const dailyMenuItems = dailyItems.map((item) => ({
+    ...item,
+    to: semesterPathOrCurrent(semesterId, item.destination),
+  }))
   const [resourcesOpen, setResourcesOpen] = useState(true)
   const [schedulingOpen, setSchedulingOpen] = useState(true)
   const [dailyOpen, setDailyOpen] = useState(true)
@@ -158,7 +182,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </CollapsibleTrigger>
       <CollapsibleContent>
         <SidebarMenuSub>
-          {schedulingItems.map((item) => (
+          {schedulingMenuItems.map((item) => (
             <SidebarMenuSubItem key={item.to}>
               <SidebarMenuSubButton
                 isActive={pathname === item.to}
@@ -197,7 +221,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </CollapsibleTrigger>
       <CollapsibleContent>
         <SidebarMenuSub>
-          {dailyItems.map((item) => (
+          {dailyMenuItems.map((item) => (
             <SidebarMenuSubItem key={item.to}>
               <SidebarMenuSubButton
                 isActive={pathname === item.to}
@@ -296,7 +320,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         {user?.role !== "viewer" && group("基础资料", [], resourcesMenu)}
         {user?.role === "viewer" &&
           group("当前课表", [
-            { title: "课表查看", to: "/scheduling/timetable", icon: BookOpenTextIcon },
+            {
+              title: "课表查看",
+              to: semesterPathOrCurrent(semesterId, "timetable"),
+              icon: BookOpenTextIcon,
+            },
           ])}
         {user?.role === "admin" &&
           group("系统", [

@@ -25,10 +25,10 @@ it('returns all preparation checks from current semester data', function (): voi
         ->assertJsonPath('data.status', 'passed')
         ->assertJsonPath('data.summary.blocking', 0)
         ->assertJsonPath('data.summary.warnings', 0)
-        ->assertJsonPath('data.summary.passed', 8)
+        ->assertJsonPath('data.summary.passed', 9)
         ->assertJsonPath('data.summary.confirmed_assignments', 1)
         ->assertJsonPath('data.summary.required_entries', 1)
-        ->assertJsonCount(8, 'data.checks');
+        ->assertJsonCount(9, 'data.checks');
 
     expect(collect($response->json('data.checks'))->pluck('key')->all())->toBe([
         'schedule_template',
@@ -37,6 +37,7 @@ it('returns all preparation checks from current semester data', function (): voi
         'assignment_resources',
         'theoretical_capacity',
         'fixed_placements',
+        'constraint_integrity',
         'active_constraints',
         'current_version',
     ]);
@@ -187,9 +188,11 @@ it('keeps preparation query count bounded for a medium school', function (): voi
     $result = app(PreparationCheckService::class)->inspect($semester);
     $queryCount = count(DB::getQueryLog());
     DB::disableQueryLog();
+    $constraintCheck = collect($result['checks'])->firstWhere('key', 'constraint_integrity');
 
     expect($result['summary']['confirmed_assignments'])->toBe(360)
         ->and($result['summary']['required_entries'])->toBe(808)
+        ->and($constraintCheck['status'])->toBe('passed')
         ->and($queryCount)->toBeLessThanOrEqual(20);
 });
 
@@ -324,13 +327,13 @@ function preparationCheckFixture(int $userId): array
     ]);
     DB::table('scheduling_constraints')->insert([
         'semester_id' => $semesterId,
-        'name' => '课程均匀分布',
+        'name' => '周一优先排课',
         'kind' => 'soft',
-        'category' => 'course_distribution',
+        'category' => 'preferred_slot',
         'target_type' => 'semester',
         'target_id' => $semesterId,
-        'scope' => json_encode([], JSON_THROW_ON_ERROR),
-        'requirement' => json_encode(['spread' => true], JSON_THROW_ON_ERROR),
+        'scope' => json_encode(['weekdays' => [1]], JSON_THROW_ON_ERROR),
+        'requirement' => json_encode(['preference' => 'prefer'], JSON_THROW_ON_ERROR),
         'weight' => 70,
         'source' => 'user',
         'status' => 'active',

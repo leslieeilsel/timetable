@@ -663,6 +663,7 @@ class MediumSchoolSeeder extends Seeder
             ['避免同一课程同日重复', 'soft', 'spacing', 85, ['max_same_course_per_day' => 1], '除连堂配置外，同一班级同一课程每天尽量只安排一次。'],
         ];
         $timestamp = now();
+        $activeTemplateCategories = [];
         foreach ($definitions as [$name, $kind, $category, $weight, $requirement, $explanation]) {
             DB::table('scheduling_constraints')->insert([
                 'semester_id' => $semester['id'],
@@ -673,7 +674,7 @@ class MediumSchoolSeeder extends Seeder
                 'requirement' => json_encode($requirement, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
                 'weight' => $weight,
                 'source' => $kind === 'hard' ? 'system' : 'template',
-                'status' => 'active',
+                'status' => $kind === 'hard' || in_array($category, $activeTemplateCategories, true) ? 'active' : 'inactive',
                 'explanation' => $explanation,
                 'created_at' => $timestamp,
                 'updated_at' => $timestamp,
@@ -868,6 +869,7 @@ class MediumSchoolSeeder extends Seeder
             DB::table('substitutions')->insert([
                 'teacher_leave_id' => $leaveId,
                 'original_entry_id' => $entry->id,
+                'replaced_teacher_id' => $entry->teacher_id,
                 'effective_date' => $date,
                 'replacement_teacher_id' => $leaveReplacement['teacher_id'],
                 'status' => 'active',

@@ -5,7 +5,8 @@
   "scripts": {
     "dev:web": "vp run @timetable/web#dev",
     "dev:api": "php apps/api/artisan serve --host=127.0.0.1 --port=8000",
-    "dev": "vp exec concurrently -k --kill-others-on-fail \"vp run dev:api\" \"vp run dev:web\"",
+    "dev:queue": "php apps/api/artisan queue:work database --queue=default --tries=3 --timeout=300",
+    "dev": "vp exec concurrently -k --kill-others-on-fail \"vp run dev:api\" \"vp run dev:queue\" \"vp run dev:web\"",
     "check:web": "vp run @timetable/web#check",
     "check:api": "composer --working-dir=apps/api check",
     "check": "vp run check:web && vp run check:api",

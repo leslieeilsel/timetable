@@ -375,6 +375,8 @@ export interface DailyTimetableRow {
   original_entry_id: number | null
   exception_id: number | null
   substitution_id: number | null
+  substitution_ids: number[]
+  substitution_notes: (string | null)[]
   item_id: number
   item_name: string
   item_sort_order: number
@@ -491,11 +493,13 @@ export interface Substitution {
   id: number
   teacher_leave_id: number | null
   original_entry_id: number
+  replaced_teacher_id: number | null
   effective_date: string
   replacement_teacher_id: number
   status: OperationalStatus
   reason: string | null
   original_entry?: TimetableEntry
+  replaced_teacher?: Teacher | null
   replacement_teacher: Teacher
 }
 

@@ -52,6 +52,16 @@ php apps/api/artisan db:seed --class='Database\Seeders\MediumSchoolSeeder'
 
 默认开发入口为 `http://localhost:5173`。Vite 将 `/api` 和 `/sanctum` 同源代理到 `127.0.0.1:8000`；不要在同一登录会话中混用 `localhost` 与 `127.0.0.1`。
 
+自动排课使用可恢复的数据库队列。`pnpm dev` 会同时启动 Web、API 与数据库队列 Worker；也可用 `pnpm dev:queue` 单独启动 Worker。Worker 的 `--timeout=300` 必须小于 `DB_QUEUE_RETRY_AFTER=360`，避免同一任务被两个进程同时执行。
+
+生产部署完成 Migration 后，需由进程管理器持续守护以下命令：
+
+```bash
+php apps/api/artisan queue:work database --queue=default --tries=3 --timeout=300
+```
+
+发布新代码后执行 `php apps/api/artisan queue:restart`。失败任务会写入 `failed_jobs`，可使用 `queue:failed` 检查，并在确认输入仍有效后按运维流程重试。
+
 若使用 MySQL，本地容器固定为 8.4.11：
 
 ```bash

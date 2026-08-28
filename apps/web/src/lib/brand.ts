@@ -25,15 +25,23 @@ const pageTitles: Record<string, string> = {
   "/settings": "系统设置",
 }
 
+const semesterPageTitles: Record<string, string> = {
+  setup: "学期配置",
+  preparation: "准备检查",
+  assignments: "课程与任课矩阵",
+  constraints: "规则与约束",
+  generate: "方案生成",
+  timetable: "课表调整与诊断",
+  adjustments: "临时调课",
+  leaves: "请假与代课",
+}
+
 export function pageTitleForPath(pathname: string) {
   const normalizedPath = pathname.replace(/\/+$/, "") || "/"
   if (/^\/years\/[^/]+$/.test(normalizedPath)) return "学年详情"
-  if (/^\/semesters\/[^/]+\/setup$/.test(normalizedPath)) return "学期配置"
-  if (/^\/semesters\/[^/]+\/assignments$/.test(normalizedPath)) {
-    return "课程与任课矩阵"
-  }
-  if (/^\/semesters\/[^/]+\/timetable$/.test(normalizedPath)) {
-    return "课表调整与诊断"
+  const semesterPage = /^\/semesters\/[^/]+\/([^/]+)$/.exec(normalizedPath)?.[1]
+  if (semesterPage) {
+    if (semesterPageTitles[semesterPage]) return semesterPageTitles[semesterPage]
   }
   return pageTitles[normalizedPath] ?? "工作台"
 }

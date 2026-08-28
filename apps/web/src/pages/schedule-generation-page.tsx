@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react"
-import { Link, useSearchParams } from "react-router"
+import { Link } from "react-router"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   AlertTriangleIcon,
@@ -16,7 +16,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { api, apiAllPages, apiMessage, jsonBody } from "@/lib/api"
-import { useResolvedSemesterId } from "@/lib/semester"
+import { semesterPath, useResolvedSemesterId } from "@/lib/semester"
 import type {
   ClassSetting,
   PaginationMeta,
@@ -49,7 +49,11 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
-import { mergeSearchParams, positiveIntegerParam } from "@/lib/url-state"
+import {
+  mergeSearchParams,
+  positiveIntegerParam,
+  useHashPreservingSearchParams,
+} from "@/lib/url-state"
 
 type ScopeType = "all" | "grade" | "class" | "assignment"
 type StrategyProfile = "balanced" | "class_distribution" | "teacher_experience" | "room_utilization"
@@ -68,7 +72,7 @@ const strategyOptions: Array<{ value: StrategyProfile; title: string; descriptio
 export function ScheduleGenerationPage() {
   const { semesterId, context } = useResolvedSemesterId()
   const client = useQueryClient()
-  const [params, setParams] = useSearchParams()
+  const [params, setParams] = useHashPreservingSearchParams()
   const runId = Number(params.get("run")) || null
   const [scopeType, setScopeType] = useState<ScopeType>("all")
   const [scopeIds, setScopeIds] = useState<number[]>([])
@@ -146,13 +150,15 @@ export function ScheduleGenerationPage() {
     }
   }, [runsLastPage, runsPage])
 
-  if (!semesterId && !context.isLoading)
+  if (semesterId === null) {
+    if (context.isLoading) return <LoadingState label="正在载入学期…" />
     return (
       <>
         <PageHeader title="方案生成" />
         <EmptyList title="尚未设置当前学期" description="请先设置当前开放学期。" />
       </>
     )
+  }
 
   const start = async () => {
     if (!preparation.data?.etag || (scopeType !== "all" && scopeIds.length === 0)) return
@@ -289,7 +295,10 @@ export function ScheduleGenerationPage() {
                 </div>
                 <div className="flex shrink-0 flex-col gap-2 sm:flex-row lg:min-w-56 lg:flex-col">
                   {!preparation.data.data.ready ? (
-                    <Button nativeButton={false} render={<Link to="/scheduling/preparation" />}>
+                    <Button
+                      nativeButton={false}
+                      render={<Link to={semesterPath(semesterId, "preparation")} />}
+                    >
                       先处理阻塞问题
                       <ArrowRightIcon />
                     </Button>

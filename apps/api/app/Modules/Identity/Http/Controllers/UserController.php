@@ -81,7 +81,8 @@ class UserController
             return $user;
         }, 3);
 
-        return response()->json(['data' => $this->data($user)], 201);
+        return response()->json(['data' => $this->data($user)], 201)
+            ->header('ETag', $this->etag($user));
     }
 
     public function update(Request $request, User $user): JsonResponse
@@ -96,6 +97,7 @@ class UserController
         $user = DB::transaction(function () use ($request, $user, $validated): User {
             $actor = $this->guard->actor($request, true);
             $target = User::query()->lockForUpdate()->findOrFail($user->id);
+            $this->assertEtag($request, $target);
             $before = $this->data($target);
             $nextRole = isset($validated['role']) ? Role::from($validated['role']) : $target->role;
             $nextActive = $validated['is_active'] ?? $target->is_active;
@@ -106,13 +108,13 @@ class UserController
                 }
             }
 
-            $sensitiveChanged = $nextRole !== $target->role || $nextActive !== $target->is_active || isset($validated['email']);
             $target->fill([
                 'name' => isset($validated['name']) ? Normalizer::text($validated['name']) : $target->name,
                 'email' => isset($validated['email']) ? Normalizer::email($validated['email']) : $target->email,
                 'role' => $nextRole,
                 'is_active' => $nextActive,
             ]);
+            $sensitiveChanged = $target->isDirty(['email', 'role', 'is_active']);
             if ($sensitiveChanged) {
                 $target->auth_version++;
             }
@@ -125,7 +127,8 @@ class UserController
             return $target;
         }, 3);
 
-        return response()->json(['data' => $this->data($user)]);
+        return response()->json(['data' => $this->data($user)])
+            ->header('ETag', $this->etag($user));
     }
 
     public function resetPassword(Request $request, User $user): JsonResponse
@@ -134,9 +137,10 @@ class UserController
             'temporary_password' => ['required', Password::min(12)->letters()->mixedCase()->numbers()],
         ]);
 
-        DB::transaction(function () use ($request, $user, $validated): void {
+        $user = DB::transaction(function () use ($request, $user, $validated): User {
             $actor = $this->guard->actor($request, true);
             $target = User::query()->lockForUpdate()->findOrFail($user->id);
+            $this->assertEtag($request, $target);
             $target->forceFill([
                 'password' => $validated['temporary_password'],
                 'must_change_password' => true,
@@ -144,9 +148,12 @@ class UserController
             ])->save();
             DB::table('sessions')->where('user_id', $target->id)->delete();
             $this->audit->record($request, $actor, 'reset_password', 'user', $target->id, null, ['must_change_password' => true]);
+
+            return $target;
         }, 3);
 
-        return response()->json(['data' => ['reset' => true]]);
+        return response()->json(['data' => ['reset' => true, 'etag' => $this->etag($user)]])
+            ->header('ETag', $this->etag($user));
     }
 
     private function assertAdmin(Request $request): void
@@ -167,6 +174,40 @@ class UserController
             'is_active' => $user->is_active,
             'must_change_password' => $user->must_change_password,
             'created_at' => $user->created_at?->toISOString(),
+            'etag' => $this->etag($user),
         ];
+    }
+
+    private function assertEtag(Request $request, User $user): void
+    {
+        $actual = $request->header('If-Match');
+        if ($actual === null) {
+            throw new ApiProblemException('USER_ETAG_REQUIRED', '缺少用户版本，请刷新后重试', 428);
+        }
+        if (! preg_match('/^"user-\d+-[a-f0-9]{64}"$/D', $actual)) {
+            throw new ApiProblemException('INVALID_USER_ETAG', '用户版本格式无效', 400);
+        }
+
+        $expected = $this->etag($user);
+        if (! hash_equals($expected, $actual)) {
+            throw new ApiProblemException('USER_ETAG_CONFLICT', '用户已被其他管理员修改，请刷新后重试', 412, [
+                'current_etag' => $expected,
+            ]);
+        }
+    }
+
+    private function etag(User $user): string
+    {
+        $state = json_encode([
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'role' => $user->role->value,
+            'is_active' => $user->is_active,
+            'must_change_password' => $user->must_change_password,
+            'auth_version' => $user->auth_version,
+        ], JSON_THROW_ON_ERROR);
+
+        return sprintf('"user-%d-%s"', $user->id, hash('sha256', $state));
     }
 }

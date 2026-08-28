@@ -1,6 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { useSearchParams } from "react-router"
 import { ArrowRightLeftIcon, CopyIcon, PlusIcon, Settings2Icon } from "lucide-react"
 import { toast } from "sonner"
 import { api, apiAllPages, apiMessage, jsonBody } from "@/lib/api"
@@ -21,7 +20,12 @@ import { TablePagination } from "@/components/table-pagination"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
-import { enumParam, mergeSearchParams, positiveIntegerParam } from "@/lib/url-state"
+import {
+  enumParam,
+  mergeSearchParams,
+  positiveIntegerParam,
+  useHashPreservingSearchParams,
+} from "@/lib/url-state"
 import {
   Dialog,
   DialogContent,
@@ -45,7 +49,7 @@ const weekdays = ["周一", "周二", "周三", "周四", "周五", "周六", "�
 export function SemesterSetupPage() {
   const { semesterId, context } = useResolvedSemesterId()
   const client = useQueryClient()
-  const [urlParams, setUrlParams] = useSearchParams()
+  const [urlParams, setUrlParams] = useHashPreservingSearchParams()
   const [settingOpen, setSettingOpen] = useState(false)
   const [templateOpen, setTemplateOpen] = useState(false)
   const [migratingSetting, setMigratingSetting] = useState<ClassSetting | null>(null)

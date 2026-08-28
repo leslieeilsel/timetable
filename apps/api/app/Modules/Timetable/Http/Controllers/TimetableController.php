@@ -19,12 +19,14 @@ use App\Modules\Timetable\Models\TimetableVersion;
 use App\Modules\Timetable\Services\RoomResolver;
 use App\Modules\Timetable\Services\TimetableConflictService;
 use App\Modules\Timetable\Services\TimetableDiagnosticService;
+use App\Modules\Timetable\Services\TimetableSynchronizationService;
 use App\Modules\Timetable\Services\TimetableVersionService;
 use App\Support\ApiProblemException;
 use App\Support\EtagService;
 use App\Support\SimpleXlsxWriter;
 use App\Support\WriteGuard;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -42,6 +44,7 @@ class TimetableController
         private readonly RoomResolver $rooms,
         private readonly TimetableConflictService $conflicts,
         private readonly TimetableDiagnosticService $diagnostics,
+        private readonly TimetableSynchronizationService $synchronization,
         private readonly TimetableVersionService $versions,
         private readonly SimpleXlsxWriter $xlsx,
     ) {}
@@ -57,7 +60,11 @@ class TimetableController
         $view = $filters['view'] ?? 'class';
         $mode = $filters['mode'] ?? 'official';
         $resourceId = $filters['resource_id'] ?? null;
-        $version = $this->versions->resolveForRead($semester, isset($filters['version_id']) ? (int) $filters['version_id'] : null);
+        $version = $this->versions->resolveForRead(
+            $semester,
+            isset($filters['version_id']) ? (int) $filters['version_id'] : null,
+            $request->user()->role->canEdit(),
+        );
         $versionId = $version === null ? 0 : $version->id;
         $settings = AppSetting::query()->findOrFail(1);
         $template = $semester->scheduleTemplate()->with(['days', 'items'])->first();
@@ -94,9 +101,13 @@ class TimetableController
             'version_id' => ['nullable', 'integer'],
         ]);
         $settings = AppSetting::query()->findOrFail(1);
+        $allowDrafts = $request->user()->role->canEdit();
         $version = isset($data['version_id'])
-            ? $this->versions->findForSemester($semester, (int) $data['version_id'])
-            : $this->versions->resolveForRead($semester);
+            ? $this->versions->findReadableForSemester($semester, (int) $data['version_id'], $allowDrafts)
+            : $this->versions->resolveForRead($semester, null, $allowDrafts);
+        if ($version !== null) {
+            $this->synchronization->assertVersionAligned($semester, $version);
+        }
         $movingEntry = null;
         if (isset($data['entry_id'])) {
             $movingEntry = TimetableEntry::query()->with('teachingAssignment')->findOrFail((int) $data['entry_id']);
@@ -110,17 +121,45 @@ class TimetableController
                 ->where('semester_id', $semester->id)
                 ->findOrFail((int) $data['teaching_assignment_id']);
         }
-        $this->assertPlaceable($assignment, (int) $data['weekday'], (int) $data['item_id']);
+        $assignmentIds = $this->synchronization->assignmentIds($semester, $assignment->id);
+        $versionId = $version === null ? 0 : $version->id;
+        $assignments = $this->synchronizedAssignments($semester, $assignmentIds, $versionId);
+        $movingEntries = $movingEntry === null
+            ? new EloquentCollection
+            : $this->synchronizedEntries($semester, $movingEntry, $assignmentIds);
+        foreach ($assignments as $groupAssignment) {
+            $this->assertPlaceable($groupAssignment, (int) $data['weekday'], (int) $data['item_id']);
+        }
+
+        $diagnosis = $this->diagnostics->diagnoseGroup(
+            $semester,
+            $version,
+            $this->primaryAssignmentFirst($assignments, $assignment->id)->all(),
+            (int) $data['weekday'],
+            (int) $data['item_id'],
+            $movingEntries->all(),
+        );
+        if ($movingEntry === null) {
+            $fullAssignments = $assignments->filter(
+                fn (TeachingAssignment $groupAssignment): bool => $groupAssignment->entries_count >= $groupAssignment->weekly_items,
+            );
+            if ($fullAssignments->isNotEmpty()) {
+                $limitConflicts = $fullAssignments->map(fn (TeachingAssignment $groupAssignment): array => [
+                    'assignment_id' => $groupAssignment->id,
+                    'type' => 'weekly_load',
+                    'message' => '该任课关系已达到每周课时上限。',
+                ])->values()->all();
+                $diagnosis['allowed'] = false;
+                $diagnosis['summary'] = count($assignments) > 1
+                    ? '同步组不能整体安排：至少一个成员已达到每周课时上限。'
+                    : '不能移动：该任课关系已达到每周课时上限。';
+                $diagnosis['hard_conflicts'] = [...$diagnosis['hard_conflicts'], ...$limitConflicts];
+                $diagnosis['estimated_quality_delta'] = 0.0;
+            }
+        }
 
         return response()->json([
-            'data' => $this->diagnostics->diagnose(
-                $semester,
-                $version,
-                $assignment,
-                (int) $data['weekday'],
-                (int) $data['item_id'],
-                $movingEntry,
-            ),
+            'data' => $diagnosis,
             'meta' => $this->meta($semester, $settings, $version),
         ])->header('ETag', $this->etags->semester($semester, $settings));
     }
@@ -133,7 +172,11 @@ class TimetableController
             'version_id' => ['required', 'integer'],
         ]);
         $settings = AppSetting::query()->findOrFail(1);
-        $version = $this->versions->findForSemester($semester, (int) $data['version_id']);
+        $version = $this->versions->findReadableForSemester(
+            $semester,
+            (int) $data['version_id'],
+            $request->user()->role->canEdit(),
+        );
         [$entry, $target] = $this->swapPair(
             $semester,
             $version,
@@ -243,77 +286,96 @@ class TimetableController
                 $actor,
                 isset($data['version_id']) ? (int) $data['version_id'] : null,
             );
-            $assignment = TeachingAssignment::query()->with([
-                'semester', 'schoolClass.grade', 'teachingGroup.schoolClasses.grade', 'teacher', 'collaborators', 'course',
-            ])
-                ->withCount(['entries' => fn ($query) => $query->where('timetable_version_id', $version->id)])
-                ->where('semester_id', $lockedSemester->id)->lockForUpdate()->findOrFail($data['teaching_assignment_id']);
-            $this->assertPlaceable($assignment, $data['weekday'], $data['item_id']);
-            if ($assignment->entries_count >= $assignment->weekly_items) {
-                throw new ApiProblemException('ASSIGNMENT_WEEKLY_LIMIT_REACHED', '该任课关系已达到每周课时上限', 409);
+            $this->synchronization->assertVersionAligned($lockedSemester, $version);
+            $primaryAssignmentId = (int) $data['teaching_assignment_id'];
+            $assignmentIds = $this->synchronization->assignmentIds($lockedSemester, $primaryAssignmentId);
+            $assignments = $this->synchronizedAssignments($lockedSemester, $assignmentIds, $version->id, true);
+            $this->assertSynchronizedShapes($assignments);
+            foreach ($assignments as $assignment) {
+                $this->assertPlaceable($assignment, (int) $data['weekday'], (int) $data['item_id']);
+                if ($assignment->entries_count >= $assignment->weekly_items) {
+                    throw new ApiProblemException(
+                        'ASSIGNMENT_WEEKLY_LIMIT_REACHED',
+                        '同步组中至少一条任课关系已达到每周课时上限',
+                        409,
+                        ['assignment_id' => $assignment->id],
+                    );
+                }
+                if (isset($data['week_pattern']) && WeekPattern::from($data['week_pattern']) !== $assignment->week_pattern) {
+                    throw new ApiProblemException('ENTRY_WEEK_PATTERN_MISMATCH', '课表条目的周型必须与任课关系一致', 422);
+                }
             }
-            if (isset($data['week_pattern']) && WeekPattern::from($data['week_pattern']) !== $assignment->week_pattern) {
-                throw new ApiProblemException('ENTRY_WEEK_PATTERN_MISMATCH', '课表条目的周型必须与任课关系一致', 422);
-            }
-            $diagnosis = $this->diagnostics->diagnose(
+            $diagnosis = $this->diagnostics->diagnoseGroup(
                 $lockedSemester,
                 $version,
-                $assignment,
+                $this->primaryAssignmentFirst($assignments, $primaryAssignmentId)->all(),
                 (int) $data['weekday'],
                 (int) $data['item_id'],
             );
             if (! $diagnosis['allowed']) {
-                throw new ApiProblemException('TIMETABLE_PLACEMENT_NOT_ALLOWED', '该课程不能安排在目标位置', 409, [
+                throw new ApiProblemException('TIMETABLE_PLACEMENT_NOT_ALLOWED', '该课程或其同步组不能安排在目标位置', 409, [
                     'diagnostics' => $diagnosis,
                 ]);
             }
-            $roomId = $this->rooms->resolve($assignment);
-            $room = Room::query()->findOrFail($roomId);
-            if (! $room->is_active) {
-                throw new ApiProblemException('ROOM_INACTIVE', '教室已停用，不能新增课程', 409);
-            }
-            $weekPattern = $assignment->week_pattern;
-            $activeWeeks = $weekPattern === WeekPattern::Specified ? $assignment->active_weeks : null;
-            $classIds = $this->classIds($assignment);
-            $teacherIds = $this->teacherIds($assignment);
-            $this->conflicts->assertAvailable(
-                $lockedSemester->id,
-                $version->id,
-                $classIds,
-                $teacherIds,
-                $roomId,
-                $data['weekday'],
-                $data['item_id'],
-                $weekPattern,
-                null,
-                $activeWeeks,
-            );
-            try {
-                $entry = TimetableEntry::query()->create([
-                    'semester_id' => $lockedSemester->id,
-                    'timetable_version_id' => $version->id,
-                    'teaching_assignment_id' => $assignment->id,
-                    'school_class_id' => $assignment->school_class_id,
-                    'teaching_group_id' => $assignment->teaching_group_id,
-                    'teacher_id' => $assignment->teacher_id,
-                    'course_id' => $assignment->course_id,
-                    'actual_room_id' => $roomId,
-                    'week_pattern' => $weekPattern,
-                    'active_weeks' => $activeWeeks,
-                    'weekday' => $data['weekday'],
-                    'item_id' => $data['item_id'],
-                    'source' => 'manual',
-                    'is_locked' => false,
-                ]);
-                $this->syncEffectiveResources($entry, $classIds, $teacherIds);
-            } catch (QueryException $exception) {
-                throw $this->mapConstraint($exception);
+            $createdEntries = new EloquentCollection;
+            foreach ($assignments as $assignment) {
+                $roomId = $this->rooms->resolve($assignment);
+                $room = Room::query()->findOrFail($roomId);
+                if (! $room->is_active) {
+                    throw new ApiProblemException(
+                        'ROOM_INACTIVE',
+                        '同步组中至少一个教室已停用，不能新增课程',
+                        409,
+                        ['assignment_id' => $assignment->id, 'room_id' => $roomId],
+                    );
+                }
+                $weekPattern = $assignment->week_pattern;
+                $activeWeeks = $weekPattern === WeekPattern::Specified ? $assignment->active_weeks : null;
+                $classIds = $this->classIds($assignment);
+                $teacherIds = $this->teacherIds($assignment);
+                $this->conflicts->assertAvailable(
+                    $lockedSemester->id,
+                    $version->id,
+                    $classIds,
+                    $teacherIds,
+                    $roomId,
+                    (int) $data['weekday'],
+                    (int) $data['item_id'],
+                    $weekPattern,
+                    null,
+                    $activeWeeks,
+                );
+                try {
+                    $entry = TimetableEntry::query()->create([
+                        'semester_id' => $lockedSemester->id,
+                        'timetable_version_id' => $version->id,
+                        'teaching_assignment_id' => $assignment->id,
+                        'school_class_id' => $assignment->school_class_id,
+                        'teaching_group_id' => $assignment->teaching_group_id,
+                        'teacher_id' => $assignment->teacher_id,
+                        'course_id' => $assignment->course_id,
+                        'actual_room_id' => $roomId,
+                        'week_pattern' => $weekPattern,
+                        'active_weeks' => $activeWeeks,
+                        'weekday' => $data['weekday'],
+                        'item_id' => $data['item_id'],
+                        'source' => 'manual',
+                        'is_locked' => false,
+                    ]);
+                    $this->syncEffectiveResources($entry, $classIds, $teacherIds);
+                    $createdEntries->push($entry);
+                } catch (QueryException $exception) {
+                    throw $this->mapConstraint($exception);
+                }
             }
             $lockedSemester->increment('timetable_revision');
             $lockedSemester->refresh();
-            $this->audit->record($request, $actor, 'create', 'timetable_entry', $entry->id, null, $entry->toArray());
+            foreach ($createdEntries as $createdEntry) {
+                $this->audit->record($request, $actor, 'create', 'timetable_entry', $createdEntry->id, null, $createdEntry->toArray());
+            }
+            $entry = $this->entryResponse($createdEntries, $primaryAssignmentId);
 
-            return response()->json(['data' => $entry->load(['schoolClass', 'teacher', 'course', 'actualRoom', 'item']), 'meta' => $this->meta($lockedSemester, $settings, $version)], 201)
+            return response()->json(['data' => $entry, 'meta' => $this->meta($lockedSemester, $settings, $version)], 201)
                 ->header('ETag', $this->etags->semester($lockedSemester, $settings));
         }, 3);
     }
@@ -331,57 +393,92 @@ class TimetableController
             [$actor, $settings, $lockedSemester] = $this->guard->semester($request, $semester, false, true);
             $locked = TimetableEntry::query()->with(['teachingAssignment.semester', 'timetableVersion'])->lockForUpdate()->findOrFail($entry->id);
             $this->versions->assertDraft($locked->timetableVersion);
-            if ($locked->is_locked) {
-                throw new ApiProblemException('TIMETABLE_ENTRY_LOCKED', '课程已锁定，请先解锁', 409);
+            $assignmentIds = $this->synchronization->assignmentIds($lockedSemester, $locked->teaching_assignment_id);
+            $groupEntries = $this->synchronizedEntries($lockedSemester, $locked, $assignmentIds, true);
+            $assignments = new EloquentCollection($groupEntries->map(fn (TimetableEntry $groupEntry): TeachingAssignment => $groupEntry->teachingAssignment)->all());
+            $this->assertSynchronizedShapes($assignments);
+            $lockedIds = $groupEntries->where('is_locked', true)->pluck('id')->map(fn ($id): int => (int) $id)->values()->all();
+            if ($lockedIds !== []) {
+                throw new ApiProblemException(
+                    'TIMETABLE_ENTRY_LOCKED',
+                    '同步组中存在已锁定课程，请先解锁整个组',
+                    409,
+                    ['entry_ids' => $lockedIds],
+                );
             }
-            $this->assertPlaceable($locked->teachingAssignment, $data['weekday'], $data['item_id']);
-            if (isset($data['week_pattern']) && WeekPattern::from($data['week_pattern']) !== $locked->teachingAssignment->week_pattern) {
-                throw new ApiProblemException('ENTRY_WEEK_PATTERN_MISMATCH', '课表条目的周型必须与任课关系一致', 422);
+            foreach ($assignments as $assignment) {
+                $this->assertPlaceable($assignment, (int) $data['weekday'], (int) $data['item_id']);
+                if (isset($data['week_pattern']) && WeekPattern::from($data['week_pattern']) !== $assignment->week_pattern) {
+                    throw new ApiProblemException('ENTRY_WEEK_PATTERN_MISMATCH', '课表条目的周型必须与任课关系一致', 422);
+                }
             }
-            $diagnosis = $this->diagnostics->diagnose(
+            $diagnosis = $this->diagnostics->diagnoseGroup(
                 $lockedSemester,
                 $locked->timetableVersion,
-                $locked->teachingAssignment,
+                $this->primaryAssignmentFirst($assignments, $locked->teaching_assignment_id)->all(),
                 (int) $data['weekday'],
                 (int) $data['item_id'],
-                $locked,
+                $groupEntries->all(),
             );
             if (! $diagnosis['allowed']) {
-                throw new ApiProblemException('TIMETABLE_PLACEMENT_NOT_ALLOWED', '该课程不能移动到目标位置', 409, [
+                throw new ApiProblemException('TIMETABLE_PLACEMENT_NOT_ALLOWED', '该课程或其同步组不能移动到目标位置', 409, [
                     'diagnostics' => $diagnosis,
                 ]);
             }
-            $weekPattern = $locked->teachingAssignment->week_pattern;
-            $activeWeeks = $weekPattern === WeekPattern::Specified
-                ? $locked->teachingAssignment->active_weeks
-                : null;
-            $this->conflicts->assertAvailable(
-                $lockedSemester->id,
-                $locked->timetable_version_id,
-                $locked->schoolClasses->pluck('id')->map(fn ($id) => (int) $id)->all(),
-                $locked->teachers->pluck('id')->map(fn ($id) => (int) $id)->all(),
-                $locked->actual_room_id,
-                $data['weekday'],
-                $data['item_id'],
-                $weekPattern,
-                $locked->id,
-                $activeWeeks,
-            );
-            $before = $locked->toArray();
-            $locked->fill([...$data, 'week_pattern' => $weekPattern, 'active_weeks' => $activeWeeks]);
-            if ($locked->isDirty()) {
+            $before = [];
+            $changedEntries = [];
+            foreach ($groupEntries as $groupEntry) {
+                $assignment = $groupEntry->teachingAssignment;
+                $weekPattern = $assignment->week_pattern;
+                $activeWeeks = $weekPattern === WeekPattern::Specified ? $assignment->active_weeks : null;
+                $this->conflicts->assertAvailable(
+                    $lockedSemester->id,
+                    $groupEntry->timetable_version_id,
+                    $groupEntry->schoolClasses->pluck('id')->map(fn ($id): int => (int) $id)->all(),
+                    $groupEntry->teachers->pluck('id')->map(fn ($id): int => (int) $id)->all(),
+                    $groupEntry->actual_room_id,
+                    (int) $data['weekday'],
+                    (int) $data['item_id'],
+                    $weekPattern,
+                    $groupEntry->id,
+                    $activeWeeks,
+                );
+                $before[$groupEntry->id] = $groupEntry->toArray();
+                $groupEntry->fill([
+                    'weekday' => $data['weekday'],
+                    'item_id' => $data['item_id'],
+                    'week_pattern' => $weekPattern,
+                    'active_weeks' => $activeWeeks,
+                ]);
+                if (! $groupEntry->isDirty()) {
+                    continue;
+                }
                 try {
-                    $locked->save();
-                    $this->updateEffectiveResourceSlots($locked);
+                    $groupEntry->save();
+                    $this->updateEffectiveResourceSlots($groupEntry);
+                    $changedEntries[] = $groupEntry;
                 } catch (QueryException $exception) {
                     throw $this->mapConstraint($exception);
                 }
+            }
+            if ($changedEntries !== []) {
                 $lockedSemester->increment('timetable_revision');
                 $lockedSemester->refresh();
-                $this->audit->record($request, $actor, 'move', 'timetable_entry', $locked->id, $before, $locked->toArray());
+                foreach ($changedEntries as $changedEntry) {
+                    $this->audit->record(
+                        $request,
+                        $actor,
+                        'move',
+                        'timetable_entry',
+                        $changedEntry->id,
+                        $before[$changedEntry->id],
+                        $changedEntry->toArray(),
+                    );
+                }
             }
+            $responseEntry = $this->entryResponse($groupEntries, $locked->teaching_assignment_id);
 
-            return response()->json(['data' => $locked->load(['schoolClass', 'teacher', 'course', 'actualRoom', 'item']), 'meta' => $this->meta($lockedSemester, $settings, $locked->timetableVersion)])
+            return response()->json(['data' => $responseEntry, 'meta' => $this->meta($lockedSemester, $settings, $locked->timetableVersion)])
                 ->header('ETag', $this->etags->semester($lockedSemester, $settings));
         }, 3);
     }
@@ -392,18 +489,33 @@ class TimetableController
 
         return DB::transaction(function () use ($request, $semester, $entry): JsonResponse {
             [$actor, $settings, $lockedSemester] = $this->guard->semester($request, $semester, false, true);
-            $locked = TimetableEntry::query()->with('timetableVersion')->lockForUpdate()->findOrFail($entry->id);
+            $locked = TimetableEntry::query()->with(['timetableVersion', 'teachingAssignment'])->lockForUpdate()->findOrFail($entry->id);
             $this->versions->assertDraft($locked->timetableVersion);
-            if ($locked->is_locked) {
-                throw new ApiProblemException('TIMETABLE_ENTRY_LOCKED', '课程已锁定，请先解锁', 409);
+            $assignmentIds = $this->synchronization->assignmentIds($lockedSemester, $locked->teaching_assignment_id);
+            $groupEntries = $this->synchronizedEntries($lockedSemester, $locked, $assignmentIds, true);
+            $lockedIds = $groupEntries->where('is_locked', true)->pluck('id')->map(fn ($id): int => (int) $id)->values()->all();
+            if ($lockedIds !== []) {
+                throw new ApiProblemException(
+                    'TIMETABLE_ENTRY_LOCKED',
+                    '同步组中存在已锁定课程，请先解锁整个组',
+                    409,
+                    ['entry_ids' => $lockedIds],
+                );
             }
-            $before = $locked->toArray();
-            $locked->delete();
+            $deletedIds = [];
+            foreach ($groupEntries as $groupEntry) {
+                $before = $groupEntry->toArray();
+                $groupEntry->delete();
+                $deletedIds[] = $groupEntry->id;
+                $this->audit->record($request, $actor, 'delete', 'timetable_entry', $groupEntry->id, $before, null);
+            }
             $lockedSemester->increment('timetable_revision');
             $lockedSemester->refresh();
-            $this->audit->record($request, $actor, 'delete', 'timetable_entry', $entry->id, $before, null);
 
-            return response()->json(['data' => ['deleted_id' => $entry->id], 'meta' => $this->meta($lockedSemester, $settings, $locked->timetableVersion)])
+            return response()->json(['data' => [
+                'deleted_id' => $entry->id,
+                'deleted_ids' => $deletedIds,
+            ], 'meta' => $this->meta($lockedSemester, $settings, $locked->timetableVersion)])
                 ->header('ETag', $this->etags->semester($lockedSemester, $settings));
         }, 3);
     }
@@ -424,18 +536,36 @@ class TimetableController
 
         return DB::transaction(function () use ($request, $semester, $entry, $value): JsonResponse {
             [$actor, $settings, $lockedSemester] = $this->guard->semester($request, $semester, false, true);
-            $locked = TimetableEntry::query()->with('timetableVersion')->lockForUpdate()->findOrFail($entry->id);
+            $locked = TimetableEntry::query()->with(['timetableVersion', 'teachingAssignment'])->lockForUpdate()->findOrFail($entry->id);
             $this->versions->assertDraft($locked->timetableVersion);
-            $before = $locked->toArray();
-            $locked->is_locked = $value;
-            if ($locked->isDirty()) {
-                $locked->save();
+            $assignmentIds = $this->synchronization->assignmentIds($lockedSemester, $locked->teaching_assignment_id);
+            $groupEntries = $this->synchronizedEntries($lockedSemester, $locked, $assignmentIds, true);
+            $changed = false;
+            foreach ($groupEntries as $groupEntry) {
+                $before = $groupEntry->toArray();
+                $groupEntry->is_locked = $value;
+                if (! $groupEntry->isDirty()) {
+                    continue;
+                }
+                $groupEntry->save();
+                $changed = true;
+                $this->audit->record(
+                    $request,
+                    $actor,
+                    $value ? 'lock' : 'unlock',
+                    'timetable_entry',
+                    $groupEntry->id,
+                    $before,
+                    $groupEntry->toArray(),
+                );
+            }
+            if ($changed) {
                 $lockedSemester->increment('timetable_revision');
                 $lockedSemester->refresh();
-                $this->audit->record($request, $actor, $value ? 'lock' : 'unlock', 'timetable_entry', $locked->id, $before, $locked->toArray());
             }
+            $responseEntry = $this->entryResponse($groupEntries, $locked->teaching_assignment_id);
 
-            return response()->json(['data' => $locked, 'meta' => $this->meta($lockedSemester, $settings, $locked->timetableVersion)])
+            return response()->json(['data' => $responseEntry, 'meta' => $this->meta($lockedSemester, $settings, $locked->timetableVersion)])
                 ->header('ETag', $this->etags->semester($lockedSemester, $settings));
         }, 3);
     }
@@ -444,7 +574,11 @@ class TimetableController
     {
         $filters = $request->validate(['version_id' => ['sometimes', 'integer']]);
         $settings = AppSetting::query()->findOrFail(1);
-        $version = $this->versions->resolveForRead($semester, isset($filters['version_id']) ? (int) $filters['version_id'] : null);
+        $version = $this->versions->resolveForRead(
+            $semester,
+            isset($filters['version_id']) ? (int) $filters['version_id'] : null,
+            $request->user()->role->canEdit(),
+        );
         $versionId = $version === null ? 0 : $version->id;
         $items = $semester->teachingAssignments()->where('status', AssignmentStatus::Confirmed->value)
             ->withCount(['entries' => fn ($query) => $query->where('timetable_version_id', $versionId)])
@@ -464,19 +598,27 @@ class TimetableController
     {
         $filters = $request->validate(['version_id' => ['sometimes', 'integer']]);
         $settings = AppSetting::query()->findOrFail(1);
-        $version = $this->versions->resolveForRead($semester, isset($filters['version_id']) ? (int) $filters['version_id'] : null);
+        $version = $this->versions->resolveForRead(
+            $semester,
+            isset($filters['version_id']) ? (int) $filters['version_id'] : null,
+            $request->user()->role->canEdit(),
+        );
         $versionId = $version === null ? 0 : $version->id;
         $draftCount = $semester->teachingAssignments()->where('status', AssignmentStatus::Draft->value)->count();
+        $synchronizationIssues = $version === null
+            ? []
+            : $this->synchronization->versionAlignmentIssues($semester, $version);
         $incomplete = $semester->teachingAssignments()->where('status', AssignmentStatus::Confirmed->value)
             ->withCount(['entries' => fn ($query) => $query->where('timetable_version_id', $versionId)])->get()
             ->filter(fn (TeachingAssignment $assignment) => $assignment->entries_count !== $assignment->weekly_items)->values();
 
         return response()->json(['data' => [
-            'valid' => $draftCount === 0 && $incomplete->isEmpty(),
+            'valid' => $draftCount === 0 && $incomplete->isEmpty() && $synchronizationIssues === [],
             'draft_assignment_count' => $draftCount,
             'incomplete_assignments' => $incomplete->map(fn (TeachingAssignment $assignment) => [
                 'id' => $assignment->id, 'required' => $assignment->weekly_items, 'scheduled' => $assignment->entries_count,
             ]),
+            'synchronization_issues' => $synchronizationIssues,
         ], 'meta' => $this->meta($semester, $settings, $version)])
             ->header('ETag', $this->etags->semester($semester, $settings));
     }
@@ -535,7 +677,11 @@ class TimetableController
             throw new ApiProblemException('TIMETABLE_RESOURCE_NOT_FOUND', '导出资源不存在或不属于该学期', 422);
         }
         $mode = (string) ($data['mode'] ?? 'official');
-        $version = $this->versions->resolveForRead($semester, isset($data['version_id']) ? (int) $data['version_id'] : null);
+        $version = $this->versions->resolveForRead(
+            $semester,
+            isset($data['version_id']) ? (int) $data['version_id'] : null,
+            $request->user()->role->canEdit(),
+        );
         $versionId = $version === null ? 0 : $version->id;
         $versionNo = $version === null ? 0 : $version->version_no;
         $versionName = $version === null ? '未创建' : $version->name;
@@ -608,6 +754,148 @@ class TimetableController
     }
 
     /**
+     * @param  list<int>  $assignmentIds
+     * @return EloquentCollection<int, TeachingAssignment>
+     */
+    private function synchronizedAssignments(
+        Semester $semester,
+        array $assignmentIds,
+        ?int $versionId = null,
+        bool $lock = false,
+    ): EloquentCollection {
+        $query = TeachingAssignment::query()
+            ->where('semester_id', $semester->id)
+            ->whereIn('id', $assignmentIds)
+            ->with([
+                'semester', 'schoolClass.grade', 'teachingGroup.schoolClasses.grade', 'teacher', 'collaborators',
+                'course', 'specifiedRoom',
+            ])
+            ->orderBy('id');
+        if ($versionId !== null) {
+            $query->withCount(['entries' => fn ($entryQuery) => $entryQuery->where('timetable_version_id', $versionId)]);
+        }
+        if ($lock) {
+            $query->lockForUpdate();
+        }
+        $assignments = $query->get();
+        $missingIds = array_values(array_diff($assignmentIds, $assignments->pluck('id')->map(fn ($id): int => (int) $id)->all()));
+        if ($missingIds !== []) {
+            throw new ApiProblemException(
+                'TIMETABLE_SYNCHRONIZATION_INVALID',
+                '同步组包含已失效或不属于当前学期的任课关系',
+                409,
+                ['assignment_ids' => $missingIds],
+            );
+        }
+
+        return $assignments;
+    }
+
+    /**
+     * @param  list<int>  $assignmentIds
+     * @return EloquentCollection<int, TimetableEntry>
+     */
+    private function synchronizedEntries(
+        Semester $semester,
+        TimetableEntry $source,
+        array $assignmentIds,
+        bool $lock = false,
+    ): EloquentCollection {
+        $query = TimetableEntry::query()
+            ->where('semester_id', $semester->id)
+            ->where('timetable_version_id', $source->timetable_version_id)
+            ->whereIn('teaching_assignment_id', $assignmentIds)
+            ->where('weekday', $source->weekday)
+            ->where('item_id', $source->item_id)
+            ->where('week_pattern', $source->week_pattern->value)
+            ->with([
+                'timetableVersion', 'schoolClasses', 'teachers',
+                'teachingAssignment.semester', 'teachingAssignment.schoolClass.grade',
+                'teachingAssignment.teachingGroup.schoolClasses.grade', 'teachingAssignment.teacher',
+                'teachingAssignment.collaborators', 'teachingAssignment.course', 'teachingAssignment.specifiedRoom',
+            ])
+            ->orderBy('id');
+        if ($lock) {
+            $query->lockForUpdate();
+        }
+        $sourceWeeks = $this->normalizedWeeks($source->active_weeks);
+        $entries = $query->get()->filter(
+            fn (TimetableEntry $candidate): bool => $this->normalizedWeeks($candidate->active_weeks) === $sourceWeeks,
+        )->values();
+        $foundAssignmentIds = $entries->pluck('teaching_assignment_id')->map(fn ($id): int => (int) $id)->all();
+        $missingIds = array_values(array_diff($assignmentIds, $foundAssignmentIds));
+        if ($missingIds !== [] || $entries->count() !== count($assignmentIds)) {
+            throw new ApiProblemException(
+                'TIMETABLE_SYNCHRONIZATION_INCOMPLETE',
+                '当前课表中的同步组不完整或周型不一致，未执行任何修改',
+                409,
+                ['assignment_ids' => $assignmentIds, 'missing_assignment_ids' => $missingIds],
+            );
+        }
+
+        return $entries;
+    }
+
+    /** @param EloquentCollection<int, TeachingAssignment> $assignments */
+    private function assertSynchronizedShapes(EloquentCollection $assignments): void
+    {
+        $signatures = $assignments->map(fn (TeachingAssignment $assignment): string => implode(':', [
+            $assignment->weekly_items,
+            $assignment->items_per_session,
+            $assignment->week_pattern->value,
+            json_encode($this->normalizedWeeks($assignment->active_weeks)),
+        ]))->unique();
+        if ($signatures->count() > 1) {
+            throw new ApiProblemException(
+                'TIMETABLE_SYNCHRONIZATION_SHAPE_INVALID',
+                '同步组的周课时、连排节数或周型不一致，无法进行原子排课',
+                409,
+                ['assignment_ids' => $assignments->pluck('id')->all()],
+            );
+        }
+    }
+
+    /**
+     * @param  EloquentCollection<int, TeachingAssignment>  $assignments
+     * @return EloquentCollection<int, TeachingAssignment>
+     */
+    private function primaryAssignmentFirst(EloquentCollection $assignments, int $assignmentId): EloquentCollection
+    {
+        return $assignments->sortByDesc(fn (TeachingAssignment $assignment): bool => $assignment->id === $assignmentId)->values();
+    }
+
+    /**
+     * @param  EloquentCollection<int, TimetableEntry>  $entries
+     */
+    private function entryResponse(EloquentCollection $entries, int $primaryAssignmentId): TimetableEntry
+    {
+        $freshEntries = TimetableEntry::query()->whereIn('id', $entries->pluck('id'))
+            ->with(['schoolClass', 'teachingGroup', 'schoolClasses', 'teacher', 'teachers', 'course', 'actualRoom', 'item'])
+            ->orderBy('id')
+            ->get();
+        $primary = $freshEntries->firstWhere('teaching_assignment_id', $primaryAssignmentId);
+        if (! $primary instanceof TimetableEntry) {
+            throw new \LogicException('The primary synchronized timetable entry was not persisted.');
+        }
+        $serialized = $freshEntries->map(fn (TimetableEntry $entry): array => $entry->toArray())->values()->all();
+        $primary->setAttribute('synchronized_entries', $serialized);
+
+        return $primary;
+    }
+
+    /**
+     * @param  list<int>|null  $weeks
+     * @return list<int>
+     */
+    private function normalizedWeeks(?array $weeks): array
+    {
+        $normalized = array_map('intval', $weeks ?? []);
+        sort($normalized);
+
+        return array_values(array_unique($normalized));
+    }
+
+    /**
      * @return array{TimetableEntry, TimetableEntry}
      */
     private function swapPair(
@@ -639,6 +927,19 @@ class TimetableController
         $target = $entries->firstWhere('id', $targetEntryId);
         if ($entry === null || $target === null) {
             throw new ApiProblemException('TIMETABLE_SWAP_ENTRY_NOT_FOUND', '要交换的课程不属于当前课表版本', 404);
+        }
+        $entryGroupIds = $this->synchronization->assignmentIds($semester, $entry->teaching_assignment_id);
+        $targetGroupIds = $this->synchronization->assignmentIds($semester, $target->teaching_assignment_id);
+        if (count($entryGroupIds) > 1 || count($targetGroupIds) > 1) {
+            throw new ApiProblemException(
+                'TIMETABLE_SWAP_SYNCHRONIZATION_UNSUPPORTED',
+                '同步组课程不能通过单条交换操作调整，请移动整个同步组',
+                409,
+                [
+                    'entry_ids' => [$entry->id, $target->id],
+                    'assignment_ids' => array_values(array_unique([...$entryGroupIds, ...$targetGroupIds])),
+                ],
+            );
         }
         if ($entry->teaching_assignment_id === $target->teaching_assignment_id) {
             throw new ApiProblemException('TIMETABLE_SWAP_SAME_ASSIGNMENT', '同一任课关系的两个课节无需交换', 422);

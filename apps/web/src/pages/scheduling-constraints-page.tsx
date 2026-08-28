@@ -7,7 +7,6 @@ import {
   type ReactNode,
 } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { useSearchParams } from "react-router"
 import { PlusIcon } from "lucide-react"
 import { toast } from "sonner"
 import { api, apiAllPages, apiMessage, jsonBody } from "@/lib/api"
@@ -36,7 +35,12 @@ import {
 } from "@/components/searchable-picker"
 import { TableActionButton } from "@/components/table-action-button"
 import { TablePagination } from "@/components/table-pagination"
-import { enumParam, mergeSearchParams, positiveIntegerParam } from "@/lib/url-state"
+import {
+  enumParam,
+  mergeSearchParams,
+  positiveIntegerParam,
+  useHashPreservingSearchParams,
+} from "@/lib/url-state"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -67,7 +71,7 @@ const weekdayNames = ["", "周一", "周二", "周三", "周四", "周五", "周
 export function SchedulingConstraintsPage() {
   const { semesterId, context } = useResolvedSemesterId()
   const client = useQueryClient()
-  const [urlParams, setUrlParams] = useSearchParams()
+  const [urlParams, setUrlParams] = useHashPreservingSearchParams()
   const [tab, setTab] = useState(() => enumParam(urlParams, "tab", ["rules", "fixed"], "rules"))
   const [search, setSearch] = useState(() => urlParams.get("q") ?? "")
   const deferredSearch = useDeferredValue(search)

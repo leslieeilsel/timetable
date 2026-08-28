@@ -146,6 +146,7 @@ class TeacherLeaveController
             'teacher:id,name,employee_no',
             'substitutions' => fn ($query) => $query->with([
                 'originalEntry.course:id,name', 'originalEntry.item:id,name',
+                'replacedTeacher:id,name,employee_no',
                 'replacementTeacher:id,name,employee_no',
             ])->orderBy('effective_date')->orderBy('id'),
         ]);
@@ -238,17 +239,24 @@ class TeacherLeaveController
                         'date' => $item['date'],
                     ]);
                 }
-                $substitution = Substitution::query()->updateOrCreate(
-                    ['original_entry_id' => $entry->id, 'effective_date' => $item['date']],
-                    [
-                        'teacher_leave_id' => $lockedLeave->id,
-                        'replacement_teacher_id' => (int) $item['replacement_teacher_id'],
-                        'status' => OperationalStatus::Active,
-                        'reason' => $item['reason'] ?? $lockedLeave->reason,
-                        'created_by' => $actor->id,
-                    ],
-                );
-                $saved[] = $substitution->load(['originalEntry.course', 'replacementTeacher']);
+                $substitution = Substitution::query()->firstOrNew([
+                    'teacher_leave_id' => $lockedLeave->id,
+                    'original_entry_id' => $entry->id,
+                    'effective_date' => $item['date'],
+                    'replaced_teacher_id' => $lockedLeave->teacher_id,
+                ]);
+                $substitution->fill([
+                    'replacement_teacher_id' => (int) $item['replacement_teacher_id'],
+                    'status' => OperationalStatus::Active,
+                    'reason' => $item['reason'] ?? $lockedLeave->reason,
+                ]);
+                if (! $substitution->exists) {
+                    $substitution->created_by = $actor->id;
+                }
+                $substitution->save();
+                $saved[] = $substitution->load([
+                    'originalEntry.course', 'replacedTeacher', 'replacementTeacher',
+                ]);
             }
             $lockedSemester->increment('timetable_revision');
             $lockedSemester->refresh();

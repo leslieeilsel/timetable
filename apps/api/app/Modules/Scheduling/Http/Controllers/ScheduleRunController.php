@@ -92,12 +92,17 @@ class ScheduleRunController
 
         [$run, $settings, $lockedSemester] = DB::transaction(function () use ($request, $semester, $data, $scope, $preservation): array {
             [$actor, $settings, $lockedSemester] = $this->guard->semester($request, $semester, false, true);
-            if (isset($preservation['base_version_id'])) {
-                $baseVersion = $lockedSemester->timetableVersions()->find((int) $preservation['base_version_id']);
+            $baseVersionId = array_key_exists('base_version_id', $preservation)
+                ? ($preservation['base_version_id'] === null ? null : (int) $preservation['base_version_id'])
+                : $lockedSemester->current_timetable_version_id;
+            if ($baseVersionId !== null) {
+                $baseVersion = $lockedSemester->timetableVersions()->lockForUpdate()->find($baseVersionId);
                 if ($baseVersion === null) {
                     throw new ApiProblemException('VERSION_SEMESTER_MISMATCH', '局部重排的基础课表版本不属于该学期', 404);
                 }
             }
+            $preservation['base_version_id'] = $baseVersionId;
+            $baseVersionFingerprint = ScheduleRun::fingerprintTimetableVersion($baseVersionId, true);
             $preparation = $this->preparation->inspect($lockedSemester);
             if (! $preparation['ready']) {
                 throw new ApiProblemException('PREPARATION_BLOCKED', '准备检查存在阻塞项，无法创建自动排课任务', 409, [
@@ -105,8 +110,10 @@ class ScheduleRunController
                 ]);
             }
             $activeConstraints = $lockedSemester->schedulingConstraints()
-                ->where('status', 'active')->orderBy('id')->get()->map(fn (SchedulingConstraint $constraint): array => [
+                ->where('status', 'active')->orderBy('id')->lockForUpdate()->get()->map(fn (SchedulingConstraint $constraint): array => [
                     'id' => $constraint->id,
+                    'semester_id' => $constraint->semester_id,
+                    'name' => $constraint->name,
                     'kind' => $constraint->kind->value,
                     'category' => $constraint->category->value,
                     'target_type' => $constraint->target_type?->value,
@@ -115,7 +122,17 @@ class ScheduleRunController
                     'condition' => $constraint->condition,
                     'requirement' => $constraint->requirement,
                     'weight' => $constraint->weight,
+                    'source' => $constraint->source,
+                    'status' => $constraint->status->value,
+                    'explanation' => $constraint->explanation,
+                    'created_at' => $constraint->created_at?->toJSON(),
+                    'updated_at' => $constraint->updated_at?->toJSON(),
                 ])->all();
+            $inputRevision = (int) $lockedSemester->getRawOriginal('input_revision');
+            $catalogRevision = (int) $settings->getRawOriginal('catalog_revision');
+            $timetableRevision = (int) $lockedSemester->getRawOriginal('timetable_revision');
+            $assignmentRevision = (int) $lockedSemester->getRawOriginal('assignment_revision');
+            $constraintRevision = (int) $lockedSemester->getRawOriginal('constraint_revision');
             $run = ScheduleRun::query()->create([
                 'semester_id' => $lockedSemester->id,
                 'created_by' => $actor->id,
@@ -123,15 +140,25 @@ class ScheduleRunController
                 'scope' => $scope,
                 'preservation' => $preservation,
                 'constraint_snapshot' => [
-                    'input_revision' => (int) $lockedSemester->getRawOriginal('input_revision'),
-                    'assignment_revision' => (int) $lockedSemester->getRawOriginal('assignment_revision'),
-                    'constraint_revision' => (int) $lockedSemester->getRawOriginal('constraint_revision'),
+                    'input_revision' => $inputRevision,
+                    'catalog_revision' => $catalogRevision,
+                    'timetable_revision' => $timetableRevision,
+                    'assignment_revision' => $assignmentRevision,
+                    'constraint_revision' => $constraintRevision,
+                    'base_version_id' => $baseVersionId,
+                    'base_version_fingerprint' => $baseVersionFingerprint,
                     'constraints' => $activeConstraints,
                 ],
                 'strategy' => $data['strategy'],
                 'candidate_count' => (int) $data['candidate_count'],
-                'input_revision' => (int) $lockedSemester->getRawOriginal('input_revision'),
-                'algorithm_version' => 'resource-block-v2',
+                'input_revision' => $inputRevision,
+                'catalog_revision' => $catalogRevision,
+                'timetable_revision' => $timetableRevision,
+                'assignment_revision' => $assignmentRevision,
+                'constraint_revision' => $constraintRevision,
+                'base_version_id' => $baseVersionId,
+                'base_version_fingerprint' => $baseVersionFingerprint,
+                'algorithm_version' => 'resource-block-v3-snapshot',
                 'random_seed' => random_int(1, 2_000_000_000),
                 'progress_stage' => 'queued',
                 'progress_percent' => 0,
@@ -143,7 +170,7 @@ class ScheduleRunController
 
             return [$run, $settings, $lockedSemester];
         }, 3);
-        GenerateScheduleCandidates::dispatchAfterResponse($run->id);
+        GenerateScheduleCandidates::dispatch($run->id)->onConnection('database')->afterCommit();
 
         return response()->json([
             'data' => $run,
@@ -162,6 +189,7 @@ class ScheduleRunController
                 throw new ApiProblemException('SCHEDULE_RUN_TERMINAL', '已结束的自动排课任务不能取消', 409);
             }
             $before = $locked->toArray();
+            $locked->candidates()->delete();
             $locked->forceFill([
                 'status' => ScheduleRunStatus::Cancelled,
                 'progress_stage' => 'cancelled',

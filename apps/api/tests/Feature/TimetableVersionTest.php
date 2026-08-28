@@ -512,6 +512,43 @@ it('enforces hard scheduling rules again when a timetable entry is saved', funct
         ->assertJsonPath('diagnostics.hard_conflicts.0.constraint_id', fn ($value) => is_int($value));
 });
 
+it('diagnoses the supported preferred slot semantics used by the solver', function (): void {
+    $fixture = timetableVersionFixture();
+    DB::table('teaching_assignments')->where('id', $fixture['assignment_id'])->update(['weekly_items' => 2]);
+    $etag = $this->getJson("/api/v1/semesters/{$fixture['semester_id']}")->headers->get('ETag');
+    $placed = $this->withHeader('If-Match', $etag)
+        ->postJson("/api/v1/semesters/{$fixture['semester_id']}/timetable/entries", [
+            'teaching_assignment_id' => $fixture['assignment_id'],
+            'weekday' => 1,
+            'item_id' => $fixture['item_ids'][0],
+        ])->assertCreated();
+    DB::table('scheduling_constraints')->insert([
+        'semester_id' => $fixture['semester_id'],
+        'name' => '避免第二节',
+        'kind' => 'soft',
+        'category' => 'preferred_slot',
+        'scope' => json_encode(['item_ids' => [$fixture['item_ids'][1]]], JSON_THROW_ON_ERROR),
+        'condition' => null,
+        'requirement' => json_encode(['preference' => 'avoid'], JSON_THROW_ON_ERROR),
+        'weight' => 70,
+        'source' => 'user',
+        'status' => 'active',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $response = $this->postJson("/api/v1/semesters/{$fixture['semester_id']}/timetable/diagnose", [
+        'teaching_assignment_id' => $fixture['assignment_id'],
+        'weekday' => 1,
+        'item_id' => $fixture['item_ids'][1],
+        'version_id' => $placed->json('meta.version_id'),
+    ])->assertOk()
+        ->assertJsonPath('data.allowed', true);
+
+    expect($response->json('data.soft_warnings'))
+        ->toContain('避免第二节将受到影响。');
+});
+
 it('previews and atomically swaps two timetable entries', function (): void {
     $fixture = timetableVersionFixture();
     $base = DB::table('teaching_assignments')->where('id', $fixture['assignment_id'])->first();
@@ -542,12 +579,13 @@ it('previews and atomically swaps two timetable entries', function (): void {
             'weekday' => 1,
             'item_id' => $fixture['item_ids'][0],
         ])->assertCreated();
+    $versionId = $first->json('meta.version_id');
     $second = $this->withHeader('If-Match', $first->headers->get('ETag'))
         ->postJson("/api/v1/semesters/{$fixture['semester_id']}/timetable/entries", [
             'teaching_assignment_id' => $targetAssignmentId,
             'weekday' => 1,
             'item_id' => $fixture['item_ids'][1],
-            'version_id' => $first->json('meta.version_id'),
+            'version_id' => $versionId,
         ])->assertCreated();
     $payload = [
         'entry_id' => $first->json('data.id'),
@@ -569,6 +607,216 @@ it('previews and atomically swaps two timetable entries', function (): void {
         ->toBe($fixture['item_ids'][1])
         ->and(DB::table('timetable_entries')->where('id', $second->json('data.id'))->value('item_id'))
         ->toBe($fixture['item_ids'][0]);
+});
+
+it('rejects a synchronization rule and version whose existing positions are misaligned', function (): void {
+    $fixture = timetableVersionFixture();
+    $relatedAssignmentId = addSynchronizedAssignment($fixture);
+    $etag = $this->getJson("/api/v1/semesters/{$fixture['semester_id']}")->headers->get('ETag');
+    $first = $this->withHeader('If-Match', $etag)
+        ->postJson("/api/v1/semesters/{$fixture['semester_id']}/timetable/entries", [
+            'teaching_assignment_id' => $fixture['assignment_id'],
+            'weekday' => 1,
+            'item_id' => $fixture['item_ids'][0],
+        ])->assertCreated();
+    $versionId = $first->json('meta.version_id');
+    $second = $this->withHeader('If-Match', $first->headers->get('ETag'))
+        ->postJson("/api/v1/semesters/{$fixture['semester_id']}/timetable/entries", [
+            'teaching_assignment_id' => $relatedAssignmentId,
+            'weekday' => 2,
+            'item_id' => $fixture['item_ids'][1],
+            'version_id' => $versionId,
+        ])->assertCreated();
+    $constraint = $this->withHeader('If-Match', $second->headers->get('ETag'))
+        ->postJson("/api/v1/semesters/{$fixture['semester_id']}/scheduling-constraints", [
+            'name' => '已有位置必须先对齐',
+            'kind' => 'hard',
+            'category' => 'synchronization',
+            'target_type' => 'teaching_assignment',
+            'target_id' => $fixture['assignment_id'],
+            'scope' => [],
+            'requirement' => ['with_assignment_ids' => [$relatedAssignmentId]],
+        ])->assertCreated();
+    $constraintId = $constraint->json('data.id');
+
+    $this->withHeader('If-Match', $constraint->headers->get('ETag'))
+        ->postJson("/api/v1/semesters/{$fixture['semester_id']}/scheduling-constraints/{$constraintId}/activate")
+        ->assertStatus(409)
+        ->assertJsonPath('code', 'TIMETABLE_SYNCHRONIZATION_MISALIGNED');
+    expect(DB::table('scheduling_constraints')->where('id', $constraintId)->value('status'))->toBe('draft');
+
+    DB::table('scheduling_constraints')->where('id', $constraintId)->update(['status' => 'active']);
+    DB::table('timetable_versions')->where('id', $versionId)->update([
+        'input_revision' => DB::table('semesters')->where('id', $fixture['semester_id'])->value('input_revision'),
+    ]);
+    $this->getJson(
+        "/api/v1/semesters/{$fixture['semester_id']}/timetable/validation?version_id={$versionId}",
+    )->assertOk()
+        ->assertJsonPath('data.valid', false)
+        ->assertJsonCount(1, 'data.synchronization_issues');
+    $this->withHeader('If-Match', $constraint->headers->get('ETag'))
+        ->postJson(
+            "/api/v1/semesters/{$fixture['semester_id']}/timetable-versions/{$versionId}/activate",
+            ['reason' => '尝试启用错位课表'],
+        )->assertStatus(409)
+        ->assertJsonPath('code', 'TIMETABLE_SYNCHRONIZATION_MISALIGNED');
+    $this->withHeader('If-Match', $constraint->headers->get('ETag'))
+        ->postJson("/api/v1/semesters/{$fixture['semester_id']}/timetable/entries", [
+            'teaching_assignment_id' => $fixture['assignment_id'],
+            'weekday' => 3,
+            'item_id' => $fixture['item_ids'][0],
+            'version_id' => $versionId,
+        ])->assertStatus(409)
+        ->assertJsonPath('code', 'TIMETABLE_SYNCHRONIZATION_MISALIGNED');
+});
+
+it('creates moves and deletes a hard synchronization group atomically', function (): void {
+    $fixture = timetableVersionFixture();
+    $relatedAssignmentId = addSynchronizedAssignment($fixture);
+    $etag = $this->getJson("/api/v1/semesters/{$fixture['semester_id']}")->headers->get('ETag');
+    $constraint = $this->withHeader('If-Match', $etag)
+        ->postJson("/api/v1/semesters/{$fixture['semester_id']}/scheduling-constraints", [
+            'name' => '两个班同步上课',
+            'kind' => 'hard',
+            'category' => 'synchronization',
+            'target_type' => 'teaching_assignment',
+            'target_id' => $fixture['assignment_id'],
+            'scope' => [],
+            'condition' => null,
+            'requirement' => ['with_assignment_ids' => [$relatedAssignmentId]],
+        ])->assertCreated();
+    $activated = $this->withHeader('If-Match', $constraint->headers->get('ETag'))
+        ->postJson(
+            "/api/v1/semesters/{$fixture['semester_id']}/scheduling-constraints/{$constraint->json('data.id')}/activate",
+        )->assertOk();
+
+    $created = $this->withHeader('If-Match', $activated->headers->get('ETag'))
+        ->postJson("/api/v1/semesters/{$fixture['semester_id']}/timetable/entries", [
+            'teaching_assignment_id' => $fixture['assignment_id'],
+            'weekday' => 1,
+            'item_id' => $fixture['item_ids'][0],
+        ])->assertCreated()
+        ->assertJsonCount(2, 'data.synchronized_entries');
+    $versionId = $created->json('meta.version_id');
+    $primaryEntryId = $created->json('data.id');
+    $relatedEntryId = DB::table('timetable_entries')
+        ->where('timetable_version_id', $versionId)
+        ->where('teaching_assignment_id', $relatedAssignmentId)
+        ->value('id');
+
+    expect(DB::table('timetable_entries')->where('timetable_version_id', $versionId)->count())->toBe(2)
+        ->and(DB::table('timetable_entries')->where('timetable_version_id', $versionId)->pluck('weekday')->unique()->all())->toBe([1]);
+
+    $locked = $this->withHeader('If-Match', $created->headers->get('ETag'))
+        ->putJson("/api/v1/semesters/{$fixture['semester_id']}/timetable/entries/{$relatedEntryId}/lock")
+        ->assertOk()
+        ->assertJsonCount(2, 'data.synchronized_entries');
+    expect(DB::table('timetable_entries')->whereIn('id', [$primaryEntryId, $relatedEntryId])->pluck('is_locked')->unique()->all())
+        ->toBe([1]);
+    $this->postJson("/api/v1/semesters/{$fixture['semester_id']}/timetable/swap/diagnose", [
+        'entry_id' => $primaryEntryId,
+        'target_entry_id' => $relatedEntryId,
+        'version_id' => $versionId,
+    ])->assertStatus(409)
+        ->assertJsonPath('code', 'TIMETABLE_SWAP_SYNCHRONIZATION_UNSUPPORTED');
+    $this->withHeader('If-Match', $locked->headers->get('ETag'))
+        ->postJson("/api/v1/semesters/{$fixture['semester_id']}/timetable/swap", [
+            'entry_id' => $primaryEntryId,
+            'target_entry_id' => $relatedEntryId,
+            'version_id' => $versionId,
+        ])->assertStatus(409)
+        ->assertJsonPath('code', 'TIMETABLE_SWAP_SYNCHRONIZATION_UNSUPPORTED');
+    $this->withHeader('If-Match', $locked->headers->get('ETag'))
+        ->patchJson("/api/v1/semesters/{$fixture['semester_id']}/timetable/entries/{$primaryEntryId}", [
+            'weekday' => 2,
+            'item_id' => $fixture['item_ids'][1],
+        ])->assertStatus(409)
+        ->assertJsonPath('code', 'TIMETABLE_ENTRY_LOCKED');
+    expect(DB::table('timetable_entries')->whereIn('id', [$primaryEntryId, $relatedEntryId])->pluck('weekday')->unique()->all())->toBe([1]);
+    $this->withHeader('If-Match', $locked->headers->get('ETag'))
+        ->deleteJson("/api/v1/semesters/{$fixture['semester_id']}/timetable/entries/{$primaryEntryId}")
+        ->assertStatus(409)
+        ->assertJsonPath('code', 'TIMETABLE_ENTRY_LOCKED');
+    expect(DB::table('timetable_entries')->whereIn('id', [$primaryEntryId, $relatedEntryId])->count())->toBe(2);
+
+    $unlocked = $this->withHeader('If-Match', $locked->headers->get('ETag'))
+        ->deleteJson("/api/v1/semesters/{$fixture['semester_id']}/timetable/entries/{$relatedEntryId}/lock")
+        ->assertOk()
+        ->assertJsonCount(2, 'data.synchronized_entries');
+    expect(DB::table('timetable_entries')->whereIn('id', [$primaryEntryId, $relatedEntryId])->pluck('is_locked')->unique()->all())
+        ->toBe([0]);
+    $moved = $this->withHeader('If-Match', $unlocked->headers->get('ETag'))
+        ->patchJson("/api/v1/semesters/{$fixture['semester_id']}/timetable/entries/{$primaryEntryId}", [
+            'weekday' => 2,
+            'item_id' => $fixture['item_ids'][1],
+        ])->assertOk()
+        ->assertJsonCount(2, 'data.synchronized_entries');
+    expect(DB::table('timetable_entries')->whereIn('id', [$primaryEntryId, $relatedEntryId])->pluck('weekday')->unique()->all())->toBe([2])
+        ->and(DB::table('timetable_entries')->whereIn('id', [$primaryEntryId, $relatedEntryId])->pluck('item_id')->unique()->all())
+        ->toBe([$fixture['item_ids'][1]]);
+
+    $this->withHeader('If-Match', $moved->headers->get('ETag'))
+        ->deleteJson("/api/v1/semesters/{$fixture['semester_id']}/timetable/entries/{$primaryEntryId}")
+        ->assertOk()
+        ->assertJsonCount(2, 'data.deleted_ids');
+    expect(DB::table('timetable_entries')->whereIn('id', [$primaryEntryId, $relatedEntryId])->count())->toBe(0);
+});
+
+it('does not create another synchronization group after its members reach their weekly limit', function (): void {
+    $fixture = timetableVersionFixture();
+    DB::table('teaching_assignments')->where('id', $fixture['assignment_id'])->update(['weekly_items' => 2]);
+    $relatedAssignmentId = addSynchronizedAssignment($fixture);
+    DB::table('scheduling_constraints')->insert([
+        'semester_id' => $fixture['semester_id'],
+        'name' => '达到课时上限的同步组',
+        'kind' => 'hard',
+        'category' => 'synchronization',
+        'target_type' => 'teaching_assignment',
+        'target_id' => $fixture['assignment_id'],
+        'scope' => json_encode([], JSON_THROW_ON_ERROR),
+        'condition' => null,
+        'requirement' => json_encode(['with_assignment_ids' => [$relatedAssignmentId]], JSON_THROW_ON_ERROR),
+        'source' => 'user',
+        'status' => 'active',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    $etag = $this->getJson("/api/v1/semesters/{$fixture['semester_id']}")->headers->get('ETag');
+    $first = $this->withHeader('If-Match', $etag)
+        ->postJson("/api/v1/semesters/{$fixture['semester_id']}/timetable/entries", [
+            'teaching_assignment_id' => $fixture['assignment_id'],
+            'weekday' => 1,
+            'item_id' => $fixture['item_ids'][0],
+        ])->assertCreated();
+    $second = $this->withHeader('If-Match', $first->headers->get('ETag'))
+        ->postJson("/api/v1/semesters/{$fixture['semester_id']}/timetable/entries", [
+            'teaching_assignment_id' => $fixture['assignment_id'],
+            'weekday' => 2,
+            'item_id' => $fixture['item_ids'][1],
+            'version_id' => $first->json('meta.version_id'),
+        ])->assertCreated();
+
+    $this->postJson("/api/v1/semesters/{$fixture['semester_id']}/timetable/diagnose", [
+        'teaching_assignment_id' => $fixture['assignment_id'],
+        'weekday' => 3,
+        'item_id' => $fixture['item_ids'][0],
+        'version_id' => $first->json('meta.version_id'),
+    ])->assertOk()
+        ->assertJsonPath('data.allowed', false)
+        ->assertJsonPath('data.hard_conflicts.0.type', 'weekly_load');
+
+    $this->withHeader('If-Match', $second->headers->get('ETag'))
+        ->postJson("/api/v1/semesters/{$fixture['semester_id']}/timetable/entries", [
+            'teaching_assignment_id' => $fixture['assignment_id'],
+            'weekday' => 3,
+            'item_id' => $fixture['item_ids'][0],
+            'version_id' => $first->json('meta.version_id'),
+        ])->assertStatus(409)
+        ->assertJsonPath('code', 'ASSIGNMENT_WEEKLY_LIMIT_REACHED')
+        ->assertJsonPath('assignment_id', $fixture['assignment_id']);
+
+    expect(DB::table('timetable_entries')->where('teaching_assignment_id', $fixture['assignment_id'])->count())->toBe(2)
+        ->and(DB::table('timetable_entries')->where('teaching_assignment_id', $relatedAssignmentId)->count())->toBe(2);
 });
 
 /** @return array{semester_id: int, assignment_id: int, teacher_id: int, item_ids: list<int>} */
@@ -639,4 +887,61 @@ function timetableVersionFixture(): array
         'teacher_id' => $teacherId,
         'item_ids' => $itemIds,
     ];
+}
+
+/**
+ * @param  array{semester_id: int, assignment_id: int, teacher_id: int, item_ids: list<int>}  $fixture
+ */
+function addSynchronizedAssignment(array $fixture): int
+{
+    $now = now();
+    $base = DB::table('teaching_assignments')->where('id', $fixture['assignment_id'])->first();
+    $gradeId = DB::table('school_classes')->where('id', $base->school_class_id)->value('grade_id');
+    $teacherId = DB::table('teachers')->insertGetId([
+        'employee_no' => 'T-SYNC', 'name' => '同步教师', 'is_active' => true,
+        'created_at' => $now, 'updated_at' => $now,
+    ]);
+    $courseId = DB::table('courses')->insertGetId([
+        'name' => '同步课程', 'short_name' => '同', 'is_active' => true,
+        'created_at' => $now, 'updated_at' => $now,
+    ]);
+    DB::table('teacher_course')->insert(['teacher_id' => $teacherId, 'course_id' => $courseId]);
+    $roomId = DB::table('rooms')->insertGetId([
+        'name' => '同步班教室', 'type' => 'classroom', 'is_active' => true,
+        'created_at' => $now, 'updated_at' => $now,
+    ]);
+    $classId = DB::table('school_classes')->insertGetId([
+        'academic_year_id' => $base->academic_year_id,
+        'grade_id' => $gradeId,
+        'name' => '七年级 2 班',
+        'code' => 'G7C2',
+        'status' => 'active',
+        'created_at' => $now,
+        'updated_at' => $now,
+    ]);
+    DB::table('semester_class_settings')->insert([
+        'semester_id' => $fixture['semester_id'],
+        'academic_year_id' => $base->academic_year_id,
+        'school_class_id' => $classId,
+        'fixed_room_id' => $roomId,
+        'status' => 'active',
+        'created_at' => $now,
+        'updated_at' => $now,
+    ]);
+
+    return DB::table('teaching_assignments')->insertGetId([
+        'semester_id' => $fixture['semester_id'],
+        'academic_year_id' => $base->academic_year_id,
+        'school_class_id' => $classId,
+        'course_id' => $courseId,
+        'teacher_id' => $teacherId,
+        'weekly_items' => $base->weekly_items,
+        'items_per_session' => $base->items_per_session,
+        'week_pattern' => $base->week_pattern,
+        'active_weeks' => $base->active_weeks,
+        'room_mode' => 'class_default',
+        'status' => 'confirmed',
+        'created_at' => $now,
+        'updated_at' => $now,
+    ]);
 }

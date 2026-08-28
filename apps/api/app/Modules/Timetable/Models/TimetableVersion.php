@@ -23,6 +23,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int|null $base_version_id
  * @property int $created_by
  * @property int $input_revision
+ * @property int|null $catalog_revision
  * @property-read Semester $semester
  * @property-read User $creator
  * @property-read Collection<int, TimetableEntry> $entries
@@ -31,7 +32,7 @@ class TimetableVersion extends Model
 {
     protected $fillable = [
         'semester_id', 'version_no', 'name', 'status', 'source', 'source_candidate_id',
-        'base_version_id', 'created_by', 'input_revision', 'quality_score', 'score_breakdown',
+        'base_version_id', 'created_by', 'input_revision', 'catalog_revision', 'quality_score', 'score_breakdown',
         'hard_conflict_count', 'soft_warning_count', 'activated_at',
     ];
 
@@ -42,6 +43,7 @@ class TimetableVersion extends Model
             'status' => TimetableVersionStatus::class,
             'source' => TimetableVersionSource::class,
             'input_revision' => 'integer',
+            'catalog_revision' => 'integer',
             'quality_score' => 'decimal:2',
             'score_breakdown' => 'array',
             'hard_conflict_count' => 'integer',

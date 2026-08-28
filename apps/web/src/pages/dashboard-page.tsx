@@ -5,6 +5,7 @@ import { api, apiAllPages } from "@/lib/api"
 import { useAuth } from "@/lib/auth"
 import type { ClassSetting, ScheduleTemplate, Semester, TeachingAssignment } from "@/lib/types"
 import { useSchoolContext } from "@/lib/queries"
+import { semesterPath } from "@/lib/semester"
 import { ErrorState, LoadingState, PageHeader } from "@/components/page"
 import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/status-badge"
@@ -113,7 +114,10 @@ export function DashboardPage() {
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
-              <Button nativeButton={false} render={<Link to="/semester/timetable" />}>
+              <Button
+                nativeButton={false}
+                render={<Link to={semesterPath(current.id, "timetable")} />}
+              >
                 进入排课工作台
                 <ArrowRightIcon />
               </Button>
@@ -122,14 +126,14 @@ export function DashboardPage() {
                   <Button
                     variant="outline"
                     nativeButton={false}
-                    render={<Link to="/semester/assignments" />}
+                    render={<Link to={semesterPath(current.id, "assignments")} />}
                   >
                     查看任课关系
                   </Button>
                   <Button
                     variant="outline"
                     nativeButton={false}
-                    render={<Link to="/semester/setup" />}
+                    render={<Link to={semesterPath(current.id, "setup")} />}
                   >
                     学期配置
                   </Button>
@@ -165,7 +169,7 @@ export function DashboardPage() {
                 <Button
                   variant="outline"
                   nativeButton={false}
-                  render={<Link to="/semester/timetable" />}
+                  render={<Link to={semesterPath(current.id, "timetable")} />}
                 >
                   查看课表
                 </Button>

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { useSearchParams } from "react-router"
 import {
   ArrowLeftIcon,
   CheckIcon,
@@ -62,7 +61,12 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
-import { enumParam, mergeSearchParams, positiveIntegerParam } from "@/lib/url-state"
+import {
+  enumParam,
+  mergeSearchParams,
+  positiveIntegerParam,
+  useHashPreservingSearchParams,
+} from "@/lib/url-state"
 
 type View = "matrix" | "class" | "teacher" | "course" | "room" | "table"
 const viewValues = ["matrix", "class", "teacher", "course", "room", "table"] as const
@@ -118,7 +122,7 @@ const selectClass =
 export function CourseAssignmentMatrixPage() {
   const { semesterId, context } = useResolvedSemesterId()
   const client = useQueryClient()
-  const [urlParams, setUrlParams] = useSearchParams()
+  const [urlParams, setUrlParams] = useHashPreservingSearchParams()
   const [view, setView] = useState<View>(() => enumParam(urlParams, "view", viewValues, "matrix"))
   const [search, setSearch] = useState(() => urlParams.get("q") ?? "")
   const [gradeFilter, setGradeFilter] = useState(() => numericFilterParam(urlParams, "grade", ""))

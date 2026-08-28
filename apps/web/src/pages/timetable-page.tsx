@@ -21,7 +21,12 @@ import {
 import { toast } from "sonner"
 import { api, apiAllPages, ApiError, apiMessage, jsonBody } from "@/lib/api"
 import { useAuth } from "@/lib/auth"
-import { useResolvedSemesterId } from "@/lib/semester"
+import {
+  resolveTimetableVersionSelection,
+  semesterPath,
+  timetableVersionsForRole,
+  useResolvedSemesterId,
+} from "@/lib/semester"
 import {
   assignmentMatchesResource,
   isTimetableVersionStale,
@@ -214,14 +219,6 @@ export function TimetablePage() {
     queryFn: () => apiAllPages<ClassSetting>(`/api/v1/semesters/${semesterId}/class-settings`),
     enabled: semesterId !== null,
   })
-  const assignments = useQuery({
-    queryKey: ["teaching-assignments", semesterId, "confirmed", selectedVersionId],
-    queryFn: () =>
-      apiAllPages<TeachingAssignment>(
-        `/api/v1/semesters/${semesterId}/teaching-assignments?status=confirmed${selectedVersionId ? `&version_id=${selectedVersionId}` : ""}`,
-      ),
-    enabled: semesterId !== null,
-  })
   const rooms = useQuery({
     queryKey: ["rooms"],
     queryFn: () => apiAllPages<Room>("/api/v1/rooms"),
@@ -231,6 +228,27 @@ export function TimetablePage() {
     queryFn: () =>
       apiAllPages<TimetableVersion>(`/api/v1/semesters/${semesterId}/timetable-versions`),
     enabled: semesterId !== null,
+  })
+  const availableVersions = useMemo(() => versions.data?.data ?? [], [versions.data?.data])
+  const selectableVersions = useMemo(
+    () => timetableVersionsForRole(availableVersions, user?.role),
+    [availableVersions, user?.role],
+  )
+  const selectedVersionExists = selectableVersions.some(
+    (version) => String(version.id) === selectedVersionId,
+  )
+  const canDefaultToNoVersion =
+    (user?.role === "admin" || user?.role === "scheduler") &&
+    versions.isSuccess &&
+    availableVersions.length === 0
+  const versionSelectionReady = selectedVersionExists || canDefaultToNoVersion
+  const assignments = useQuery({
+    queryKey: ["teaching-assignments", semesterId, "confirmed", selectedVersionId],
+    queryFn: () =>
+      apiAllPages<TeachingAssignment>(
+        `/api/v1/semesters/${semesterId}/teaching-assignments?status=confirmed${selectedVersionId ? `&version_id=${selectedVersionId}` : ""}`,
+      ),
+    enabled: semesterId !== null && versions.isSuccess && versionSelectionReady,
   })
   const resources = useMemo(() => {
     if (view === "class")
@@ -256,18 +274,15 @@ export function TimetablePage() {
     )
   }, [resources])
   useEffect(() => {
-    const available = versions.data?.data ?? []
-    setSelectedVersionId((current) => {
-      if (available.some((version) => String(version.id) === current)) return current
-      const preferred =
-        available.find((version) => version.status === "draft") ??
-        available.find(
-          (version) => version.id === semester.data?.data.current_timetable_version_id,
-        ) ??
-        available[0]
-      return preferred ? String(preferred.id) : ""
-    })
-  }, [semester.data?.data.current_timetable_version_id, versions.data])
+    setSelectedVersionId((current) =>
+      resolveTimetableVersionSelection(
+        availableVersions,
+        current,
+        semester.data?.data.current_timetable_version_id,
+        user?.role,
+      ),
+    )
+  }, [availableVersions, semester.data?.data.current_timetable_version_id, user?.role])
   useEffect(() => {
     setHistory([])
     setHistoryIndex(0)
@@ -278,7 +293,8 @@ export function TimetablePage() {
       api<TimetableData>(
         `/api/v1/semesters/${semesterId}/timetable?view=${view}&resource_id=${resourceId}&mode=${full ? "full" : "official"}${selectedVersionId ? `&version_id=${selectedVersionId}` : ""}`,
       ),
-    enabled: semesterId !== null && Boolean(resourceId) && versions.isSuccess,
+    enabled:
+      semesterId !== null && Boolean(resourceId) && versions.isSuccess && versionSelectionReady,
   })
   const completeness = useQuery({
     queryKey: ["completeness", semesterId, selectedVersionId],
@@ -295,7 +311,7 @@ export function TimetablePage() {
           `/api/v1/semesters/${semesterId}/timetable/completeness${selectedVersionId ? `?version_id=${selectedVersionId}` : ""}`,
         )
       ).data,
-    enabled: semesterId !== null && versions.isSuccess,
+    enabled: semesterId !== null && versions.isSuccess && versionSelectionReady,
   })
   const refresh = useCallback(async () => {
     await Promise.all([
@@ -424,13 +440,15 @@ export function TimetablePage() {
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [applyHistory, history.length, historyIndex])
-  if (!semesterId && !context.isLoading)
+  if (semesterId === null) {
+    if (context.isLoading) return <LoadingState label="正在载入学期…" />
     return (
       <>
         <PageHeader title="排课工作台" />
         <EmptyList title="尚未设置当前学期" description="请先设置当前开放学期。" />
       </>
     )
+  }
   if (
     semester.isLoading ||
     settings.isLoading ||
@@ -442,7 +460,7 @@ export function TimetablePage() {
   if (semester.isError || versions.isError || !semester.data)
     return <ErrorState retry={() => void semester.refetch()} />
   const current = semester.data.data
-  const selectedVersion = (versions.data?.data ?? []).find(
+  const selectedVersion = selectableVersions.find(
     (version) => String(version.id) === selectedVersionId,
   )
   const canMutate = user?.role !== "viewer" && current.status === "open"
@@ -524,7 +542,7 @@ export function TimetablePage() {
         }),
       })
       toast.success(successMessage)
-      void navigate("/scheduling/generate?run=" + result.data.id)
+      void navigate(`${semesterPath(semesterId, "generate")}?run=${result.data.id}`)
     } catch (error) {
       toast.error(apiMessage(error))
     } finally {
@@ -564,10 +582,13 @@ export function TimetablePage() {
               aria-label="选择课表版本"
               onChange={(event) => setSelectedVersionId(event.target.value)}
             >
-              {(versions.data?.data ?? []).length === 0 && (
+              {user?.role === "viewer" && !selectedVersionId && (
+                <option value="">暂无已发布的当前课表</option>
+              )}
+              {user?.role !== "viewer" && selectableVersions.length === 0 && (
                 <option value="">尚未创建课表版本</option>
               )}
-              {(versions.data?.data ?? []).map((version) => (
+              {selectableVersions.map((version) => (
                 <option key={version.id} value={version.id}>
                   v{version.version_no} · {version.name} · {versionStatusName(version.status)}
                   {version.input_revision !== current.input_revision ? " · 数据已变化" : ""}
@@ -582,7 +603,7 @@ export function TimetablePage() {
             )}
             <Button
               variant="outline"
-              disabled={!selectedVersion || (versions.data?.data.length ?? 0) < 2}
+              disabled={!selectedVersion || selectableVersions.length < 2}
               onClick={() => setCompareOpen(true)}
             >
               <ArrowRightLeftIcon />
@@ -625,7 +646,11 @@ export function TimetablePage() {
           </div>
           <div className="flex flex-wrap items-center gap-3 text-sm">
             <DropdownMenu>
-              <DropdownMenuTrigger render={<Button variant="outline" disabled={!resourceId} />}>
+              <DropdownMenuTrigger
+                render={
+                  <Button variant="outline" disabled={!resourceId || !versionSelectionReady} />
+                }
+              >
                 <DownloadIcon />
                 导出
               </DropdownMenuTrigger>
@@ -638,7 +663,11 @@ export function TimetablePage() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button variant="outline" disabled={!resourceId} onClick={() => window.print()}>
+            <Button
+              variant="outline"
+              disabled={!resourceId || !versionSelectionReady}
+              onClick={() => window.print()}
+            >
               <PrinterIcon />
               打印 / PDF
             </Button>
@@ -750,7 +779,10 @@ export function TimetablePage() {
                     自动补齐当前班级
                   </Button>
                 ) : (
-                  <Button size="sm" onClick={() => void navigate("/scheduling/generate")}>
+                  <Button
+                    size="sm"
+                    onClick={() => void navigate(semesterPath(semesterId, "generate"))}
+                  >
                     <SparklesIcon />
                     重新生成完整方案
                   </Button>
@@ -780,7 +812,14 @@ export function TimetablePage() {
             )}
           </div>
         )}
-        {!resourceId ? (
+        {!versionSelectionReady ? (
+          <div className="overflow-hidden rounded-2xl border bg-background">
+            <EmptyList
+              title="暂无已发布的当前课表"
+              description="当前没有可默认打开的版本；如有历史版本，可从上方版本列表显式选择查看。"
+            />
+          </div>
+        ) : !resourceId ? (
           <div className="overflow-hidden rounded-2xl border bg-background">
             <EmptyList title="没有可查看的资源" description="请先配置班级、任课关系或教室。" />
           </div>
@@ -855,7 +894,7 @@ export function TimetablePage() {
       <VersionComparisonSheet
         open={compareOpen}
         semesterId={current.id}
-        versions={versions.data?.data ?? []}
+        versions={selectableVersions}
         selectedVersion={selectedVersion ?? null}
         onClose={() => setCompareOpen(false)}
       />

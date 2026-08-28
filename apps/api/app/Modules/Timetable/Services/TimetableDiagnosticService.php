@@ -36,6 +36,38 @@ class TimetableDiagnosticService
         ?TimetableEntry $movingEntry = null,
         array $additionalExceptEntryIds = [],
     ): array {
+        return $this->diagnoseGroup(
+            $semester,
+            $version,
+            [$assignment],
+            $weekday,
+            $itemId,
+            $movingEntry === null ? [] : [$movingEntry],
+            $additionalExceptEntryIds,
+        );
+    }
+
+    /**
+     * Diagnose an atomic synchronized placement against one shared snapshot. Synthetic
+     * entries make group members visible to one another before any database row exists.
+     *
+     * @param  list<TeachingAssignment>  $assignments
+     * @param  list<TimetableEntry>  $movingEntries
+     * @param  list<int>  $additionalExceptEntryIds
+     * @return array<string, mixed>
+     */
+    public function diagnoseGroup(
+        Semester $semester,
+        ?TimetableVersion $version,
+        array $assignments,
+        int $weekday,
+        int $itemId,
+        array $movingEntries = [],
+        array $additionalExceptEntryIds = [],
+    ): array {
+        if ($assignments === []) {
+            throw new \InvalidArgumentException('A diagnostic group must contain at least one assignment.');
+        }
         $template = $semester->scheduleTemplate()->with(['days', 'items'])->firstOrFail();
         $days = $template->days->where('is_enabled', true)->pluck('weekday')->map(fn ($day): int => (int) $day)->all();
         $items = $template->items->where('is_active', true)->where('allows_course', true)
@@ -45,25 +77,30 @@ class TimetableDiagnosticService
             throw new ApiProblemException('DIAGNOSTIC_SLOT_INVALID', '目标位置不是允许排课的课节', 422);
         }
         $versionId = $version === null ? 0 : $version->id;
-        $entries = TimetableEntry::query()->where('timetable_version_id', $versionId)
+        $entries = TimetableEntry::query()->where('semester_id', $semester->id)
+            ->where('timetable_version_id', $versionId)
             ->with(['schoolClasses:id,name', 'teachers:id,name', 'actualRoom:id,name', 'item:id,name,sort_order'])
             ->get();
         $constraints = $semester->schedulingConstraints()->where('status', ConstraintStatus::Active->value)->get();
-        $candidate = $this->candidate($semester, $assignment);
+        $candidates = [];
+        foreach ($assignments as $assignment) {
+            $candidates[$assignment->id] = $this->candidate($semester, $assignment);
+        }
+        $movingByAssignment = collect($movingEntries)->keyBy('teaching_assignment_id');
         $exceptEntryIds = array_values(array_unique([
             ...$additionalExceptEntryIds,
-            ...($movingEntry === null ? [] : [$movingEntry->id]),
+            ...array_map(fn (TimetableEntry $entry): int => $entry->id, $movingEntries),
         ]));
         $existing = $this->existingEntries($semester, $entries, $exceptEntryIds);
-        $evaluation = $this->evaluate(
+        $evaluation = $this->evaluateGroup(
             $semester,
-            $candidate,
+            $candidates,
             $constraints,
             $existing,
             $weekday,
             $itemId,
             (int) $targetItem->sort_order,
-            $movingEntry,
+            $movingByAssignment,
             $version,
         );
 
@@ -73,15 +110,15 @@ class TimetableDiagnosticService
                 if ($candidateWeekday === $weekday && $item->id === $itemId) {
                     continue;
                 }
-                $alternative = $this->evaluate(
+                $alternative = $this->evaluateGroup(
                     $semester,
-                    $candidate,
+                    $candidates,
                     $constraints,
                     $existing,
                     $candidateWeekday,
                     $item->id,
                     $item->sort_order,
-                    $movingEntry,
+                    $movingByAssignment,
                     $version,
                 );
                 if (! $alternative['allowed']) {
@@ -100,13 +137,13 @@ class TimetableDiagnosticService
             ?: $left['weekday'] <=> $right['weekday']
             ?: $left['item_id'] <=> $right['item_id']);
 
-        $targetName = $assignment->school_class_id !== null
-            ? $assignment->schoolClass->name
-            : $assignment->teachingGroup->name;
+        $assignmentSummaries = array_map(function (TeachingAssignment $assignment) use ($candidates): array {
+            $targetName = $assignment->school_class_id !== null
+                ? $assignment->schoolClass->name
+                : $assignment->teachingGroup->name;
+            $candidate = $candidates[$assignment->id];
 
-        return [
-            ...$evaluation,
-            'assignment' => [
+            return [
                 'id' => $assignment->id,
                 'target' => $targetName,
                 'course' => $assignment->course->name,
@@ -114,7 +151,13 @@ class TimetableDiagnosticService
                     ? ''
                     : '、'.$assignment->collaborators->pluck('name')->join('、')),
                 'room' => $candidate['room_name'],
-            ],
+            ];
+        }, $assignments);
+
+        return [
+            ...$evaluation,
+            'assignment' => $assignmentSummaries[0],
+            'synchronized_assignments' => $assignmentSummaries,
             'target' => [
                 'weekday' => $weekday,
                 'item_id' => $itemId,
@@ -125,10 +168,112 @@ class TimetableDiagnosticService
     }
 
     /**
+     * @param  array<int, array<string, mixed>>  $candidates
+     * @param  Collection<int, SchedulingConstraint>  $constraints
+     * @param  list<array<string, mixed>>  $existing
+     * @param  Collection<int, TimetableEntry>  $movingByAssignment
+     * @return array<string, mixed>
+     */
+    private function evaluateGroup(
+        Semester $semester,
+        array $candidates,
+        Collection $constraints,
+        array $existing,
+        int $weekday,
+        int $itemId,
+        int $itemSortOrder,
+        Collection $movingByAssignment,
+        ?TimetableVersion $version,
+    ): array {
+        $memberDiagnostics = [];
+        $hardConflicts = [];
+        $softWarnings = [];
+        $softPenalty = 0.0;
+        foreach ($candidates as $assignmentId => $candidate) {
+            $memberExisting = $existing;
+            foreach ($candidates as $relatedAssignmentId => $relatedCandidate) {
+                if ($relatedAssignmentId === $assignmentId) {
+                    continue;
+                }
+                $memberExisting[] = $this->syntheticEntry(
+                    $relatedCandidate,
+                    $weekday,
+                    $itemId,
+                    $itemSortOrder,
+                );
+            }
+            $member = $this->evaluate(
+                $semester,
+                $candidate,
+                $constraints,
+                $memberExisting,
+                $weekday,
+                $itemId,
+                $itemSortOrder,
+                $movingByAssignment->get($assignmentId),
+                $version,
+            );
+            $memberDiagnostics[] = ['assignment_id' => $assignmentId, ...$member];
+            foreach ($member['hard_conflicts'] as $conflict) {
+                $hardConflicts[] = ['assignment_id' => $assignmentId, ...$conflict];
+            }
+            $softWarnings = [...$softWarnings, ...$member['soft_warnings']];
+            $softPenalty += $member['soft_penalty'];
+        }
+        $hardConflicts = collect($hardConflicts)->unique(fn (array $item): string => implode(':', [
+            $item['assignment_id'],
+            $item['type'],
+            $item['constraint_id'] ?? '',
+            $item['resource'] ?? '',
+            $item['message'],
+        ]))->values()->all();
+        $allowed = $hardConflicts === [];
+        $grouped = count($candidates) > 1;
+
+        return [
+            'allowed' => $allowed,
+            'summary' => $allowed
+                ? ($softWarnings === []
+                    ? ($grouped ? '同步组可以整体安排：全部成员均无硬冲突。' : '可以移动：班级、教师、教室和启用规则均允许。')
+                    : ($grouped ? '同步组可以整体安排，但会降低部分软规则质量。' : '可以移动，但会降低部分软规则质量。'))
+                : ($grouped ? '同步组不能整体安排：至少一个成员存在硬冲突。' : '不能移动：存在必须先处理的硬冲突。'),
+            'hard_conflicts' => $hardConflicts,
+            'soft_warnings' => array_values(array_unique($softWarnings)),
+            'soft_penalty' => round($softPenalty, 2),
+            'estimated_quality_delta' => $allowed ? round(-$softPenalty, 2) : 0.0,
+            'member_diagnostics' => $memberDiagnostics,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $candidate
+     * @return array<string, mixed>
+     */
+    private function syntheticEntry(
+        array $candidate,
+        int $weekday,
+        int $itemId,
+        int $itemSortOrder,
+    ): array {
+        return [
+            'id' => -$candidate['assignment_id'],
+            'assignment_id' => $candidate['assignment_id'],
+            'weekday' => $weekday,
+            'item_id' => $itemId,
+            'item_sort_order' => $itemSortOrder,
+            'week_pattern' => $candidate['week_pattern'],
+            'active_weeks' => $candidate['active_weeks'],
+            'week_mask' => $candidate['week_mask'],
+            'resources' => $candidate['resources'],
+        ];
+    }
+
+    /**
      * @return array{
      *   assignment_id: int, class_ids: list<int>, grade_ids: list<int>, teaching_group_id: int|null,
-     *   teacher_ids: list<int>, course_id: int,
-     *   room_id: int, room_name: string, week_mask: int, resources: list<string>, resource_names: array<string, string>
+     *   teacher_ids: list<int>, course_id: int, course_name: string,
+     *   room_id: int, room_name: string, week_pattern: string, active_weeks: list<int>|null,
+     *   week_mask: int, resources: list<string>, resource_names: array<string, string>
      * }
      */
     private function candidate(Semester $semester, TeachingAssignment $assignment): array
@@ -175,8 +320,11 @@ class TimetableDiagnosticService
             'teaching_group_id' => $assignment->teaching_group_id,
             'teacher_ids' => $teacherIds,
             'course_id' => $assignment->course_id,
+            'course_name' => $assignment->course->name,
             'room_id' => $roomId,
             'room_name' => $roomName,
+            'week_pattern' => $assignment->week_pattern->value,
+            'active_weeks' => $assignment->week_pattern->value === 'specified' ? $assignment->active_weeks : null,
             'week_mask' => $this->weekPatterns->mask($semester, $assignment->week_pattern, $assignment->active_weeks),
             'resources' => array_values(array_unique($resources)),
             'resource_names' => $resourceNames,
@@ -221,8 +369,9 @@ class TimetableDiagnosticService
     /**
      * @param  array{
      *   assignment_id: int, class_ids: list<int>, grade_ids: list<int>, teaching_group_id: int|null,
-     *   teacher_ids: list<int>, course_id: int,
-     *   room_id: int, room_name: string, week_mask: int, resources: list<string>, resource_names: array<string, string>
+     *   teacher_ids: list<int>, course_id: int, course_name: string,
+     *   room_id: int, room_name: string, week_pattern: string, active_weeks: list<int>|null,
+     *   week_mask: int, resources: list<string>, resource_names: array<string, string>
      * }  $candidate
      * @param  Collection<int, SchedulingConstraint>  $constraints
      * @param  list<array{id: int, assignment_id: int, weekday: int, item_id: int, item_sort_order: int, week_pattern: string, active_weeks: list<int>|null, week_mask: int, resources: list<string>}>  $existing
@@ -364,7 +513,7 @@ class TimetableDiagnosticService
                 } else {
                     foreach ($relatedIds as $relatedId) {
                         $aligned = collect($existing)->contains(fn (array $entry): bool => $entry['assignment_id'] === $relatedId && $entry['weekday'] === $weekday
-                            && $entry['item_id'] === $itemId && ($entry['week_mask'] & $candidate['week_mask']) !== 0);
+                            && $entry['item_id'] === $itemId && $entry['week_mask'] === $candidate['week_mask']);
                         if (! $aligned) {
                             $hardConflicts[] = [
                                 'type' => 'rule', 'constraint_id' => $constraint->id,
@@ -398,7 +547,14 @@ class TimetableDiagnosticService
                 && $this->slotMatches($constraint->condition ?? [], $weekday, $itemId, $itemSortOrder);
             $violated = (($requirement['preference'] ?? null) === 'avoid' && $matches)
                 || (($requirement['preference'] ?? null) === 'prefer' && ! $matches);
-            if ($constraint->category->value === 'consecutive_items') {
+            $category = $constraint->category->value;
+            if ($category === 'course_priority') {
+                $courseNames = $requirement['prefer_earlier_items'] ?? [];
+                $violated = is_array($courseNames)
+                    && in_array($candidate['course_name'], $courseNames, true)
+                    && $itemSortOrder > 4;
+            }
+            if ($category === 'consecutive_items') {
                 $limit = $this->integerRequirement($requirement, ['max_consecutive_items', 'maximum']) ?? 3;
                 foreach ($this->constraintResources($constraint, $candidate) as $resource) {
                     $violated = $violated || $this->consecutiveLoad(
@@ -410,7 +566,7 @@ class TimetableDiagnosticService
                     ) > $limit;
                 }
             }
-            if (in_array($constraint->category->value, ['course_distribution', 'spacing'], true)) {
+            if (in_array($category, ['course_distribution', 'spacing'], true)) {
                 $limit = $this->integerRequirement($requirement, ['max_same_course_per_day', 'max_per_day']) ?? 1;
                 $violated = $violated || $sameDaySessions + 1 > $limit;
                 $minimumGap = $this->integerRequirement($requirement, ['min_gap_days', 'minimum_gap_days']);
@@ -424,7 +580,7 @@ class TimetableDiagnosticService
                     }
                 }
             }
-            if (in_array($constraint->category->value, ['daily_load', 'workload_balance'], true)) {
+            if (in_array($category, ['daily_load', 'workload_balance'], true)) {
                 $limit = $this->integerRequirement($requirement, ['max_items_per_day', 'max_per_day']);
                 if ($limit !== null) {
                     foreach ($this->constraintResources($constraint, $candidate) as $resource) {
@@ -432,14 +588,35 @@ class TimetableDiagnosticService
                             || $this->dailyLoad($existing, $resource, $weekday, $candidate['week_mask']) + 1 > $limit;
                     }
                 }
+                if ($category === 'workload_balance' && ($requirement['balance_teacher_daily_load'] ?? null) === true) {
+                    foreach ($this->constraintResources($constraint, $candidate) as $resource) {
+                        $violated = $violated || $this->projectedDailyImbalance(
+                            $existing,
+                            $resource,
+                            $weekday,
+                            $candidate['week_mask'],
+                        ) > 0;
+                    }
+                }
             }
-            if ($constraint->category->value === 'weekly_load') {
+            if ($category === 'weekly_load') {
                 $limit = $this->integerRequirement($requirement, ['max_items_per_week', 'max_per_week']);
                 if ($limit !== null) {
                     foreach ($this->constraintResources($constraint, $candidate) as $resource) {
                         $violated = $violated
                             || $this->weeklyLoad($existing, $resource, $candidate['week_mask']) + 1 > $limit;
                     }
+                }
+            }
+            if ($category === 'teacher_gaps') {
+                foreach ($candidate['teacher_ids'] as $teacherId) {
+                    $violated = $violated || $this->projectedGap(
+                        $existing,
+                        "teacher:{$teacherId}",
+                        $weekday,
+                        $candidate['week_mask'],
+                        $itemSortOrder,
+                    ) > 0;
                 }
             }
             if ($violated) {
@@ -463,7 +640,7 @@ class TimetableDiagnosticService
     }
 
     /**
-     * @param  array{assignment_id: int, class_ids: list<int>, grade_ids: list<int>, teaching_group_id: int|null, teacher_ids: list<int>, course_id: int, room_id: int, room_name: string, week_mask: int, resources: list<string>, resource_names: array<string, string>}  $candidate
+     * @param  array{assignment_id: int, class_ids: list<int>, grade_ids: list<int>, teaching_group_id: int|null, teacher_ids: list<int>, course_id: int, course_name: string, room_id: int, room_name: string, week_pattern: string, active_weeks: list<int>|null, week_mask: int, resources: list<string>, resource_names: array<string, string>}  $candidate
      */
     private function targetsCandidate(SchedulingConstraint $constraint, array $candidate): bool
     {
@@ -526,7 +703,7 @@ class TimetableDiagnosticService
     }
 
     /**
-     * @param  array{assignment_id: int, class_ids: list<int>, grade_ids: list<int>, teaching_group_id: int|null, teacher_ids: list<int>, course_id: int, room_id: int, room_name: string, week_mask: int, resources: list<string>, resource_names: array<string, string>}  $candidate
+     * @param  array{assignment_id: int, class_ids: list<int>, grade_ids: list<int>, teaching_group_id: int|null, teacher_ids: list<int>, course_id: int, course_name: string, room_id: int, room_name: string, week_pattern: string, active_weeks: list<int>|null, week_mask: int, resources: list<string>, resource_names: array<string, string>}  $candidate
      * @return list<string>
      */
     private function constraintResources(SchedulingConstraint $constraint, array $candidate): array
@@ -540,11 +717,33 @@ class TimetableDiagnosticService
         if ($constraint->target_type === ConstraintTargetType::Room && $constraint->target_id !== null) {
             return ["room:{$constraint->target_id}"];
         }
+        if (in_array($constraint->target_type, [ConstraintTargetType::Grade, ConstraintTargetType::TeachingGroup], true)) {
+            return array_map(fn (int $classId): string => "school_class:{$classId}", $candidate['class_ids']);
+        }
 
-        return array_values(array_filter(
-            $candidate['resources'],
-            fn (string $resource): bool => str_starts_with($resource, 'teacher:') || str_starts_with($resource, 'school_class:'),
-        ));
+        $requestedTypes = $constraint->requirement['resource_types'] ?? null;
+        if (! is_array($requestedTypes)) {
+            $singleType = $constraint->requirement['resource_type'] ?? null;
+            $requestedTypes = is_string($singleType)
+                ? [$singleType]
+                : ($constraint->category->value === 'consecutive_items' ? ['teacher'] : ['teacher', 'school_class']);
+        }
+        $resources = [];
+        foreach ($requestedTypes as $type) {
+            if ($type === 'teacher') {
+                foreach ($candidate['teacher_ids'] as $teacherId) {
+                    $resources[] = "teacher:{$teacherId}";
+                }
+            } elseif ($type === 'school_class') {
+                foreach ($candidate['class_ids'] as $classId) {
+                    $resources[] = "school_class:{$classId}";
+                }
+            } elseif ($type === 'room') {
+                $resources[] = "room:{$candidate['room_id']}";
+            }
+        }
+
+        return array_values(array_unique($resources));
     }
 
     /**
@@ -615,6 +814,57 @@ class TimetableDiagnosticService
         foreach ($this->weekBits($weekMask) as $weekBit) {
             $maximum = max($maximum, count(array_filter($existing, fn (array $entry): bool => $entry['assignment_id'] === $assignmentId && $entry['weekday'] === $weekday
                 && ($entry['week_mask'] & $weekBit) !== 0)));
+        }
+
+        return $maximum;
+    }
+
+    /**
+     * @param  list<array{id: int, assignment_id: int, weekday: int, item_id: int, item_sort_order: int, week_pattern: string, active_weeks: list<int>|null, week_mask: int, resources: list<string>}>  $existing
+     */
+    private function projectedGap(
+        array $existing,
+        string $resource,
+        int $weekday,
+        int $weekMask,
+        int $candidateOrder,
+    ): int {
+        $maximum = 0;
+        foreach ($this->weekBits($weekMask) as $weekBit) {
+            $orders = [$candidateOrder];
+            foreach ($existing as $entry) {
+                if ($entry['weekday'] === $weekday && ($entry['week_mask'] & $weekBit) !== 0
+                    && in_array($resource, $entry['resources'], true)) {
+                    $orders[] = $entry['item_sort_order'];
+                }
+            }
+            $orders = array_values(array_unique($orders));
+            sort($orders);
+            $maximum = max($maximum, max($orders) - min($orders) + 1 - count($orders));
+        }
+
+        return $maximum;
+    }
+
+    /**
+     * @param  list<array{id: int, assignment_id: int, weekday: int, item_id: int, item_sort_order: int, week_pattern: string, active_weeks: list<int>|null, week_mask: int, resources: list<string>}>  $existing
+     */
+    private function projectedDailyImbalance(
+        array $existing,
+        string $resource,
+        int $weekday,
+        int $weekMask,
+    ): int {
+        $maximum = 0;
+        foreach ($this->weekBits($weekMask) as $weekBit) {
+            $dailyLoads = [$weekday => 1];
+            foreach ($existing as $entry) {
+                if (($entry['week_mask'] & $weekBit) !== 0 && in_array($resource, $entry['resources'], true)) {
+                    $dailyLoads[$entry['weekday']] = ($dailyLoads[$entry['weekday']] ?? 0) + 1;
+                }
+            }
+            $loads = array_values($dailyLoads);
+            $maximum = max($maximum, max($loads) - min($loads));
         }
 
         return $maximum;

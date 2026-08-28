@@ -2695,6 +2695,7 @@ paths:
           in: path
           required: true
           schema: { type: integer, minimum: 1 }
+        - $ref: "#/components/parameters/IfMatch"
       requestBody:
         required: false
         content:
@@ -2703,6 +2704,7 @@ paths:
               $ref: "#/components/schemas/WritePayload"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
@@ -2719,6 +2721,7 @@ paths:
           in: path
           required: true
           schema: { type: integer, minimum: 1 }
+        - $ref: "#/components/parameters/IfMatch"
       requestBody:
         required: true
         content:
@@ -2728,6 +2731,7 @@ paths:
       responses:
         "200": { $ref: "#/components/responses/Success" }
         "201": { $ref: "#/components/responses/Created" }
+        "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
@@ -2903,7 +2907,7 @@ components:
       name: If-Match
       in: header
       required: true
-      description: 使用同一次可编辑资源读取响应携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N。
+      description: 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。
       schema:
         type: string
         minLength: 3

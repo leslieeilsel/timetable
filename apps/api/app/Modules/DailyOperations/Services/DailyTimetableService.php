@@ -92,11 +92,11 @@ class DailyTimetableService
             ->where('status', OperationalStatus::Active->value)
             ->whereHas('originalEntry', fn ($query) => $query->where('timetable_version_id', $version->id))
             ->with(['replacementTeacher:id,name,employee_no', 'teacherLeave:id,teacher_id'])
+            ->orderBy('id')
             ->get();
         foreach ($substitutions as $substitution) {
-            $replacedTeacherId = $substitution->teacher_leave_id !== null
-                ? $substitution->teacherLeave->teacher_id
-                : null;
+            $replacedTeacherId = $substitution->replaced_teacher_id
+                ?? $substitution->teacherLeave?->teacher_id;
             if ($replacedTeacherId === $ignoreSubstitutionsForTeacherId) {
                 continue;
             }
@@ -111,6 +111,8 @@ class DailyTimetableService
                     $substitution->replacementTeacher->name,
                 );
                 $row['substitution_id'] = $substitution->id;
+                $row['substitution_ids'][] = $substitution->id;
+                $row['substitution_notes'][] = $substitution->reason;
                 $row['status'] = 'substitution';
                 $row['note'] = $substitution->reason;
             }
@@ -531,6 +533,8 @@ class DailyTimetableService
             'original_entry_id' => $entry->id,
             'exception_id' => null,
             'substitution_id' => null,
+            'substitution_ids' => [],
+            'substitution_notes' => [],
             'item_id' => $entry->item_id,
             'item_name' => $entry->item->name,
             'item_sort_order' => $entry->item->sort_order,
@@ -677,14 +681,14 @@ class DailyTimetableService
         $classNames = $assignment->school_class_id !== null
             ? [$assignment->schoolClass->name]
             : $assignment->teachingGroup?->schoolClasses->pluck('name')->all() ?? [];
-        $teacherIds = array_values(array_unique([
-            $assignment->teacher_id,
-            ...$assignment->collaborators->pluck('id')->map(fn ($id): int => (int) $id)->all(),
-        ]));
-        $teacherNames = [
-            $assignment->teacher->name,
-            ...$assignment->collaborators->pluck('name')->all(),
-        ];
+        $teacherPairs = $this->uniqueTeacherPairs([
+            ['id' => $assignment->teacher_id, 'name' => $assignment->teacher->name],
+            ...$assignment->collaborators
+                ->map(fn (Teacher $teacher): array => ['id' => $teacher->id, 'name' => $teacher->name])
+                ->all(),
+        ]);
+        $teacherIds = array_column($teacherPairs, 'id');
+        $teacherNames = array_column($teacherPairs, 'name');
         $roomId = $this->rooms->resolve($assignment);
         $roomName = Room::query()->whereKey($roomId)->value('name') ?? "教室 #{$roomId}";
 
@@ -695,6 +699,8 @@ class DailyTimetableService
             'original_entry_id' => null,
             'exception_id' => null,
             'substitution_id' => null,
+            'substitution_ids' => [],
+            'substitution_notes' => [],
             'item_id' => $item->id,
             'item_name' => $item->name,
             'item_sort_order' => $item->sort_order,
@@ -726,18 +732,16 @@ class DailyTimetableService
     /** @param array<string, mixed> $row */
     private function replacePrimaryTeacher(array &$row, int $teacherId, string $teacherName): void
     {
-        $collaboratorIds = array_values(array_filter(
-            $row['teacher_ids'],
-            fn (int $id): bool => $id !== $row['primary_teacher_id'],
-        ));
-        $collaboratorNames = array_values(array_filter(
-            $row['teacher_names'],
-            fn (string $name): bool => $name !== $row['teacher_name'],
-        ));
+        $teacherPairs = [
+            ['id' => $teacherId, 'name' => $teacherName],
+            ...array_values(array_filter(
+                $this->teacherPairs($row),
+                fn (array $teacher): bool => $teacher['id'] !== $row['primary_teacher_id'],
+            )),
+        ];
         $row['teacher_id'] = $teacherId;
         $row['teacher_name'] = $teacherName;
-        $row['teacher_ids'] = array_values(array_unique([$teacherId, ...$collaboratorIds]));
-        $row['teacher_names'] = array_values(array_unique([$teacherName, ...$collaboratorNames]));
+        $this->setTeacherPairs($row, $teacherPairs);
     }
 
     /** @param array<string, mixed> $row */
@@ -752,14 +756,66 @@ class DailyTimetableService
 
             return;
         }
-        $index = array_search($replacedTeacherId, $row['teacher_ids'], true);
-        if ($index === false) {
+        $teacherPairs = $this->teacherPairs($row);
+        $replaced = false;
+        foreach ($teacherPairs as &$teacher) {
+            if ($teacher['id'] !== $replacedTeacherId) {
+                continue;
+            }
+            $teacher = ['id' => $replacementTeacherId, 'name' => $replacementTeacherName];
+            $replaced = true;
+            break;
+        }
+        unset($teacher);
+        if (! $replaced) {
             return;
         }
-        $row['teacher_ids'][$index] = $replacementTeacherId;
-        $row['teacher_names'][$index] = $replacementTeacherName;
-        $row['teacher_ids'] = array_values(array_unique($row['teacher_ids']));
-        $row['teacher_names'] = array_values(array_unique($row['teacher_names']));
+        $this->setTeacherPairs($row, $teacherPairs);
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @return list<array{id: int, name: string}>
+     */
+    private function teacherPairs(array $row): array
+    {
+        $pairs = [];
+        foreach ($row['teacher_ids'] as $index => $teacherId) {
+            $pairs[] = [
+                'id' => (int) $teacherId,
+                'name' => (string) ($row['teacher_names'][$index] ?? ''),
+            ];
+        }
+
+        return $pairs;
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @param  list<array{id: int, name: string}>  $teacherPairs
+     */
+    private function setTeacherPairs(array &$row, array $teacherPairs): void
+    {
+        $teacherPairs = $this->uniqueTeacherPairs($teacherPairs);
+        $row['teacher_ids'] = array_column($teacherPairs, 'id');
+        $row['teacher_names'] = array_column($teacherPairs, 'name');
+    }
+
+    /**
+     * @param  list<array{id: int, name: string}>  $teacherPairs
+     * @return list<array{id: int, name: string}>
+     */
+    private function uniqueTeacherPairs(array $teacherPairs): array
+    {
+        $unique = [];
+        foreach ($teacherPairs as $teacher) {
+            if (array_key_exists($teacher['id'], $unique)) {
+                continue;
+            }
+            $unique[$teacher['id']] = $teacher;
+        }
+
+        return array_values($unique);
     }
 
     /** @param array<string, mixed> $row */

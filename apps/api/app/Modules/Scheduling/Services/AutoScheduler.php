@@ -8,6 +8,7 @@ use App\Enums\ConstraintStatus;
 use App\Enums\ConstraintTargetType;
 use App\Enums\ResourceStatus;
 use App\Enums\ScheduleRunStatus;
+use App\Modules\AcademicCalendar\Models\AppSetting;
 use App\Modules\AcademicCalendar\Models\Semester;
 use App\Modules\Scheduling\Exceptions\SchedulingFailureException;
 use App\Modules\Scheduling\Models\ScheduleCandidate;
@@ -35,18 +36,12 @@ class AutoScheduler
     public function generate(ScheduleRun $run): void
     {
         try {
-            $run = ScheduleRun::query()->with('semester')->findOrFail($run->id);
-            if ($run->status === ScheduleRunStatus::Cancelled) {
+            $preparedRun = $this->prepareRun($run->id);
+            if ($preparedRun === null) {
                 return;
             }
-            $this->updateStage($run, ScheduleRunStatus::Checking, 'checking_input', 5);
+            $run = $preparedRun;
             $semester = $run->semester;
-            if ($run->input_revision !== (int) $semester->getRawOriginal('input_revision')) {
-                throw new SchedulingFailureException('RUN_INPUT_STALE', '排课输入已变化，请重新创建生成任务。', [
-                    'run_input_revision' => $run->input_revision,
-                    'current_input_revision' => (int) $semester->getRawOriginal('input_revision'),
-                ]);
-            }
             $preparation = $this->preparation->inspect($semester);
             if (! $preparation['ready']) {
                 throw new SchedulingFailureException('PREPARATION_BLOCKED', '准备检查存在阻塞项，无法开始自动排课。', [
@@ -54,10 +49,14 @@ class AutoScheduler
                 ]);
             }
             $this->assertNotCancelled($run);
-            $this->updateStage($run, ScheduleRunStatus::Solving, 'building_problem', 15);
+            if (! $this->updateStage($run, ScheduleRunStatus::Solving, 'building_problem', 15)) {
+                return;
+            }
             $problem = $this->buildProblem($run, $semester);
 
-            $this->updateStage($run, ScheduleRunStatus::Solving, 'searching_feasible_solution', 25);
+            if (! $this->updateStage($run, ScheduleRunStatus::Solving, 'searching_feasible_solution', 25)) {
+                return;
+            }
             $solutions = [];
             $solutionHashes = [];
             for ($rank = 1; $rank <= $run->candidate_count; $rank++) {
@@ -94,60 +93,46 @@ class AutoScheduler
                 }
                 $solutions[] = $solution;
                 $progress = 25 + (int) floor(($rank / $run->candidate_count) * 55);
-                $this->updateStage($run, ScheduleRunStatus::Optimizing, 'optimizing_candidate_'.$rank, $progress);
+                if (! $this->updateStage($run, ScheduleRunStatus::Optimizing, 'optimizing_candidate_'.$rank, $progress)) {
+                    return;
+                }
             }
 
             $this->assertNotCancelled($run);
-            $this->updateStage($run, ScheduleRunStatus::BuildingCandidates, 'building_candidates', 85);
+            if (! $this->updateStage($run, ScheduleRunStatus::BuildingCandidates, 'building_candidates', 85)) {
+                return;
+            }
             $rankedSolutions = array_map(fn (array $solution): array => [
                 'solution' => $solution,
                 'metrics' => $this->score($problem, $solution, $run->strategy),
             ], $solutions);
             usort($rankedSolutions, fn (array $left, array $right): int => $right['metrics']['quality_score'] <=> $left['metrics']['quality_score']
                 ?: $this->solutionHash($left['solution']) <=> $this->solutionHash($right['solution']));
-            DB::transaction(function () use ($run, $problem, $rankedSolutions): void {
-                ScheduleCandidate::query()->where('schedule_run_id', $run->id)->delete();
-                foreach ($rankedSolutions as $index => $ranked) {
-                    $solution = $ranked['solution'];
-                    $metrics = $ranked['metrics'];
-                    $candidate = ScheduleCandidate::query()->create([
-                        'schedule_run_id' => $run->id,
-                        'semester_id' => $run->semester_id,
-                        'rank' => $index + 1,
-                        'name' => $this->candidateName($index + 1, $run->strategy),
-                        'quality_score' => $metrics['quality_score'],
-                        'score_breakdown' => $metrics['score_breakdown'],
-                        'hard_conflict_count' => 0,
-                        'soft_warning_count' => $metrics['soft_warning_count'],
-                        'unscheduled_count' => 0,
-                        'created_at' => now(),
-                    ]);
-                    $this->persistCandidateEntries($candidate, $problem, $solution);
-                }
-            }, 3);
-            $run->forceFill([
-                'status' => ScheduleRunStatus::Completed,
-                'progress_stage' => 'completed',
-                'progress_percent' => 100,
-                'completed_at' => now(),
-                'diagnostics' => [
-                    'candidate_count' => count($solutions),
-                    'assignment_count' => count($problem['assignments']),
-                    'entry_count' => count($problem['units']),
-                    'slot_count' => count($problem['slots']),
-                ],
-            ])->save();
+            $this->complete($run, $problem, $rankedSolutions);
         } catch (SchedulingFailureException $exception) {
             $this->fail($run, $exception->failureCode, $exception->getMessage(), $exception->diagnostics);
         } catch (Throwable $exception) {
-            Log::error('Automatic scheduling failed unexpectedly.', [
+            Log::warning('Automatic scheduling attempt failed and will be retried.', [
                 'schedule_run_id' => $run->id,
                 'exception' => $exception,
             ]);
-            $this->fail($run, 'SCHEDULER_INTERNAL_ERROR', '自动排课发生内部错误，请保留任务编号后重试。', [
-                'run_id' => $run->id,
-            ]);
+
+            throw $exception;
         }
+    }
+
+    public function markRetriesExhausted(ScheduleRun $run, ?Throwable $exception, int $maxAttempts): void
+    {
+        $this->fail($run, 'SCHEDULER_RETRIES_EXHAUSTED', '自动排课多次重试后仍未完成，请保留任务编号并联系管理员。', [
+            'run_id' => $run->id,
+            'max_attempts' => $maxAttempts,
+            'exception_type' => $exception === null ? null : $exception::class,
+        ]);
+        Log::error('Automatic scheduling exhausted all queue attempts.', [
+            'schedule_run_id' => $run->id,
+            'max_attempts' => $maxAttempts,
+            'exception' => $exception,
+        ]);
     }
 
     /** @return array<string, mixed> */
@@ -183,12 +168,9 @@ class AutoScheduler
                 'collaborators', 'course', 'specifiedRoom',
             ])->orderBy('id')->get();
         $selectedIds = $this->selectedAssignmentIds($run->scope, $assignments);
-        $constraints = $semester->schedulingConstraints()
-            ->where('status', ConstraintStatus::Active->value)
-            ->get();
-        $baseVersionId = isset($run->preservation['base_version_id'])
-            ? (int) $run->preservation['base_version_id']
-            : $semester->current_timetable_version_id;
+        $constraints = $this->constraintsFromSnapshot($run);
+        $baseVersionId = $run->base_version_id
+            ?? (isset($run->preservation['base_version_id']) ? (int) $run->preservation['base_version_id'] : null);
         $currentEntries = $baseVersionId === null
             ? collect()
             : TimetableEntry::query()
@@ -1788,14 +1770,108 @@ class AutoScheduler
         return (int) sprintf('%u', crc32(implode(':', $values)));
     }
 
-    private function updateStage(ScheduleRun $run, ScheduleRunStatus $status, string $stage, int $progress): void
+    private function prepareRun(int $runId): ?ScheduleRun
     {
-        $run->forceFill([
-            'status' => $status,
-            'progress_stage' => $stage,
-            'progress_percent' => $progress,
-            'started_at' => $run->started_at ?? now(),
-        ])->save();
+        $identity = ScheduleRun::query()->find($runId, ['id', 'semester_id']);
+        if ($identity === null) {
+            return null;
+        }
+
+        return DB::transaction(function () use ($identity): ?ScheduleRun {
+            $settings = AppSetting::query()->lockForUpdate()->findOrFail(1);
+            $semester = Semester::query()->lockForUpdate()->findOrFail($identity->semester_id);
+            $locked = ScheduleRun::query()->lockForUpdate()->find($identity->id);
+            if ($locked === null || $locked->isTerminal()) {
+                return null;
+            }
+            if (! $locked->hasCompleteInputSnapshot()) {
+                throw new SchedulingFailureException('RUN_SNAPSHOT_INCOMPLETE', '自动排课任务缺少完整输入快照，请重新创建生成任务。', [
+                    'run_id' => $locked->id,
+                    'algorithm_version' => $locked->algorithm_version,
+                ]);
+            }
+            if (! $locked->baselineMatches(true)) {
+                throw new SchedulingFailureException('RUN_BASELINE_STALE', '基础课表或锁定课程已变化，请重新创建生成任务。', [
+                    'base_version_id' => $locked->base_version_id,
+                    'run_base_version_fingerprint' => $locked->base_version_fingerprint,
+                    'current_base_version_fingerprint' => ScheduleRun::fingerprintTimetableVersion($locked->base_version_id, true),
+                ]);
+            }
+            $differences = $locked->revisionDifferences($semester, $settings);
+            if ($differences !== []) {
+                throw new SchedulingFailureException('RUN_INPUT_STALE', '排课输入已变化，请重新创建生成任务。', $differences);
+            }
+            if ($locked->progress_percent < 5) {
+                $locked->forceFill([
+                    'status' => ScheduleRunStatus::Checking,
+                    'progress_stage' => 'checking_input',
+                    'progress_percent' => 5,
+                    'started_at' => $locked->started_at ?? now(),
+                ])->save();
+            }
+            $locked->setRelation('semester', $semester);
+
+            return $locked;
+        }, 3);
+    }
+
+    /** @return Collection<int, SchedulingConstraint> */
+    private function constraintsFromSnapshot(ScheduleRun $run): Collection
+    {
+        $snapshots = $run->constraint_snapshot['constraints'] ?? null;
+        if (! is_array($snapshots)) {
+            return new Collection;
+        }
+        $constraints = [];
+        foreach ($snapshots as $snapshot) {
+            if (! is_array($snapshot)) {
+                continue;
+            }
+            $constraint = new SchedulingConstraint;
+            $constraint->forceFill([
+                'id' => (int) ($snapshot['id'] ?? 0),
+                'semester_id' => (int) ($snapshot['semester_id'] ?? $run->semester_id),
+                'name' => (string) ($snapshot['name'] ?? '快照规则 #'.($snapshot['id'] ?? '?')),
+                'kind' => $snapshot['kind'],
+                'category' => $snapshot['category'],
+                'target_type' => $snapshot['target_type'] ?? null,
+                'target_id' => isset($snapshot['target_id']) ? (int) $snapshot['target_id'] : null,
+                'scope' => $snapshot['scope'] ?? [],
+                'condition' => $snapshot['condition'] ?? null,
+                'requirement' => $snapshot['requirement'] ?? [],
+                'weight' => isset($snapshot['weight']) ? (int) $snapshot['weight'] : null,
+                'source' => (string) ($snapshot['source'] ?? 'snapshot'),
+                'status' => $snapshot['status'] ?? ConstraintStatus::Active->value,
+                'explanation' => $snapshot['explanation'] ?? null,
+                'created_at' => $snapshot['created_at'] ?? null,
+                'updated_at' => $snapshot['updated_at'] ?? null,
+            ]);
+            $constraint->exists = true;
+            $constraints[] = $constraint;
+        }
+
+        return new Collection($constraints);
+    }
+
+    private function updateStage(ScheduleRun $run, ScheduleRunStatus $status, string $stage, int $progress): bool
+    {
+        return DB::transaction(function () use ($run, $status, $stage, $progress): bool {
+            $locked = ScheduleRun::query()->lockForUpdate()->find($run->id);
+            if ($locked === null || $locked->isTerminal()) {
+                return false;
+            }
+            if ($progress >= $locked->progress_percent) {
+                $locked->forceFill([
+                    'status' => $status,
+                    'progress_stage' => $stage,
+                    'progress_percent' => $progress,
+                    'started_at' => $locked->started_at ?? now(),
+                ])->save();
+                $run->setRawAttributes($locked->getAttributes(), true);
+            }
+
+            return true;
+        }, 3);
     }
 
     private function assertNotCancelled(ScheduleRun $run): void
@@ -1804,18 +1880,87 @@ class AutoScheduler
         if ($status === ScheduleRunStatus::Cancelled->value) {
             throw new SchedulingFailureException('RUN_CANCELLED', '自动排课任务已取消。');
         }
+        if (in_array($status, [ScheduleRunStatus::Completed->value, ScheduleRunStatus::Failed->value], true)) {
+            throw new SchedulingFailureException('RUN_TERMINAL', '自动排课任务已由其他执行器结束。');
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $problem
+     * @param  list<array{solution: array<int, int>, metrics: array<string, mixed>}>  $rankedSolutions
+     */
+    private function complete(ScheduleRun $run, array $problem, array $rankedSolutions): bool
+    {
+        return DB::transaction(function () use ($run, $problem, $rankedSolutions): bool {
+            $settings = AppSetting::query()->lockForUpdate()->findOrFail(1);
+            $semester = Semester::query()->lockForUpdate()->findOrFail($run->semester_id);
+            $locked = ScheduleRun::query()->lockForUpdate()->find($run->id);
+            if ($locked === null || $locked->isTerminal()) {
+                return false;
+            }
+            if (! $locked->hasCompleteInputSnapshot()) {
+                throw new SchedulingFailureException('RUN_SNAPSHOT_INCOMPLETE', '自动排课任务缺少完整输入快照，未保存候选方案。', [
+                    'run_id' => $locked->id,
+                    'algorithm_version' => $locked->algorithm_version,
+                ]);
+            }
+            if (! $locked->baselineMatches(true)) {
+                throw new SchedulingFailureException('RUN_BASELINE_STALE', '求解期间基础课表或锁定课程发生变化，未保存候选方案。', [
+                    'base_version_id' => $locked->base_version_id,
+                    'run_base_version_fingerprint' => $locked->base_version_fingerprint,
+                    'current_base_version_fingerprint' => ScheduleRun::fingerprintTimetableVersion($locked->base_version_id, true),
+                ]);
+            }
+            $differences = $locked->revisionDifferences($semester, $settings);
+            if ($differences !== []) {
+                throw new SchedulingFailureException('RUN_INPUT_STALE', '求解期间排课输入发生变化，未保存候选方案。', $differences);
+            }
+            $locked->candidates()->delete();
+            foreach ($rankedSolutions as $index => $ranked) {
+                $candidate = ScheduleCandidate::query()->create([
+                    'schedule_run_id' => $locked->id,
+                    'semester_id' => $locked->semester_id,
+                    'rank' => $index + 1,
+                    'name' => $this->candidateName($index + 1, $locked->strategy),
+                    'quality_score' => $ranked['metrics']['quality_score'],
+                    'score_breakdown' => $ranked['metrics']['score_breakdown'],
+                    'hard_conflict_count' => 0,
+                    'soft_warning_count' => $ranked['metrics']['soft_warning_count'],
+                    'unscheduled_count' => 0,
+                    'created_at' => now(),
+                ]);
+                $this->persistCandidateEntries($candidate, $problem, $ranked['solution']);
+            }
+            $locked->forceFill([
+                'status' => ScheduleRunStatus::Completed,
+                'progress_stage' => 'completed',
+                'progress_percent' => 100,
+                'completed_at' => now(),
+                'diagnostics' => [
+                    'candidate_count' => count($rankedSolutions),
+                    'assignment_count' => count($problem['assignments']),
+                    'entry_count' => count($problem['units']),
+                    'slot_count' => count($problem['slots']),
+                ],
+            ])->save();
+
+            return true;
+        }, 3);
     }
 
     /** @param array<string, mixed> $diagnostics */
     private function fail(ScheduleRun $run, string $code, string $message, array $diagnostics): void
     {
-        $current = ScheduleRun::query()->find($run->id);
-        if ($current === null || $current->status === ScheduleRunStatus::Cancelled || $code === 'RUN_CANCELLED') {
+        if (in_array($code, ['RUN_CANCELLED', 'RUN_TERMINAL'], true)) {
             return;
         }
-        DB::transaction(function () use ($current, $code, $message, $diagnostics): void {
-            $current->candidates()->delete();
-            $current->forceFill([
+        DB::transaction(function () use ($run, $code, $message, $diagnostics): void {
+            $locked = ScheduleRun::query()->lockForUpdate()->find($run->id);
+            if ($locked === null || $locked->isTerminal()) {
+                return;
+            }
+            $locked->candidates()->delete();
+            $locked->forceFill([
                 'status' => ScheduleRunStatus::Failed,
                 'progress_stage' => 'failed',
                 'error_code' => $code,

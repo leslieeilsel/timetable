@@ -3,6 +3,12 @@ import { CalendarDaysIcon, ChevronDownIcon, LogOutIcon, UserRoundIcon } from "lu
 import { AppSidebar } from "@/components/app-sidebar"
 import { useAuth } from "@/lib/auth"
 import {
+  isDailySemesterPath,
+  isSchedulingSemesterPath,
+  semesterPathOrCurrent,
+  useResolvedSemesterId,
+} from "@/lib/semester"
+import {
   Breadcrumb,
   BreadcrumbItem,
   BreadcrumbLink,
@@ -48,14 +54,14 @@ export function WorkspaceShell() {
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const { user, logout } = useAuth()
+  const { semesterId } = useResolvedSemesterId()
   const parts = pathname.split("/").filter(Boolean)
   const part = parts.at(-1)
   const isResourcePage = pathname.startsWith("/resources/")
-  const isSemesterPage =
-    pathname.startsWith("/scheduling/") ||
-    pathname.startsWith("/semester/") ||
-    pathname.startsWith("/semesters/")
-  const isDailyPage = pathname.startsWith("/daily/")
+  const isSemesterPage = isSchedulingSemesterPath(pathname)
+  const isDailyPage = isDailySemesterPath(pathname)
+  const schedulingRoot = semesterPathOrCurrent(semesterId, "preparation")
+  const dailyRoot = semesterPathOrCurrent(semesterId, "adjustments")
   const isYearDetail = parts[0] === "years" && parts.length > 1
   const now = new Date()
   const today = new Intl.DateTimeFormat("zh-CN", {
@@ -87,9 +93,7 @@ export function WorkspaceShell() {
               {isSemesterPage && (
                 <>
                   <BreadcrumbItem>
-                    <BreadcrumbLink render={<Link to="/scheduling/preparation" />}>
-                      排课中心
-                    </BreadcrumbLink>
+                    <BreadcrumbLink render={<Link to={schedulingRoot} />}>排课中心</BreadcrumbLink>
                   </BreadcrumbItem>
                   <BreadcrumbSeparator />
                 </>
@@ -97,9 +101,7 @@ export function WorkspaceShell() {
               {isDailyPage && (
                 <>
                   <BreadcrumbItem>
-                    <BreadcrumbLink render={<Link to="/daily/adjustments" />}>
-                      日常运行
-                    </BreadcrumbLink>
+                    <BreadcrumbLink render={<Link to={dailyRoot} />}>日常运行</BreadcrumbLink>
                   </BreadcrumbItem>
                   <BreadcrumbSeparator />
                 </>

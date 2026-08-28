@@ -388,6 +388,7 @@ class AcademicCalendarController
             'start_date' => $semester->start_date->toDateString(),
             'end_date' => $semester->end_date->toDateString(),
             'status' => $semester->status->value,
+            'current_timetable_version_id' => $semester->current_timetable_version_id,
             'etag' => $this->etags->semester($semester, $settings),
         ];
 

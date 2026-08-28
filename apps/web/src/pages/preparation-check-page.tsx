@@ -14,7 +14,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { api, apiMessage } from "@/lib/api"
-import { useResolvedSemesterId } from "@/lib/semester"
+import { semesterPath, useResolvedSemesterId, withSemesterId } from "@/lib/semester"
 import type { PreparationCheck, PreparationCheckItem } from "@/lib/types"
 import { EmptyList, ErrorState, LoadingState, PageHeader } from "@/components/page"
 import { SchedulingWorkflow } from "@/components/scheduling-workflow"
@@ -91,13 +91,15 @@ export function PreparationCheckPage() {
     }, 1600)
   }
 
-  if (!semesterId && !context.isLoading)
+  if (semesterId === null) {
+    if (context.isLoading) return <LoadingState label="正在载入学期…" />
     return (
       <>
         <PageHeader title="准备检查" />
         <EmptyList title="尚未设置当前学期" description="请先创建并设置一个开放学期。" />
       </>
     )
+  }
 
   return (
     <>
@@ -110,6 +112,7 @@ export function PreparationCheckPage() {
       ) : (
         <PreparationContent
           data={check.data.data}
+          semesterId={semesterId}
           refreshState={refreshState}
           onRefresh={() => setConfirmOpen(true)}
         />
@@ -140,16 +143,19 @@ export function PreparationCheckPage() {
 
 function PreparationContent({
   data,
+  semesterId,
   refreshState,
   onRefresh,
 }: {
   data: PreparationCheck
+  semesterId: number
   refreshState: "idle" | "checking" | "success"
   onRefresh: () => void
 }) {
   const state = statusStyle[data.status]
   const checking = refreshState === "checking"
   const HeaderIcon = checking ? CircleDashedIcon : state.icon
+  const generationPath = semesterPath(semesterId, "generate")
   return (
     <div className="space-y-4 p-4 md:p-7">
       <div className="surface-panel overflow-hidden" aria-busy={checking}>
@@ -199,7 +205,7 @@ function PreparationContent({
               aria-disabled={checking || !data.ready}
               className={checking || !data.ready ? "pointer-events-none opacity-50" : undefined}
               nativeButton={false}
-              render={<Link to="/scheduling/generate" />}
+              render={<Link to={generationPath} />}
             >
               进入方案生成
               <ArrowRightIcon />
@@ -219,7 +225,7 @@ function PreparationContent({
         <div className="grid lg:grid-cols-[minmax(0,1fr)_18rem]">
           <div className="divide-y">
             {data.checks.map((item) => (
-              <CheckRow key={item.key} item={item} checking={checking} />
+              <CheckRow key={item.key} item={item} semesterId={semesterId} checking={checking} />
             ))}
           </div>
           <aside className="border-t bg-muted/20 p-4 lg:border-t-0 lg:border-l">
@@ -254,7 +260,7 @@ function PreparationContent({
             {data.recent_runs.map((run) => (
               <Link
                 key={run.id}
-                to={`/scheduling/generate?run=${run.id}`}
+                to={`${generationPath}?run=${run.id}`}
                 className="flex min-h-12 items-center gap-3 px-4 text-sm transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/20"
               >
                 <span className="font-medium">任务 #{run.id}</span>
@@ -272,7 +278,15 @@ function PreparationContent({
   )
 }
 
-function CheckRow({ item, checking }: { item: PreparationCheckItem; checking: boolean }) {
+function CheckRow({
+  item,
+  semesterId,
+  checking,
+}: {
+  item: PreparationCheckItem
+  semesterId: number
+  checking: boolean
+}) {
   const state = statusStyle[item.status]
   return (
     <div className="grid gap-3 px-4 py-4 sm:grid-cols-[2rem_minmax(0,1fr)_auto] sm:items-start">
@@ -311,7 +325,7 @@ function CheckRow({ item, checking }: { item: PreparationCheckItem; checking: bo
           variant="outline"
           size="sm"
           nativeButton={false}
-          render={<Link to={item.fix_path} />}
+          render={<Link to={withSemesterId(semesterId, item.fix_path)} />}
         >
           去处理
           <ArrowRightIcon />

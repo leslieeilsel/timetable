@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { useSearchParams } from "react-router"
 import {
   AlertTriangleIcon,
   BellRingIcon,
@@ -54,7 +53,12 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
-import { enumParam, mergeSearchParams, positiveIntegerParam } from "@/lib/url-state"
+import {
+  enumParam,
+  mergeSearchParams,
+  positiveIntegerParam,
+  useHashPreservingSearchParams,
+} from "@/lib/url-state"
 
 const selectClass =
   "h-9 w-full rounded-md border bg-background px-3 text-sm outline-none transition-[border-color,box-shadow] focus:border-ring focus:ring-3 focus:ring-ring/20"
@@ -95,7 +99,7 @@ const exceptionStatuses = ["all", "active", "cancelled"] as const
 export function DailyAdjustmentsPage() {
   const { semesterId, context } = useResolvedSemesterId()
   const client = useQueryClient()
-  const [urlParams, setUrlParams] = useSearchParams()
+  const [urlParams, setUrlParams] = useHashPreservingSearchParams()
   const [date, setDate] = useState(() => dateParam(urlParams, "date", todayString()))
   const [dailySearch, setDailySearch] = useState(() => urlParams.get("q") ?? "")
   const [page, setPage] = useState(() => positiveIntegerParam(urlParams, "page", 1))
@@ -520,6 +524,12 @@ export function DailyAdjustmentsPage() {
 
 function DailyRowCard({ row }: { row: DailyTimetableRow }) {
   const temporary = row.status !== "base"
+  const notes =
+    row.substitution_notes.length > 0
+      ? row.substitution_notes.filter((note): note is string => Boolean(note))
+      : row.note
+        ? [row.note]
+        : []
   return (
     <div
       className={cn(
@@ -547,7 +557,9 @@ function DailyRowCard({ row }: { row: DailyTimetableRow }) {
           <p className="mt-1 truncate text-xs text-muted-foreground">
             {row.teacher_names.join("、")} · {row.room_name}
           </p>
-          {row.note && <p className="mt-1.5 text-xs text-muted-foreground">{row.note}</p>}
+          {notes.length > 0 && (
+            <p className="mt-1.5 text-xs text-muted-foreground">{notes.join("；")}</p>
+          )}
         </div>
       </div>
     </div>

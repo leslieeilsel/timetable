@@ -31,11 +31,13 @@ import {
 import { useSchoolContext } from "@/lib/queries"
 import { enumParam, mergeSearchParams, positiveIntegerParam } from "@/lib/url-state"
 
+type ManagedUser = User & { etag: string }
+
 export function UsersPage() {
   const client = useQueryClient()
   const [urlParams, setUrlParams] = useSearchParams()
-  const [editing, setEditing] = useState<User | null | undefined>(undefined)
-  const [resetting, setResetting] = useState<User | null>(null)
+  const [editing, setEditing] = useState<ManagedUser | null | undefined>(undefined)
+  const [resetting, setResetting] = useState<ManagedUser | null>(null)
   const [search, setSearch] = useState(() => urlParams.get("q") ?? "")
   const [roleFilter, setRoleFilter] = useState(() =>
     enumParam(urlParams, "role", ["all", "admin", "scheduler", "viewer"], "all"),
@@ -55,7 +57,7 @@ export function UsersPage() {
       if (deferredSearch) query.set("search", deferredSearch)
       if (roleFilter !== "all") query.set("role", roleFilter)
       if (statusFilter !== "all") query.set("status", statusFilter)
-      return api<User[]>(`/api/v1/users?${query}`)
+      return api<ManagedUser[]>(`/api/v1/users?${query}`)
     },
   })
   const pagination = users.data?.meta?.pagination as PaginationMeta | undefined
@@ -236,7 +238,7 @@ function UserDialog({
   onSaved,
 }: {
   open: boolean
-  user: User | null | undefined
+  user: ManagedUser | null | undefined
   onClose: () => void
   onSaved: () => Promise<void>
 }) {
@@ -261,6 +263,7 @@ function UserDialog({
     try {
       await api(user ? `/api/v1/users/${user.id}` : "/api/v1/users", {
         method: user ? "PATCH" : "POST",
+        etag: user?.etag,
         body: jsonBody(
           user
             ? { name: form.name, email: form.email, role: form.role, is_active: form.is_active }
@@ -356,7 +359,7 @@ function ResetPasswordDialog({
   onClose,
   onSaved,
 }: {
-  user: User | null
+  user: ManagedUser | null
   onClose: () => void
   onSaved: () => Promise<void>
 }) {
@@ -367,6 +370,7 @@ function ResetPasswordDialog({
     try {
       await api(`/api/v1/users/${user.id}/reset-password`, {
         method: "POST",
+        etag: user.etag,
         body: jsonBody({ temporary_password: password }),
       })
       toast.success("临时密码已重置，原会话已撤销")

@@ -10,6 +10,8 @@ use App\Modules\AcademicCalendar\Models\AppSetting;
 use App\Modules\AcademicCalendar\Models\Semester;
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Scheduling\Models\SchedulingConstraint;
+use App\Modules\Scheduling\Services\ConstraintPayloadValidator;
+use App\Modules\Timetable\Services\TimetableSynchronizationService;
 use App\Support\ApiProblemException;
 use App\Support\EtagService;
 use App\Support\Normalizer;
@@ -25,6 +27,8 @@ class SchedulingConstraintController
         private readonly WriteGuard $guard,
         private readonly EtagService $etags,
         private readonly AuditLogger $audit,
+        private readonly ConstraintPayloadValidator $payloads,
+        private readonly TimetableSynchronizationService $synchronization,
     ) {}
 
     public function index(Request $request, Semester $semester): JsonResponse
@@ -73,7 +77,7 @@ class SchedulingConstraintController
 
         return DB::transaction(function () use ($request, $semester, $data): JsonResponse {
             [$actor, $settings, $lockedSemester] = $this->guard->semester($request, $semester);
-            $this->assertPayload($lockedSemester, $data);
+            $this->payloads->assertValid($lockedSemester, $data);
             $constraint = SchedulingConstraint::query()->create([
                 ...$data,
                 'semester_id' => $lockedSemester->id,
@@ -104,7 +108,10 @@ class SchedulingConstraintController
                 'name', 'kind', 'category', 'target_type', 'target_id', 'scope', 'condition',
                 'requirement', 'weight', 'explanation',
             ]), ...$data];
-            $this->assertPayload($lockedSemester, $merged);
+            $this->payloads->assertValid($lockedSemester, $merged);
+            if ($locked->status === ConstraintStatus::Active) {
+                $this->assertSynchronizedVersionsAligned($lockedSemester, $merged, $locked->id);
+            }
             $before = $locked->toArray();
             $locked->fill($data);
             if (isset($data['name'])) {
@@ -168,10 +175,12 @@ class SchedulingConstraintController
             [$actor, $settings, $lockedSemester] = $this->guard->semester($request, $semester);
             $locked = SchedulingConstraint::query()->lockForUpdate()->findOrFail($constraint->id);
             if ($target === ConstraintStatus::Active) {
-                $this->assertPayload($lockedSemester, $locked->only([
+                $payload = $locked->only([
                     'name', 'kind', 'category', 'target_type', 'target_id', 'scope', 'condition',
                     'requirement', 'weight', 'explanation',
-                ]));
+                ]);
+                $this->payloads->assertValid($lockedSemester, $payload, $locked->source);
+                $this->assertSynchronizedVersionsAligned($lockedSemester, $payload, $locked->id);
             } elseif ($locked->source === 'system') {
                 throw new ApiProblemException('SYSTEM_CONSTRAINT_IMMUTABLE', '系统必要硬约束不能停用', 409);
             }
@@ -209,156 +218,32 @@ class SchedulingConstraintController
         ]);
     }
 
-    /** @param array<string, mixed> $data */
-    private function assertPayload(Semester $semester, array $data): void
-    {
-        $kind = $data['kind'] instanceof ConstraintKind ? $data['kind'] : ConstraintKind::from($data['kind']);
-        $weight = $data['weight'] ?? null;
-        if (($kind === ConstraintKind::Hard && $weight !== null) || ($kind === ConstraintKind::Soft && $weight === null)) {
-            throw new ApiProblemException('CONSTRAINT_WEIGHT_INVALID', '硬约束不设置权重，软规则必须设置 1 至 100 的权重', 422);
-        }
-
-        $targetType = $data['target_type'] ?? null;
-        $targetId = $data['target_id'] ?? null;
-        if (($targetType === null) !== ($targetId === null)) {
-            throw new ApiProblemException('CONSTRAINT_TARGET_INVALID', '作用对象类型和对象必须同时选择', 422);
-        }
-        if ($targetType !== null) {
-            $type = $targetType instanceof ConstraintTargetType ? $targetType : ConstraintTargetType::from($targetType);
-            if (! $this->targetExists($semester, $type, (int) $targetId)) {
-                throw new ApiProblemException('CONSTRAINT_TARGET_NOT_FOUND', '规则作用对象不存在或不属于该学期', 422);
-            }
-        }
-        $category = $data['category'] instanceof ConstraintCategory
-            ? $data['category']
-            : ConstraintCategory::from($data['category']);
-        $this->assertRequirement(
-            $semester,
-            $category,
-            $data['requirement'],
-            $targetType instanceof ConstraintTargetType ? $targetType : ($targetType === null ? null : ConstraintTargetType::from($targetType)),
-            $targetId === null ? null : (int) $targetId,
-        );
-    }
-
-    /**
-     * @param  array<string, mixed>  $requirement
-     */
-    private function assertRequirement(
-        Semester $semester,
-        ConstraintCategory $category,
-        array $requirement,
-        ?ConstraintTargetType $targetType,
-        ?int $targetId,
-    ): void {
-        $valid = match ($category) {
-            ConstraintCategory::Availability, ConstraintCategory::ForbiddenSlot => $this->hasBoolean($requirement, ['available', 'allowed_only', 'resource_no_overlap', 'item_allows_course', 'teacher_course_qualification', 'preserve_locked_entries']),
-            ConstraintCategory::DailyLoad => $this->hasInteger($requirement, ['max_items_per_day', 'max_per_day'], 1, 20),
-            ConstraintCategory::WeeklyLoad => isset($requirement['assignment_completeness'])
-                || $this->hasInteger($requirement, ['max_items_per_week', 'max_per_week'], 1, 100),
-            ConstraintCategory::ConsecutiveItems => $this->hasInteger($requirement, ['max_consecutive_items', 'maximum'], 1, 10),
-            ConstraintCategory::CourseDistribution => isset($requirement['spread_across_weekdays'])
-                || $this->hasInteger($requirement, ['max_same_course_per_day', 'max_per_day'], 1, 10),
-            ConstraintCategory::PreferredSlot => in_array($requirement['preference'] ?? null, ['prefer', 'avoid'], true),
-            ConstraintCategory::RoomRequirement => isset($requirement['assignment_room_mode']),
-            ConstraintCategory::Spacing => $this->hasInteger($requirement, ['max_same_course_per_day'], 1, 10)
-                || $this->hasInteger($requirement, ['min_gap_days', 'minimum_gap_days'], 1, 7),
-            ConstraintCategory::Synchronization, ConstraintCategory::MutualExclusion => true,
-            ConstraintCategory::WorkloadBalance => isset($requirement['balance_teacher_daily_load'])
-                || $this->hasInteger($requirement, ['max_items_per_day'], 1, 20),
-            ConstraintCategory::TeacherGaps => isset($requirement['minimize_teacher_gaps']) || isset($requirement['minimize']),
-            ConstraintCategory::CoursePriority => isset($requirement['prefer_earlier_items'])
-                || in_array($requirement['preference'] ?? null, ['prefer', 'avoid'], true),
-        };
-        if (! $valid) {
-            throw new ApiProblemException(
-                'CONSTRAINT_REQUIREMENT_INVALID',
-                '规则要求缺少该规则类型所需的数量、偏好或开关，请重新填写',
-                422,
-                ['category' => $category->value],
-            );
-        }
-
-        if (in_array($category, [ConstraintCategory::Synchronization, ConstraintCategory::MutualExclusion], true)) {
-            $ids = $requirement['with_assignment_ids'] ?? $requirement['assignment_ids'] ?? [];
-            $ids = is_array($ids) ? array_values(array_unique(array_map('intval', $ids))) : [];
-            if ($targetType === ConstraintTargetType::TeachingAssignment && $targetId !== null) {
-                $ids[] = $targetId;
-                $ids = array_values(array_unique($ids));
-            }
-            if (count($ids) < 2) {
-                throw new ApiProblemException(
-                    'CONSTRAINT_RELATION_TARGETS_INSUFFICIENT',
-                    '同步或互斥规则至少需要选择两条任课关系',
-                    422,
-                );
-            }
-            $existing = DB::table('teaching_assignments')
-                ->where('semester_id', $semester->id)->whereIn('id', $ids)->count();
-            if ($existing !== count($ids)) {
-                throw new ApiProblemException('CONSTRAINT_RELATION_TARGET_INVALID', '同步或互斥规则包含无效任课关系', 422);
-            }
-            if ($category === ConstraintCategory::MutualExclusion
-                && ! in_array($requirement['mode'] ?? 'same_slot', ['same_slot', 'same_day'], true)) {
-                throw new ApiProblemException('CONSTRAINT_EXCLUSION_MODE_INVALID', '互斥方式只能选择不同课节或不同日期', 422);
-            }
-        }
-    }
-
-    /**
-     * @param  array<string, mixed>  $requirement
-     * @param  list<string>  $keys
-     */
-    private function hasBoolean(array $requirement, array $keys): bool
-    {
-        foreach ($keys as $key) {
-            if (array_key_exists($key, $requirement) && (is_bool($requirement[$key]) || is_string($requirement[$key]))) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * @param  array<string, mixed>  $requirement
-     * @param  list<string>  $keys
-     */
-    private function hasInteger(array $requirement, array $keys, int $minimum, int $maximum): bool
-    {
-        foreach ($keys as $key) {
-            if (isset($requirement[$key]) && filter_var($requirement[$key], FILTER_VALIDATE_INT) !== false) {
-                $value = (int) $requirement[$key];
-
-                return $value >= $minimum && $value <= $maximum;
-            }
-        }
-
-        return false;
-    }
-
-    private function targetExists(Semester $semester, ConstraintTargetType $type, int $targetId): bool
-    {
-        return match ($type) {
-            ConstraintTargetType::Semester => $targetId === $semester->id,
-            ConstraintTargetType::Grade => DB::table('grades')->where('id', $targetId)->exists(),
-            ConstraintTargetType::SchoolClass => DB::table('school_classes')
-                ->where('id', $targetId)->where('academic_year_id', $semester->academic_year_id)->exists(),
-            ConstraintTargetType::Teacher => DB::table('teachers')->where('id', $targetId)->exists(),
-            ConstraintTargetType::Course => DB::table('courses')->where('id', $targetId)->exists(),
-            ConstraintTargetType::Room => DB::table('rooms')->where('id', $targetId)->exists(),
-            ConstraintTargetType::TeachingAssignment => DB::table('teaching_assignments')
-                ->where('id', $targetId)->where('semester_id', $semester->id)->exists(),
-            ConstraintTargetType::TeachingGroup => DB::table('teaching_groups')
-                ->where('id', $targetId)->where('semester_id', $semester->id)->exists(),
-        };
-    }
-
     private function assertUserEditable(SchedulingConstraint $constraint): void
     {
         if ($constraint->source === 'system') {
             throw new ApiProblemException('SYSTEM_CONSTRAINT_IMMUTABLE', '系统必要硬约束不能修改或删除', 409);
         }
+    }
+
+    /** @param array<string, mixed> $payload */
+    private function assertSynchronizedVersionsAligned(Semester $semester, array $payload, int $constraintId): void
+    {
+        $kind = $payload['kind'] instanceof ConstraintKind
+            ? $payload['kind']
+            : ConstraintKind::from($payload['kind']);
+        $category = $payload['category'] instanceof ConstraintCategory
+            ? $payload['category']
+            : ConstraintCategory::from($payload['category']);
+        if ($kind !== ConstraintKind::Hard || $category !== ConstraintCategory::Synchronization) {
+            return;
+        }
+        $targetId = $payload['target_id'] ?? null;
+        $relatedIds = $payload['requirement']['with_assignment_ids'] ?? [];
+        if (! is_int($targetId) || ! is_array($relatedIds)) {
+            return;
+        }
+        $assignmentIds = array_values(array_unique([$targetId, ...array_map('intval', $relatedIds)]));
+        $this->synchronization->assertCurrentVersionsAligned($semester, $assignmentIds, $constraintId);
     }
 
     private function assertParent(Semester $semester, SchedulingConstraint $constraint): void

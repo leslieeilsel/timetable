@@ -7,8 +7,10 @@ use App\Enums\ScheduleRunStatus;
 use App\Enums\TimetableVersionSource;
 use App\Enums\TimetableVersionStatus;
 use App\Models\User;
+use App\Modules\AcademicCalendar\Models\AppSetting;
 use App\Modules\AcademicCalendar\Models\Semester;
 use App\Modules\Scheduling\Models\ScheduleCandidate;
+use App\Modules\Scheduling\Models\ScheduleRun;
 use App\Modules\Scheduling\Services\WeekPatternService;
 use App\Modules\TeachingAssignment\Models\TeachingAssignment;
 use App\Modules\Timetable\Models\TimetableEntry;
@@ -18,12 +20,28 @@ use Illuminate\Support\Facades\DB;
 
 class TimetableVersionService
 {
-    public function __construct(private readonly WeekPatternService $weekPatterns) {}
+    public function __construct(
+        private readonly WeekPatternService $weekPatterns,
+        private readonly TimetableSynchronizationService $synchronization,
+    ) {}
 
-    public function resolveForRead(Semester $semester, ?int $versionId = null): ?TimetableVersion
-    {
+    public function resolveForRead(
+        Semester $semester,
+        ?int $versionId = null,
+        bool $allowDrafts = true,
+    ): ?TimetableVersion {
         if ($versionId !== null) {
-            return $this->findForSemester($semester, $versionId);
+            return $this->findReadableForSemester($semester, $versionId, $allowDrafts);
+        }
+
+        if (! $allowDrafts) {
+            if ($semester->current_timetable_version_id === null) {
+                return null;
+            }
+
+            $current = $semester->currentTimetableVersion()->first();
+
+            return $current?->status === TimetableVersionStatus::Draft ? null : $current;
         }
 
         $draft = $semester->timetableVersions()
@@ -39,6 +57,19 @@ class TimetableVersionService
         }
 
         return $semester->timetableVersions()->latest('version_no')->first();
+    }
+
+    public function findReadableForSemester(
+        Semester $semester,
+        int $versionId,
+        bool $allowDrafts = true,
+    ): TimetableVersion {
+        $version = $this->findForSemester($semester, $versionId);
+        if (! $allowDrafts && $version->status === TimetableVersionStatus::Draft) {
+            throw new ApiProblemException('VERSION_NOT_PUBLISHED', '课表版本尚未发布', 404);
+        }
+
+        return $version;
     }
 
     public function ensureWorkingDraft(Semester $semester, User $actor, ?int $versionId = null): TimetableVersion
@@ -86,6 +117,7 @@ class TimetableVersionService
             'base_version_id' => $base?->id,
             'created_by' => $actor->id,
             'input_revision' => (int) $semester->getRawOriginal('input_revision'),
+            'catalog_revision' => (int) AppSetting::query()->findOrFail(1)->getRawOriginal('catalog_revision'),
         ]);
 
         if ($base !== null) {
@@ -113,18 +145,6 @@ class TimetableVersionService
         if ($candidate->run->status !== ScheduleRunStatus::Completed) {
             throw new ApiProblemException('CANDIDATE_NOT_READY', '只有完整生成的候选方案可以采用', 409);
         }
-        if ($candidate->run->input_revision !== (int) $semester->getRawOriginal('input_revision')) {
-            throw new ApiProblemException('CANDIDATE_INPUT_STALE', '排课输入已变化，该候选方案只能查看，不能采用', 409, [
-                'candidate_input_revision' => $candidate->run->input_revision,
-                'current_input_revision' => (int) $semester->getRawOriginal('input_revision'),
-            ]);
-        }
-        if ($candidate->hard_conflict_count !== 0 || $candidate->unscheduled_count !== 0) {
-            throw new ApiProblemException('CANDIDATE_NOT_FEASIBLE', '候选方案存在硬冲突或未排课程，不能采用', 409, [
-                'hard_conflict_count' => $candidate->hard_conflict_count,
-                'unscheduled_count' => $candidate->unscheduled_count,
-            ]);
-        }
         $existing = TimetableVersion::query()->where('source_candidate_id', $candidate->id)->first();
         if ($existing !== null) {
             throw new ApiProblemException('CANDIDATE_ALREADY_ADOPTED', '该候选方案已经创建过课表版本', 409, [
@@ -132,7 +152,13 @@ class TimetableVersionService
                 'version_status' => $existing->status->value,
             ]);
         }
-
+        $this->assertCandidateSnapshotCurrent($semester, $candidate->run);
+        if ($candidate->hard_conflict_count !== 0 || $candidate->unscheduled_count !== 0) {
+            throw new ApiProblemException('CANDIDATE_NOT_FEASIBLE', '候选方案存在硬冲突或未排课程，不能采用', 409, [
+                'hard_conflict_count' => $candidate->hard_conflict_count,
+                'unscheduled_count' => $candidate->unscheduled_count,
+            ]);
+        }
         $this->assertCandidateCompleteAndConflictFree($semester, $candidate);
         $versionNo = ((int) $semester->timetableVersions()->lockForUpdate()->max('version_no')) + 1;
         $version = TimetableVersion::query()->create([
@@ -142,9 +168,11 @@ class TimetableVersionService
             'status' => TimetableVersionStatus::Draft,
             'source' => TimetableVersionSource::Candidate,
             'source_candidate_id' => $candidate->id,
-            'base_version_id' => $semester->current_timetable_version_id,
+            'base_version_id' => $candidate->run->base_version_id,
             'created_by' => $actor->id,
             'input_revision' => $candidate->run->input_revision,
+            'catalog_revision' => $candidate->run->catalog_revision
+                ?? (int) AppSetting::query()->findOrFail(1)->getRawOriginal('catalog_revision'),
             'quality_score' => $candidate->quality_score,
             'score_breakdown' => $candidate->score_breakdown,
             'hard_conflict_count' => $candidate->hard_conflict_count,
@@ -235,10 +263,16 @@ class TimetableVersionService
 
     public function assertActivatable(Semester $semester, TimetableVersion $version): void
     {
-        if ($version->input_revision !== (int) $semester->getRawOriginal('input_revision')) {
+        $settings = AppSetting::query()->findOrFail(1);
+        $inputChanged = $version->input_revision !== (int) $semester->getRawOriginal('input_revision');
+        $catalogChanged = $version->catalog_revision === null
+            || $version->catalog_revision !== (int) $settings->getRawOriginal('catalog_revision');
+        if ($inputChanged || $catalogChanged) {
             throw new ApiProblemException('VERSION_INPUT_STALE', '排课输入已变化，请重新校验或生成新草稿', 409, [
                 'version_input_revision' => $version->input_revision,
                 'current_input_revision' => (int) $semester->getRawOriginal('input_revision'),
+                'version_catalog_revision' => $version->catalog_revision,
+                'current_catalog_revision' => (int) $settings->getRawOriginal('catalog_revision'),
             ]);
         }
         if ($version->hard_conflict_count !== 0) {
@@ -246,6 +280,7 @@ class TimetableVersionService
                 'hard_conflict_count' => $version->hard_conflict_count,
             ]);
         }
+        $this->synchronization->assertVersionAligned($semester, $version);
 
         $incomplete = $semester->teachingAssignments()
             ->where('status', AssignmentStatus::Confirmed->value)
@@ -395,6 +430,28 @@ class TimetableVersionService
                 }
                 $occupancy[$key] = ($occupancy[$key] ?? 0) | $weekMask;
             }
+        }
+    }
+
+    private function assertCandidateSnapshotCurrent(Semester $semester, ScheduleRun $run): void
+    {
+        if (! $run->hasCompleteInputSnapshot()) {
+            throw new ApiProblemException('RUN_SNAPSHOT_INCOMPLETE', '自动排课任务缺少完整输入快照，该候选方案只能查看，不能采用', 409, [
+                'run_id' => $run->id,
+                'algorithm_version' => $run->algorithm_version,
+            ]);
+        }
+        if (! $run->baselineMatches(true)) {
+            throw new ApiProblemException('CANDIDATE_BASELINE_STALE', '基础课表或锁定课程已变化，该候选方案只能查看，不能采用', 409, [
+                'base_version_id' => $run->base_version_id,
+                'run_base_version_fingerprint' => $run->base_version_fingerprint,
+                'current_base_version_fingerprint' => ScheduleRun::fingerprintTimetableVersion($run->base_version_id, true),
+            ]);
+        }
+        $settings = AppSetting::query()->findOrFail(1);
+        $differences = $run->revisionDifferences($semester, $settings);
+        if ($differences !== []) {
+            throw new ApiProblemException('CANDIDATE_INPUT_STALE', '排课输入已变化，该候选方案只能查看，不能采用', 409, $differences);
         }
     }
 }

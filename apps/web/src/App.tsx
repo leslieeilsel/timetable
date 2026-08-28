@@ -2,6 +2,8 @@ import { lazy, Suspense, useEffect, type ReactNode } from "react"
 import { Navigate, Route, Routes, useLocation } from "react-router"
 import { useAuth } from "@/lib/auth"
 import { pageTitleForPath, SYSTEM_NAME } from "@/lib/brand"
+import { useSchoolContext } from "@/lib/queries"
+import { semesterPath, type SemesterDestination } from "@/lib/semester"
 import { WorkspaceShell } from "@/components/workspace-shell"
 import { LoadingState } from "@/components/page"
 
@@ -104,6 +106,15 @@ function DocumentTitle() {
   return null
 }
 
+function CurrentSemesterNavigate({ destination }: { destination: SemesterDestination }) {
+  const context = useSchoolContext()
+  const { search, hash } = useLocation()
+  if (context.isLoading) return <LoadingState label="正在载入当前学期…" />
+  const semesterId = context.data?.current_semester?.id
+  if (!semesterId) return <Navigate to="/" replace />
+  return <Navigate to={{ pathname: semesterPath(semesterId, destination), search, hash }} replace />
+}
+
 export default function App() {
   return (
     <>
@@ -167,7 +178,7 @@ export default function App() {
               path="semester/setup"
               element={
                 <RequireRole roles={["admin", "scheduler"]}>
-                  <SemesterSetupPage />
+                  <CurrentSemesterNavigate destination="setup" />
                 </RequireRole>
               }
             />
@@ -175,16 +186,19 @@ export default function App() {
               path="semester/assignments"
               element={
                 <RequireRole roles={["admin", "scheduler"]}>
-                  <TeachingAssignmentsPage />
+                  <CurrentSemesterNavigate destination="assignments" />
                 </RequireRole>
               }
             />
-            <Route path="semester/timetable" element={<TimetablePage />} />
+            <Route
+              path="semester/timetable"
+              element={<CurrentSemesterNavigate destination="timetable" />}
+            />
             <Route
               path="scheduling/preparation"
               element={
                 <RequireRole roles={["admin", "scheduler"]}>
-                  <PreparationCheckPage />
+                  <CurrentSemesterNavigate destination="preparation" />
                 </RequireRole>
               }
             />
@@ -192,7 +206,7 @@ export default function App() {
               path="scheduling/assignments"
               element={
                 <RequireRole roles={["admin", "scheduler"]}>
-                  <TeachingAssignmentsPage />
+                  <CurrentSemesterNavigate destination="assignments" />
                 </RequireRole>
               }
             />
@@ -200,7 +214,7 @@ export default function App() {
               path="scheduling/constraints"
               element={
                 <RequireRole roles={["admin", "scheduler"]}>
-                  <SchedulingConstraintsPage />
+                  <CurrentSemesterNavigate destination="constraints" />
                 </RequireRole>
               }
             />
@@ -208,16 +222,19 @@ export default function App() {
               path="scheduling/generate"
               element={
                 <RequireRole roles={["admin", "scheduler"]}>
-                  <ScheduleGenerationPage />
+                  <CurrentSemesterNavigate destination="generate" />
                 </RequireRole>
               }
             />
-            <Route path="scheduling/timetable" element={<TimetablePage />} />
+            <Route
+              path="scheduling/timetable"
+              element={<CurrentSemesterNavigate destination="timetable" />}
+            />
             <Route
               path="daily/adjustments"
               element={
                 <RequireRole roles={["admin", "scheduler"]}>
-                  <DailyAdjustmentsPage />
+                  <CurrentSemesterNavigate destination="adjustments" />
                 </RequireRole>
               }
             />
@@ -225,7 +242,7 @@ export default function App() {
               path="daily/leaves"
               element={
                 <RequireRole roles={["admin", "scheduler"]}>
-                  <TeacherLeavesPage />
+                  <CurrentSemesterNavigate destination="leaves" />
                 </RequireRole>
               }
             />
@@ -245,7 +262,47 @@ export default function App() {
                 </RequireRole>
               }
             />
+            <Route
+              path="semesters/:semesterId/preparation"
+              element={
+                <RequireRole roles={["admin", "scheduler"]}>
+                  <PreparationCheckPage />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="semesters/:semesterId/constraints"
+              element={
+                <RequireRole roles={["admin", "scheduler"]}>
+                  <SchedulingConstraintsPage />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="semesters/:semesterId/generate"
+              element={
+                <RequireRole roles={["admin", "scheduler"]}>
+                  <ScheduleGenerationPage />
+                </RequireRole>
+              }
+            />
             <Route path="semesters/:semesterId/timetable" element={<TimetablePage />} />
+            <Route
+              path="semesters/:semesterId/adjustments"
+              element={
+                <RequireRole roles={["admin", "scheduler"]}>
+                  <DailyAdjustmentsPage />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="semesters/:semesterId/leaves"
+              element={
+                <RequireRole roles={["admin", "scheduler"]}>
+                  <TeacherLeavesPage />
+                </RequireRole>
+              }
+            />
             <Route
               path="users"
               element={

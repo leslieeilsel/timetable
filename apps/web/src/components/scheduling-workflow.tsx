@@ -2,23 +2,29 @@ import { useQuery } from "@tanstack/react-query"
 import { CheckIcon, ChevronRightIcon, CircleAlertIcon } from "lucide-react"
 import { Link, useLocation } from "react-router"
 import { api } from "@/lib/api"
-import { useResolvedSemesterId } from "@/lib/semester"
+import {
+  semesterDestinationForPath,
+  semesterPathOrCurrent,
+  useResolvedSemesterId,
+  type SemesterDestination,
+} from "@/lib/semester"
 import type { PreparationCheck } from "@/lib/types"
 import { workflowStepState } from "@/lib/scheduling-workflow"
 import { cn } from "@/lib/utils"
 
 const steps = [
-  { number: 1, label: "准备检查", to: "/scheduling/preparation" },
-  { number: 2, label: "课程与任课矩阵", to: "/scheduling/assignments" },
-  { number: 3, label: "规则与约束", to: "/scheduling/constraints" },
-  { number: 4, label: "方案生成", to: "/scheduling/generate" },
-  { number: 5, label: "课表调整与诊断", to: "/scheduling/timetable" },
-]
+  { number: 1, label: "准备检查", destination: "preparation" },
+  { number: 2, label: "课程与任课矩阵", destination: "assignments" },
+  { number: 3, label: "规则与约束", destination: "constraints" },
+  { number: 4, label: "方案生成", destination: "generate" },
+  { number: 5, label: "课表调整与诊断", destination: "timetable" },
+] satisfies Array<{ number: number; label: string; destination: SemesterDestination }>
 
 export function SchedulingWorkflow() {
   const { pathname } = useLocation()
   const { semesterId } = useResolvedSemesterId()
-  const activeStepNumber = steps.find((step) => pathname.startsWith(step.to))?.number ?? 0
+  const activeDestination = semesterDestinationForPath(pathname)
+  const activeStepNumber = steps.find((step) => step.destination === activeDestination)?.number ?? 0
   const preparation = useQuery({
     queryKey: ["preparation-check", semesterId],
     queryFn: () => api<PreparationCheck>(`/api/v1/semesters/${semesterId}/preparation-check`),
@@ -33,7 +39,8 @@ export function SchedulingWorkflow() {
     >
       <ol className="flex min-w-max items-center py-2.5">
         {steps.map((step, index) => {
-          const active = pathname.startsWith(step.to)
+          const active = step.destination === activeDestination
+          const to = semesterPathOrCurrent(semesterId, step.destination)
           const actualState = workflowStepState(step.number, preparation.data?.data.checks)
           const state = step.number < activeStepNumber ? actualState : "pending"
           const completed = state === "complete" && !active
@@ -47,7 +54,7 @@ export function SchedulingWorkflow() {
                 ? "有待处理提醒"
                 : "未完成"
           return (
-            <li key={step.to} className="flex items-center">
+            <li key={step.destination} className="flex items-center">
               {index > 0 && (
                 <ChevronRightIcon
                   className="mx-2 size-3.5 text-muted-foreground/60"
@@ -55,7 +62,7 @@ export function SchedulingWorkflow() {
                 />
               )}
               <Link
-                to={step.to}
+                to={to}
                 aria-current={active ? "step" : undefined}
                 aria-label={`${step.label}，${active ? "当前步骤" : stateLabel}`}
                 data-state={active ? "active" : state}
