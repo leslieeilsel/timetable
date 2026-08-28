@@ -51,14 +51,22 @@ export async function apiAllPages<T>(path: string): Promise<ApiResult<T[]>> {
   url.searchParams.set("per_page", "100")
   let page = 1
   let lastPage = 1
-  let etag: string | null = null
+  let snapshotEtag: string | null | undefined
   let meta: Record<string, unknown> | undefined
   const items: T[] = []
   do {
     url.searchParams.set("page", String(page))
     const result = await api<T[]>(`${url.pathname}${url.search}`)
+    if (snapshotEtag === undefined) snapshotEtag = result.etag
+    else if (result.etag !== snapshotEtag) {
+      throw new ApiError(
+        "分页数据在读取过程中发生变化，请重试。",
+        409,
+        "PAGINATED_SNAPSHOT_CHANGED",
+        { page, expected_etag: snapshotEtag, actual_etag: result.etag },
+      )
+    }
     items.push(...result.data)
-    etag = result.etag
     meta = result.meta
     const pagination = result.meta?.pagination
     lastPage =
@@ -68,7 +76,7 @@ export async function apiAllPages<T>(path: string): Promise<ApiResult<T[]>> {
     page += 1
   } while (page <= lastPage)
 
-  return { data: items, etag, meta }
+  return { data: items, etag: snapshotEtag ?? null, meta }
 }
 
 async function request<T>(

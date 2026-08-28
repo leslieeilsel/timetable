@@ -274,7 +274,12 @@ class AcademicCalendarController
     {
         $request->validate([
             'reason' => ['nullable', 'string', 'max:500'],
-            'replacement_semester_id' => ['nullable', 'integer', 'exists:semesters,id'],
+            'replacement_semester_id' => [
+                'nullable',
+                'integer',
+                'exists:semesters,id',
+                Rule::notIn([$semester->getKey()]),
+            ],
         ]);
 
         return $this->changeSemesterStatus($request, $semester, LifecycleStatus::Closed);

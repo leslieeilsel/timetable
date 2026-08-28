@@ -203,6 +203,19 @@ it('builds a semester and rejects a teacher conflict in the same slot', function
     $this->putJson('/api/v1/context/current-semester', ['semester_id' => $semesterA['id']])
         ->assertOk()
         ->assertJsonPath('data.current_semester.id', $semesterA['id']);
+    $this->withHeader('If-Match', $semesterEtag)
+        ->postJson("/api/v1/semesters/{$semesterA['id']}/close", [
+            'reason' => '替代学期不能指向自身',
+            'replacement_semester_id' => $semesterA['id'],
+        ])
+        ->assertUnprocessable()
+        ->assertJsonPath('code', 'VALIDATION_FAILED');
+    $this->getJson('/api/v1/context')
+        ->assertOk()
+        ->assertJsonPath('data.current_semester.id', $semesterA['id']);
+    $this->getJson("/api/v1/semesters/{$semesterA['id']}")
+        ->assertOk()
+        ->assertJsonPath('data.status', 'open');
     $closed = $this->withHeader('If-Match', $semesterEtag)
         ->postJson("/api/v1/semesters/{$semesterA['id']}/close", ['reason' => '验收未排满任务的管理员强制关闭'])
         ->assertOk()

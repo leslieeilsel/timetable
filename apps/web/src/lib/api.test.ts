@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { api, ApiError, apiMessage, jsonBody } from "@/lib/api"
+import { api, apiAllPages, ApiError, apiMessage, jsonBody } from "@/lib/api"
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -45,5 +45,33 @@ describe("API utilities", () => {
       }),
     ).resolves.toMatchObject({ data: { saved: true } })
     expect(fetchMock).toHaveBeenCalledTimes(4)
+  })
+
+  it("rejects paginated results assembled from different ETag revisions", async () => {
+    vi.stubGlobal("window", { location: { origin: "http://localhost" } })
+    const page = (data: number[], currentPage: number, etag: string) =>
+      new Response(
+        JSON.stringify({
+          data,
+          meta: { pagination: { page: currentPage, last_page: 2 } },
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json", ETag: etag },
+        },
+      )
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(page([1], 1, '"revision-1"'))
+        .mockResolvedValueOnce(page([2], 2, '"revision-2"')),
+    )
+
+    await expect(apiAllPages<number>("/api/v1/items")).rejects.toMatchObject({
+      status: 409,
+      code: "PAGINATED_SNAPSHOT_CHANGED",
+      details: { page: 2, expected_etag: '"revision-1"', actual_etag: '"revision-2"' },
+    })
   })
 })

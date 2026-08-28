@@ -129,6 +129,11 @@ it('previews leave impact, explains substitute recommendations and supports mult
         ->assertJsonPath('data.leave.status', 'active');
     $leaveId = $created->json('data.leave.id');
 
+    $this->getJson("/api/v1/semesters/{$fixture['semester_id']}/teacher-leaves?date_to=2026-09-07&per_page=20")
+        ->assertOk()
+        ->assertJsonPath('meta.pagination.total', 1)
+        ->assertJsonPath('data.0.id', $leaveId);
+
     $recommendations = $this->getJson(
         "/api/v1/semesters/{$fixture['semester_id']}/teacher-leaves/{$leaveId}/recommendations"
         ."?entry_id={$fixture['entry_id']}&date=2026-09-07",

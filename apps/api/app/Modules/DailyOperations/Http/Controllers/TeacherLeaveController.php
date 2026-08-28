@@ -39,13 +39,16 @@ class TeacherLeaveController
             'page' => ['sometimes', 'integer', 'min:1'],
             'per_page' => ['sometimes', 'integer', Rule::in([20, 50, 100])],
         ]);
+        $dateTo = isset($filters['date_to'])
+            ? Carbon::parse((string) $filters['date_to'])->endOfDay()
+            : null;
         $paginator = $semester->teacherLeaves()
             ->with(['teacher:id,name,employee_no', 'creator:id,name'])
             ->withCount(['substitutions' => fn ($query) => $query->where('status', OperationalStatus::Active->value)])
             ->when(isset($filters['teacher_id']), fn ($query) => $query->where('teacher_id', $filters['teacher_id']))
             ->when(isset($filters['status']), fn ($query) => $query->where('status', $filters['status']))
             ->when(isset($filters['date_from']), fn ($query) => $query->where('ends_at', '>=', $filters['date_from']))
-            ->when(isset($filters['date_to']), fn ($query) => $query->where('starts_at', '<=', $filters['date_to']))
+            ->when($dateTo, fn ($query) => $query->where('starts_at', '<=', $dateTo))
             ->latest('starts_at')
             ->latest('id')
             ->paginate((int) ($filters['per_page'] ?? 20));
