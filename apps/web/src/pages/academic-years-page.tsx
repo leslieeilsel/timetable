@@ -6,6 +6,7 @@ import { toast } from "sonner"
 import { api, apiAllPages, ApiError, apiMessage, jsonBody } from "@/lib/api"
 import { useAuth } from "@/lib/auth"
 import type { AcademicYear, Grade, PaginationMeta, SchoolClass, Semester } from "@/lib/types"
+import { DatePicker } from "@/components/date-picker"
 import { EmptyList, ErrorState, Field, LoadingState, PageHeader } from "@/components/page"
 import { StatusBadge } from "@/components/status-badge"
 import { TableActionButton } from "@/components/table-action-button"
@@ -31,6 +32,7 @@ import {
 } from "@/components/ui/table"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ListToolbar, ToolbarSelect } from "@/components/list-toolbar"
+import { SimpleSelect } from "@/components/simple-select"
 import { useSchoolContext } from "@/lib/queries"
 import { enumParam, mergeSearchParams, positiveIntegerParam } from "@/lib/url-state"
 import {
@@ -192,6 +194,7 @@ export function AcademicYearsPage() {
             <Field label="学年名称">
               <Input
                 value={form.name}
+                placeholder="例如：2026-2027 学年"
                 onChange={(event) =>
                   setForm((current) => ({ ...current, name: event.target.value }))
                 }
@@ -199,23 +202,23 @@ export function AcademicYearsPage() {
             </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="开始日期">
-                <Input
-                  type="date"
+                <DatePicker
                   value={form.start_date}
-                  onInput={(event) => {
-                    const value = event.currentTarget.value
+                  onValueChange={(value) => {
                     setForm((current) => ({ ...current, start_date: value }))
                   }}
+                  label="开始日期"
+                  className="w-full"
                 />
               </Field>
               <Field label="结束日期">
-                <Input
-                  type="date"
+                <DatePicker
                   value={form.end_date}
-                  onInput={(event) => {
-                    const value = event.currentTarget.value
+                  onValueChange={(value) => {
                     setForm((current) => ({ ...current, end_date: value }))
                   }}
+                  label="结束日期"
+                  className="w-full"
                 />
               </Field>
             </div>
@@ -781,10 +784,10 @@ function SemesterLifecycleDialog({
         <div className="grid gap-4">
           {!reopening && (
             <Field label="替代当前学期（可选）">
-              <select
-                className="h-8 rounded-2xl bg-input/50 px-3 text-sm"
+              <SimpleSelect
+                className="w-full"
                 value={replacementId}
-                onChange={(event) => setReplacementId(event.target.value)}
+                onValueChange={setReplacementId}
               >
                 <option value="">不设置</option>
                 {replacementSemesters.map((semester) => (
@@ -792,7 +795,7 @@ function SemesterLifecycleDialog({
                     {semester.name}
                   </option>
                 ))}
-              </select>
+              </SimpleSelect>
             </Field>
           )}
           {(reopening || isAdmin) && (
@@ -901,10 +904,10 @@ function ClassDialog({
         </DialogHeader>
         <div className="grid gap-4">
           <Field label="年级">
-            <select
-              className="h-8 rounded-2xl bg-input/50 px-3 text-sm"
+            <SimpleSelect
+              className="w-full"
               value={form.grade_id}
-              onChange={(event) => setForm({ ...form, grade_id: event.target.value })}
+              onValueChange={(value) => setForm({ ...form, grade_id: value })}
             >
               {grades
                 .filter((grade) => grade.is_active)
@@ -913,30 +916,32 @@ function ClassDialog({
                     {grade.name}
                   </option>
                 ))}
-            </select>
+            </SimpleSelect>
           </Field>
           <Field label="班级名称">
             <Input
               value={form.name}
+              placeholder="例如：七年级1班"
               onChange={(event) => setForm({ ...form, name: event.target.value })}
             />
           </Field>
           <Field label="班级编号（可选）">
             <Input
               value={form.code}
+              placeholder="例如：G7-01"
               onChange={(event) => setForm({ ...form, code: event.target.value })}
             />
           </Field>
           {item && (
             <Field label="状态">
-              <select
-                className="h-8 rounded-2xl bg-input/50 px-3 text-sm"
+              <SimpleSelect
+                className="w-full"
                 value={form.status}
-                onChange={(event) => setForm({ ...form, status: event.target.value })}
+                onValueChange={(value) => setForm({ ...form, status: value })}
               >
                 <option value="active">启用</option>
                 <option value="inactive">停用</option>
-              </select>
+              </SimpleSelect>
             </Field>
           )}
         </div>
@@ -991,23 +996,23 @@ function SemesterDialog({
         </DialogHeader>
         <div className="grid grid-cols-2 gap-3">
           <Field label="开始日期">
-            <Input
-              type="date"
+            <DatePicker
               value={dates.start_date}
-              onInput={(event) => {
-                const value = event.currentTarget.value
+              onValueChange={(value) => {
                 setDates((current) => ({ ...current, start_date: value }))
               }}
+              label="开始日期"
+              className="w-full"
             />
           </Field>
           <Field label="结束日期">
-            <Input
-              type="date"
+            <DatePicker
               value={dates.end_date}
-              onInput={(event) => {
-                const value = event.currentTarget.value
+              onValueChange={(value) => {
                 setDates((current) => ({ ...current, end_date: value }))
               }}
+              label="结束日期"
+              className="w-full"
             />
           </Field>
         </div>

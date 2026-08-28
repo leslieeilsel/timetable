@@ -29,21 +29,24 @@ import type {
   Teacher,
   TeachingAssignment,
 } from "@/lib/types"
+import { DatePicker } from "@/components/date-picker"
 import { EmptyList, ErrorState, Field, LoadingState, PageHeader } from "@/components/page"
 import { ListToolbar, ToolbarSelect } from "@/components/list-toolbar"
+import { AssignmentPicker, RoomPicker, TeacherPicker } from "@/components/resource-picker"
+import { SimpleSelect } from "@/components/simple-select"
 import { StatusBadge } from "@/components/status-badge"
 import { TablePagination } from "@/components/table-pagination"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet"
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import {
   Table,
   TableBody,
@@ -60,8 +63,6 @@ import {
   useHashPreservingSearchParams,
 } from "@/lib/url-state"
 
-const selectClass =
-  "h-9 w-full rounded-md border bg-background px-3 text-sm outline-none transition-[border-color,box-shadow] focus:border-ring focus:ring-3 focus:ring-ring/20"
 const weekdayNames = ["", "周一", "周二", "周三", "周四", "周五", "周六", "周日"]
 const typeLabels: Record<CalendarExceptionType, string> = {
   move: "移动课节",
@@ -266,14 +267,15 @@ export function DailyAdjustmentsPage() {
               >
                 <ChevronLeftIcon />
               </Button>
-              <Input
-                type="date"
-                aria-label="查看日期"
+              <DatePicker
+                label="查看日期"
+                surface="filter"
                 className="w-40"
                 min={current?.start_date}
                 max={current?.end_date}
                 value={date}
-                onChange={(event) => setDate(event.target.value)}
+                onValueChange={setDate}
+                required
               />
               <Button
                 variant="outline"
@@ -298,6 +300,7 @@ export function DailyAdjustmentsPage() {
             <label className="relative block w-full lg:ml-auto lg:max-w-80">
               <SearchIcon className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
+                surface="filter"
                 value={dailySearch}
                 onChange={(event) => setDailySearch(event.target.value)}
                 placeholder="筛选班级、课程、教师或教室"
@@ -400,20 +403,20 @@ export function DailyAdjustmentsPage() {
               <option value="active">生效中</option>
               <option value="cancelled">已取消</option>
             </ToolbarSelect>
-            <Input
-              type="date"
-              aria-label="开始日期"
+            <DatePicker
+              label="开始日期"
+              surface="filter"
               className="w-40"
               value={dateFrom}
-              onChange={(event) => setDateFrom(event.target.value)}
+              onValueChange={setDateFrom}
             />
             <span className="text-sm text-muted-foreground">至</span>
-            <Input
-              type="date"
-              aria-label="结束日期"
+            <DatePicker
+              label="结束日期"
+              surface="filter"
               className="w-40"
               value={dateTo}
-              onChange={(event) => setDateTo(event.target.value)}
+              onValueChange={setDateTo}
             />
           </ListToolbar>
           {exceptions.isLoading ? (
@@ -666,13 +669,16 @@ function ExceptionEditor({
   }
 
   return (
-    <Sheet open={open} onOpenChange={(next) => !next && onClose()}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-[620px]">
-        <SheetHeader className="border-b pr-14">
-          <SheetTitle>新建临时调整</SheetTitle>
-          <SheetDescription>先预览影响与冲突，再确认保存；记录只覆盖指定日期。</SheetDescription>
-        </SheetHeader>
-        <form className="grid gap-5 p-6" onSubmit={(event) => void submitPreview(event)}>
+    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="flex max-h-[calc(100svh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[620px]">
+        <DialogHeader className="border-b p-6 pr-16">
+          <DialogTitle>新建临时调整</DialogTitle>
+          <DialogDescription>先预览影响与冲突，再确认保存；记录只覆盖指定日期。</DialogDescription>
+        </DialogHeader>
+        <form
+          className="grid min-h-0 flex-1 gap-5 overflow-y-auto p-6"
+          onSubmit={(event) => void submitPreview(event)}
+        >
           <div className="rounded-xl border bg-muted/25 p-3 text-sm text-muted-foreground">
             <p className="flex items-center gap-2 font-medium text-foreground">
               <CalendarClockIcon className="size-4 text-primary" />
@@ -682,24 +688,26 @@ function ExceptionEditor({
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="调整类型">
-              <select
-                className={selectClass}
+              <SimpleSelect
+                className="w-full"
                 value={form.type}
-                onChange={(event) => update("type", event.target.value as CalendarExceptionType)}
+                onValueChange={(value) => update("type", value as CalendarExceptionType)}
               >
                 {Object.entries(typeLabels).map(([value, label]) => (
                   <option key={value} value={value}>
                     {label}
                   </option>
                 ))}
-              </select>
+              </SimpleSelect>
             </Field>
             <Field label="生效日期">
-              <Input
-                type="date"
+              <DatePicker
                 disabled
                 value={form.effective_date}
-                aria-describedby="effective-date-help"
+                onValueChange={(value) => update("effective_date", value)}
+                label="生效日期"
+                className="w-full"
+                ariaDescribedBy="effective-date-help"
               />
               <p id="effective-date-help" className="mt-1.5 text-xs text-muted-foreground">
                 来自当前日期视图；如需调整其他日期，请先关闭面板并切换日期。
@@ -709,11 +717,11 @@ function ExceptionEditor({
 
           {form.type !== "makeup" && (
             <Field label={form.type === "activity" ? "被活动占用的课程" : "原课程"}>
-              <select
+              <SimpleSelect
                 required
-                className={selectClass}
+                className="w-full"
                 value={form.original_entry_id}
-                onChange={(event) => update("original_entry_id", event.target.value)}
+                onValueChange={(value) => update("original_entry_id", value)}
               >
                 <option value="">请选择当天实际课程</option>
                 {availableRows.map((row) => (
@@ -721,17 +729,17 @@ function ExceptionEditor({
                     {row.item_name} · {row.target_name} · {row.course_name} · {row.teacher_name}
                   </option>
                 ))}
-              </select>
+              </SimpleSelect>
             </Field>
           )}
 
           {form.type === "swap" && (
             <Field label="交换目标课程">
-              <select
+              <SimpleSelect
                 required
-                className={selectClass}
+                className="w-full"
                 value={form.related_entry_id}
-                onChange={(event) => update("related_entry_id", event.target.value)}
+                onValueChange={(value) => update("related_entry_id", value)}
               >
                 <option value="">请选择另一节课程</option>
                 {availableRows
@@ -741,47 +749,40 @@ function ExceptionEditor({
                       {row.item_name} · {row.target_name} · {row.course_name}
                     </option>
                   ))}
-              </select>
+              </SimpleSelect>
             </Field>
           )}
 
           {form.type === "makeup" && (
             <Field label="补课任课关系">
-              <select
-                required
-                className={selectClass}
+              <AssignmentPicker
+                assignments={assignments}
+                requireConfirmed
                 value={form.replacement_assignment_id}
-                onChange={(event) => update("replacement_assignment_id", event.target.value)}
-              >
-                <option value="">请选择课程、班级与教师</option>
-                {assignments.map((assignment) => (
-                  <option key={assignment.id} value={assignment.id}>
-                    {assignmentTarget(assignment)} · {assignment.course.name} ·{" "}
-                    {assignment.teacher.name}
-                  </option>
-                ))}
-              </select>
+                onValueChange={(value) => update("replacement_assignment_id", value)}
+              />
             </Field>
           )}
 
           {(form.type === "move" || form.type === "makeup") && (
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="目标日期">
-                <Input
-                  type="date"
+                <DatePicker
                   required
                   min={semester?.start_date}
                   max={semester?.end_date}
                   value={form.replacement_date}
-                  onChange={(event) => update("replacement_date", event.target.value)}
+                  onValueChange={(value) => update("replacement_date", value)}
+                  label="目标日期"
+                  className="w-full"
                 />
               </Field>
               <Field label="目标课节">
-                <select
+                <SimpleSelect
                   required
-                  className={selectClass}
+                  className="w-full"
                   value={form.replacement_item_id}
-                  onChange={(event) => update("replacement_item_id", event.target.value)}
+                  onValueChange={(value) => update("replacement_item_id", value)}
                 >
                   <option value="">请选择课节</option>
                   {items
@@ -792,55 +793,37 @@ function ExceptionEditor({
                         {item.name} · {shortTime(item.start_time)}–{shortTime(item.end_time)}
                       </option>
                     ))}
-                </select>
+                </SimpleSelect>
               </Field>
             </div>
           )}
 
           {form.type === "teacher_change" && (
             <Field label="临时教师">
-              <select
-                required
-                className={selectClass}
+              <TeacherPicker
+                teachers={teachers.filter(
+                  (teacher) =>
+                    teacher.id !== selectedEntry?.teacher_id &&
+                    (teacher.courses ?? []).some(
+                      (course) => course.id === selectedEntry?.course_id,
+                    ),
+                )}
+                courseId={selectedEntry?.course_id}
+                requireQualification
                 value={form.replacement_teacher_id}
-                onChange={(event) => update("replacement_teacher_id", event.target.value)}
-              >
-                <option value="">请选择教师</option>
-                {teachers
-                  .filter(
-                    (teacher) =>
-                      teacher.is_active &&
-                      teacher.id !== selectedEntry?.teacher_id &&
-                      (teacher.courses ?? []).some(
-                        (course) => course.id === selectedEntry?.course_id,
-                      ),
-                  )
-                  .map((teacher) => (
-                    <option key={teacher.id} value={teacher.id}>
-                      {teacher.name} {teacher.employee_no ? `· ${teacher.employee_no}` : ""}
-                    </option>
-                  ))}
-              </select>
+                onValueChange={(value) => update("replacement_teacher_id", value)}
+              />
             </Field>
           )}
 
           {form.type === "room_change" && (
             <Field label="临时教室">
-              <select
-                required
-                className={selectClass}
+              <RoomPicker
+                rooms={rooms.filter((room) => room.id !== selectedEntry?.room_id)}
+                contextDescription="选择新的教室/场地；当前使用场地已排除"
                 value={form.replacement_room_id}
-                onChange={(event) => update("replacement_room_id", event.target.value)}
-              >
-                <option value="">请选择教室</option>
-                {rooms
-                  .filter((room) => room.is_active && room.id !== selectedEntry?.room_id)
-                  .map((room) => (
-                    <option key={room.id} value={room.id}>
-                      {room.name}
-                    </option>
-                  ))}
-              </select>
+                onValueChange={(value) => update("replacement_room_id", value)}
+              />
             </Field>
           )}
 
@@ -872,7 +855,7 @@ function ExceptionEditor({
 
           <button type="submit" className="hidden" aria-hidden="true" />
         </form>
-        <SheetFooter className="flex-row flex-wrap justify-end border-t bg-background/95">
+        <DialogFooter className="flex-row flex-wrap justify-end border-t bg-background/95 p-6">
           <Button variant="outline" onClick={onClose} disabled={busy}>
             取消
           </Button>
@@ -884,9 +867,9 @@ function ExceptionEditor({
             <CheckCircle2Icon />
             确认保存
           </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 

@@ -86,6 +86,7 @@ export function LoginPage() {
                 <Input
                   type={showPassword ? "text" : "password"}
                   autoComplete="current-password"
+                  placeholder="请输入密码"
                   className="pr-10"
                   {...form.register("password")}
                 />
@@ -194,11 +195,16 @@ export function ChangePasswordPage() {
               <Field label="当前密码" error={form.formState.errors.current_password?.message}>
                 <PasswordInput
                   autoComplete="current-password"
+                  placeholder="输入当前密码"
                   {...form.register("current_password")}
                 />
               </Field>
               <Field label="新密码" error={form.formState.errors.password?.message}>
-                <PasswordInput autoComplete="new-password" {...form.register("password")} />
+                <PasswordInput
+                  autoComplete="new-password"
+                  placeholder="至少 12 位"
+                  {...form.register("password")}
+                />
               </Field>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 {requirements.map((requirement) => (
@@ -211,6 +217,7 @@ export function ChangePasswordPage() {
               >
                 <PasswordInput
                   autoComplete="new-password"
+                  placeholder="再次输入新密码"
                   {...form.register("password_confirmation")}
                 />
               </Field>

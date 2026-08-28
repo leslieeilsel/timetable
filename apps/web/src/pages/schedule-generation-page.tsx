@@ -1,10 +1,12 @@
-import { useEffect, useState, type FormEvent } from "react"
+import { useEffect, useMemo, useState, type FormEvent } from "react"
 import { Link } from "react-router"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   AlertTriangleIcon,
   ArrowRightIcon,
   CheckCircle2Icon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
   ChevronDownIcon,
   Clock3Icon,
   EyeIcon,
@@ -21,14 +23,24 @@ import type {
   ClassSetting,
   PaginationMeta,
   PreparationCheck,
+  Room,
   ScheduleCandidate,
   ScheduleCandidateEntry,
   ScheduleRun,
+  ScheduleTemplate,
   TeachingAssignment,
+  TimetableEntry,
 } from "@/lib/types"
 import { EmptyList, ErrorState, Field, LoadingState, PageHeader } from "@/components/page"
+import {
+  ClassPicker,
+  RoomPicker,
+  TeacherPicker,
+  teachersWithAssignmentCourses,
+} from "@/components/resource-picker"
 import { SchedulingWorkflow } from "@/components/scheduling-workflow"
 import { TablePagination } from "@/components/table-pagination"
+import { TimetableGrid, type TimetableView } from "@/components/timetable-grid"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -40,6 +52,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Table,
   TableBody,
@@ -556,6 +569,8 @@ export function ScheduleGenerationPage() {
         candidate={preview}
         semesterId={semesterId ?? 0}
         runId={activeRun.data?.data.id ?? 0}
+        assignments={assignments.data?.data ?? []}
+        classSettings={classSettings.data?.data ?? []}
         onClose={() => setPreview(null)}
       />
       <AdoptDialog
@@ -815,115 +830,175 @@ function CandidatePreview({
   candidate,
   semesterId,
   runId,
+  assignments,
+  classSettings,
   onClose,
 }: {
   open: boolean
   candidate: ScheduleCandidate | null
   semesterId: number
   runId: number
+  assignments: TeachingAssignment[]
+  classSettings: ClassSetting[]
   onClose: () => void
 }) {
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(20)
-  const [classId, setClassId] = useState("")
+  const [view, setView] = useState<TimetableView>("class")
+  const [resourceId, setResourceId] = useState("")
+  const [full, setFull] = useState(false)
+  const rooms = useQuery({
+    queryKey: ["rooms"],
+    queryFn: () => apiAllPages<Room>("/api/v1/rooms"),
+    enabled: open,
+  })
+  const template = useQuery({
+    queryKey: ["schedule-template", semesterId],
+    queryFn: () => api<ScheduleTemplate>(`/api/v1/semesters/${semesterId}/schedule-template`),
+    enabled: open,
+  })
+  const resources = useMemo(() => {
+    if (view === "class")
+      return classSettings.map((setting) => ({
+        id: setting.school_class_id,
+        name: setting.school_class.name,
+      }))
+    if (view === "teacher")
+      return Array.from(
+        new Map(
+          assignments
+            .flatMap((assignment) => [assignment.teacher, ...assignment.collaborators])
+            .map((teacher) => [teacher.id, { id: teacher.id, name: teacher.name }]),
+        ).values(),
+      ).sort((left, right) => left.name.localeCompare(right.name, "zh-CN"))
+    return (rooms.data?.data ?? []).map((room) => ({ id: room.id, name: room.name }))
+  }, [assignments, classSettings, rooms.data?.data, view])
+  const resourceIndex = resources.findIndex((resource) => String(resource.id) === resourceId)
   useEffect(() => {
     if (open) {
-      setPage(1)
-      setClassId("")
+      setView("class")
+      setFull(false)
     }
   }, [open, candidate?.id])
+  useEffect(() => {
+    setResourceId((current) =>
+      resources.some((resource) => String(resource.id) === current)
+        ? current
+        : String(resources[0]?.id ?? ""),
+    )
+  }, [resources])
+  const resourceFilter =
+    view === "class" ? "school_class_id" : view === "teacher" ? "teacher_id" : "room_id"
   const detail = useQuery({
-    queryKey: ["schedule-candidate", semesterId, runId, candidate?.id, classId, page, pageSize],
+    queryKey: ["schedule-candidate-grid", semesterId, runId, candidate?.id, view, resourceId],
     queryFn: () =>
-      api<{ candidate: ScheduleCandidate; entries: ScheduleCandidateEntry[]; is_stale: boolean }>(
-        `/api/v1/semesters/${semesterId}/schedule-runs/${runId}/candidates/${candidate?.id}?page=${page}&per_page=${pageSize}${classId ? `&school_class_id=${classId}` : ""}`,
+      fetchCandidateEntries(
+        `/api/v1/semesters/${semesterId}/schedule-runs/${runId}/candidates/${candidate?.id}`,
+        resourceFilter,
+        resourceId,
       ),
-    enabled: open && candidate !== null,
+    enabled: open && candidate !== null && Boolean(resourceId),
   })
-  const pagination = paginationOf(detail.data?.meta)
+  const gridData = useMemo(() => {
+    if (!template.data?.data || !detail.data?.data) return null
+    return {
+      view,
+      days: template.data.data.days
+        .filter((day) => day.is_enabled)
+        .sort((left, right) => left.weekday - right.weekday),
+      items: template.data.data.items
+        .filter((item) => item.is_active && (full ? item.show_in_full : item.show_in_official))
+        .sort((left, right) => left.sort_order - right.sort_order),
+      entries: detail.data.data.entries.map(candidateEntryToTimetableEntry),
+    }
+  }, [detail.data?.data, full, template.data?.data, view])
+  const moveResource = (offset: number) => {
+    const next = resources[resourceIndex + offset]
+    if (next) setResourceId(String(next.id))
+  }
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-5xl">
-        <DialogHeader>
-          <DialogTitle>{candidate?.name} · 课程明细</DialogTitle>
+      <DialogContent className="flex max-h-[calc(100svh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-6xl">
+        <DialogHeader className="border-b p-6 pr-16">
+          <DialogTitle>{candidate?.name} · 课表预览</DialogTitle>
           <DialogDescription>
-            大规模明细按页加载；课表画布将在“课表调整与诊断”中按班级、教师或教室查看。
+            与最终课表使用相同视图；可按班级、教师或教室检查候选方案。
           </DialogDescription>
         </DialogHeader>
-        {detail.isLoading ? (
-          <LoadingState />
-        ) : detail.isError || !detail.data ? (
-          <ErrorState retry={() => void detail.refetch()} />
-        ) : (
-          <>
-            <div className="flex items-center gap-2">
-              <Input
-                value={classId}
-                inputMode="numeric"
-                onChange={(event) => {
-                  setClassId(event.target.value)
-                  setPage(1)
-                }}
-                placeholder="输入班级 ID 筛选（可选）"
-                className="max-w-72"
-              />
-              {detail.data.data.is_stale && (
-                <span className="text-sm text-amber-700">基于旧输入，仅可查看</span>
-              )}
-            </div>
-            <div className="overflow-hidden rounded-xl border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>班级/教学组 · 课程</TableHead>
-                    <TableHead>教师</TableHead>
-                    <TableHead>时间</TableHead>
-                    <TableHead>教室</TableHead>
-                    <TableHead>周型</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {detail.data.data.entries.map((entry) => (
-                    <TableRow key={entry.id}>
-                      <TableCell className="font-medium">
-                        {entry.teaching_assignment.school_class?.name ??
-                          `教学组 #${entry.teaching_assignment.id}`}{" "}
-                        · {entry.teaching_assignment.course.name}
-                      </TableCell>
-                      <TableCell>{entry.teaching_assignment.teacher.name}</TableCell>
-                      <TableCell>
-                        周{["", "一", "二", "三", "四", "五", "六", "日"][entry.weekday]} ·{" "}
-                        {entry.item.name}
-                      </TableCell>
-                      <TableCell>{entry.actual_room.name}</TableCell>
-                      <TableCell>
-                        {entry.week_pattern === "all" ? "每周" : entry.week_pattern.toUpperCase()}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              {pagination && (
-                <TablePagination
-                  page={pagination.page}
-                  pageSize={pagination.per_page}
-                  totalItems={pagination.total}
-                  totalPages={pagination.last_page}
-                  onPageChange={setPage}
-                  onPageSizeChange={(value) => {
-                    setPageSize(value)
-                    setPage(1)
-                  }}
-                />
-              )}
-            </div>
-          </>
-        )}
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            关闭
+        <div className="flex flex-wrap items-center gap-2 border-b px-6 py-4">
+          <Tabs value={view} onValueChange={(value) => setView(value as TimetableView)}>
+            <TabsList>
+              <TabsTrigger value="class">班级</TabsTrigger>
+              <TabsTrigger value="teacher">教师</TabsTrigger>
+              <TabsTrigger value="room">教室</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="上一个资源"
+            disabled={resourceIndex <= 0}
+            onClick={() => moveResource(-1)}
+          >
+            <ChevronLeftIcon />
           </Button>
-        </DialogFooter>
+          {view === "class" ? (
+            <ClassPicker
+              className="min-w-64"
+              classes={classSettings.map((setting) => setting.school_class)}
+              value={resourceId}
+              onValueChange={setResourceId}
+            />
+          ) : view === "teacher" ? (
+            <TeacherPicker
+              className="min-w-64"
+              teachers={teachersWithAssignmentCourses(assignments)}
+              value={resourceId}
+              onValueChange={setResourceId}
+            />
+          ) : (
+            <RoomPicker
+              className="min-w-64"
+              rooms={rooms.data?.data ?? []}
+              value={resourceId}
+              onValueChange={setResourceId}
+            />
+          )}
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="下一个资源"
+            disabled={resourceIndex < 0 || resourceIndex >= resources.length - 1}
+            onClick={() => moveResource(1)}
+          >
+            <ChevronRightIcon />
+          </Button>
+          <label className="flex items-center gap-2 text-sm">
+            <Checkbox checked={full} onCheckedChange={(checked) => setFull(Boolean(checked))} />
+            完整作息
+          </label>
+          {detail.data?.data.is_stale && (
+            <span className="ml-auto text-sm text-amber-700 dark:text-amber-300">
+              基于旧输入，仅可查看
+            </span>
+          )}
+        </div>
+        <div className="grid min-h-0 flex-1 p-6">
+          <div className="min-h-0 overflow-auto pr-1">
+            {!resourceId ? (
+              <EmptyList title="没有可查看的资源" description="请先配置班级、任课关系或教室。" />
+            ) : detail.isLoading || template.isLoading ? (
+              <LoadingState />
+            ) : detail.isError || template.isError || !gridData ? (
+              <ErrorState
+                retry={() => {
+                  void detail.refetch()
+                  void template.refetch()
+                }}
+              />
+            ) : (
+              <TimetableGrid data={gridData} />
+            )}
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   )
@@ -992,7 +1067,11 @@ function AdoptDialog({
         </DialogHeader>
         <form className="grid gap-4" onSubmit={(event) => void save(event)}>
           <Field label="版本名称">
-            <Input value={name} onChange={(event) => setName(event.target.value)} />
+            <Input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="例如：当前课表 v2"
+            />
           </Field>
           {value?.activate && (
             <Field label="切换原因">
@@ -1037,10 +1116,10 @@ function ScopePicker({
     <div className="overflow-hidden rounded-xl border">
       <div className="flex items-center gap-2 border-b p-2">
         <Input
+          surface="filter"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           placeholder="搜索范围对象"
-          className="h-9"
         />
         <Button
           type="button"
@@ -1194,6 +1273,58 @@ function assignmentMatchesScope(assignment: TeachingAssignment, type: ScopeType,
           false)
   return true
 }
+
+interface CandidateDetail {
+  candidate: ScheduleCandidate
+  entries: ScheduleCandidateEntry[]
+  is_stale: boolean
+}
+
+async function fetchCandidateEntries(path: string, filter: string, resourceId: string) {
+  const fetchPage = (page: number) =>
+    api<CandidateDetail>(
+      `${path}?per_page=100&page=${page}&${filter}=${encodeURIComponent(resourceId)}`,
+    )
+  const first = await fetchPage(1)
+  const entries = [...first.data.entries]
+  const lastPage = paginationOf(first.meta)?.last_page ?? 1
+  for (let page = 2; page <= lastPage; page += 1) {
+    const result = await fetchPage(page)
+    entries.push(...result.data.entries)
+  }
+  return { ...first, data: { ...first.data, entries } }
+}
+
+function candidateEntryToTimetableEntry(entry: ScheduleCandidateEntry): TimetableEntry {
+  const assignment = entry.teaching_assignment
+  const schoolClasses = assignment.school_class
+    ? [assignment.school_class]
+    : (assignment.teaching_group?.school_classes ?? [])
+  return {
+    id: entry.id,
+    timetable_version_id: 0,
+    teaching_assignment_id: entry.teaching_assignment_id,
+    school_class_id: assignment.school_class_id,
+    teaching_group_id: assignment.teaching_group_id,
+    teacher_id: assignment.teacher_id,
+    course_id: assignment.course_id,
+    actual_room_id: entry.actual_room_id,
+    week_pattern: entry.week_pattern,
+    active_weeks: entry.active_weeks,
+    weekday: entry.weekday,
+    item_id: entry.item_id,
+    is_locked: entry.is_locked,
+    school_class: assignment.school_class,
+    teaching_group: assignment.teaching_group,
+    school_classes: schoolClasses,
+    course: assignment.course,
+    teacher: assignment.teacher,
+    teachers: [assignment.teacher, ...assignment.collaborators],
+    actual_room: entry.actual_room,
+    item: entry.item,
+  }
+}
+
 function paginationOf(meta?: Record<string, unknown>): PaginationMeta | null {
   const value = meta?.pagination
   return value && typeof value === "object" ? (value as PaginationMeta) : null

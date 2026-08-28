@@ -11,7 +11,6 @@ import {
   FilePlus2Icon,
   LoaderCircleIcon,
   LockIcon,
-  PlusIcon,
   PrinterIcon,
   Redo2Icon,
   SparklesIcon,
@@ -45,17 +44,32 @@ import type {
   PaginationMeta,
 } from "@/lib/types"
 import { EmptyList, ErrorState, Field, LoadingState, PageHeader } from "@/components/page"
+import {
+  AssignmentPicker,
+  ClassPicker,
+  RoomPicker,
+  TeacherPicker,
+  teachersWithAssignmentCourses,
+} from "@/components/resource-picker"
+import { SimpleSelect } from "@/components/simple-select"
+import {
+  entryTargetName,
+  TimetableGrid,
+  type TimetableView,
+  weekPatternName,
+  weekdayName,
+} from "@/components/timetable-grid"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet"
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { TablePagination } from "@/components/table-pagination"
 import {
@@ -65,7 +79,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
-type View = "class" | "teacher" | "room"
+type View = TimetableView
 interface TimetableData {
   view: View
   resource_id: number | null
@@ -188,8 +202,6 @@ type TimetableEditAction =
       position: TimetablePosition
       weekPattern: TimetableEntry["week_pattern"]
     }
-const weekdayName = ["", "周一", "周二", "周三", "周四", "周五", "周六", "周日"]
-
 export function TimetablePage() {
   const { user } = useAuth()
   const { semesterId, context } = useResolvedSemesterId()
@@ -576,11 +588,12 @@ export function TimetablePage() {
                 <TabsTrigger value="room">教室</TabsTrigger>
               </TabsList>
             </Tabs>
-            <select
-              className="h-9 min-w-52 rounded-md border bg-background px-3 text-sm outline-none focus:border-ring focus:ring-3 focus:ring-ring/20"
+            <SimpleSelect
+              className="min-w-52"
               value={selectedVersionId}
-              aria-label="选择课表版本"
-              onChange={(event) => setSelectedVersionId(event.target.value)}
+              label="选择课表版本"
+              surface="filter"
+              onValueChange={setSelectedVersionId}
             >
               {user?.role === "viewer" && !selectedVersionId && (
                 <option value="">暂无已发布的当前课表</option>
@@ -594,7 +607,7 @@ export function TimetablePage() {
                   {version.input_revision !== current.input_revision ? " · 数据已变化" : ""}
                 </option>
               ))}
-            </select>
+            </SimpleSelect>
             {canMutate && (!selectedVersion || selectedVersion.status !== "draft") && (
               <Button variant="outline" onClick={() => void createDraft()}>
                 <FilePlus2Icon />
@@ -618,18 +631,28 @@ export function TimetablePage() {
             >
               <ChevronLeftIcon />
             </Button>
-            <select
-              className="h-9 min-w-64 rounded-md border bg-background px-3 text-sm outline-none focus:border-ring focus:ring-3 focus:ring-ring/20"
-              value={resourceId}
-              aria-label={`选择${view === "class" ? "班级" : view === "teacher" ? "教师" : "教室"}`}
-              onChange={(event) => setResourceId(event.target.value)}
-            >
-              {resources.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
+            {view === "class" ? (
+              <ClassPicker
+                className="min-w-64"
+                classes={(settings.data?.data ?? []).map((item) => item.school_class)}
+                value={resourceId}
+                onValueChange={setResourceId}
+              />
+            ) : view === "teacher" ? (
+              <TeacherPicker
+                className="min-w-64"
+                teachers={teachersWithAssignmentCourses(assignments.data?.data ?? [])}
+                value={resourceId}
+                onValueChange={setResourceId}
+              />
+            ) : (
+              <RoomPicker
+                className="min-w-64"
+                rooms={rooms.data?.data ?? []}
+                value={resourceId}
+                onValueChange={setResourceId}
+              />
+            )}
             <Button
               variant="outline"
               size="icon"
@@ -893,7 +916,7 @@ export function TimetablePage() {
         onSaved={refresh}
         onOperation={recordAction}
       />
-      <VersionComparisonSheet
+      <VersionComparisonDialog
         open={compareOpen}
         semesterId={current.id}
         versions={selectableVersions}
@@ -904,7 +927,7 @@ export function TimetablePage() {
   )
 }
 
-function VersionComparisonSheet({
+function VersionComparisonDialog({
   open,
   semesterId,
   versions,
@@ -961,28 +984,28 @@ function VersionComparisonSheet({
   const data = comparison.data?.data
 
   return (
-    <Sheet open={open} onOpenChange={(next) => !next && onClose()}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-[760px]">
-        <SheetHeader className="border-b pr-14">
-          <SheetTitle>比较课表版本</SheetTitle>
-          <SheetDescription>
+    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="flex max-h-[calc(100svh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[760px]">
+        <DialogHeader className="border-b p-6 pr-16">
+          <DialogTitle>比较课表版本</DialogTitle>
+          <DialogDescription>
             逐条解释两个版本的差异；比较只读，不会改变任何课程安排。
-          </SheetDescription>
-        </SheetHeader>
-        <div className="grid gap-4 p-5">
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto p-5">
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="比较基准">
-              <select
-                className="h-9 w-full rounded-md border bg-background px-3 text-sm outline-none focus:border-ring focus:ring-3 focus:ring-ring/20"
+              <SimpleSelect
+                className="w-full"
                 value={otherVersionId}
-                onChange={(event) => setOtherVersionId(event.target.value)}
+                onValueChange={setOtherVersionId}
               >
                 {alternatives.map((version) => (
                   <option key={version.id} value={version.id}>
                     v{version.version_no} · {version.name} · {versionStatusName(version.status)}
                   </option>
                 ))}
-              </select>
+              </SimpleSelect>
             </Field>
             <Field label="目标版本">
               <div className="flex h-10 items-center rounded-lg border bg-muted/30 px-3 text-sm">
@@ -1023,11 +1046,12 @@ function VersionComparisonSheet({
               <div className="overflow-hidden rounded-xl border">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
                   <p className="text-sm font-medium">差异明细</p>
-                  <select
-                    aria-label="差异类型"
-                    className="h-9 rounded-md border bg-background px-3 text-sm outline-none"
+                  <SimpleSelect
+                    label="差异类型"
+                    className="w-auto"
                     value={changeType}
-                    onChange={(event) => setChangeType(event.target.value)}
+                    onValueChange={setChangeType}
+                    surface="filter"
                   >
                     <option value="all">全部变化</option>
                     {Object.entries(versionChangeLabels).map(([value, label]) => (
@@ -1035,7 +1059,7 @@ function VersionComparisonSheet({
                         {label}
                       </option>
                     ))}
-                  </select>
+                  </SimpleSelect>
                 </div>
                 {data.changes.length === 0 ? (
                   <EmptyList
@@ -1089,13 +1113,13 @@ function VersionComparisonSheet({
             </>
           ) : null}
         </div>
-        <SheetFooter className="border-t">
+        <DialogFooter className="border-t p-6">
           <Button variant="outline" onClick={onClose}>
             完成
           </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -1122,103 +1146,6 @@ function versionEntryLabel(entry: TimetableVersionComparisonEntry) {
   return `${weekdayName[entry.weekday]} ${entry.item_name} · ${entry.teacher_names.join("、")} · ${entry.room_name}${entry.is_locked ? " · 已锁定" : ""}`
 }
 
-function TimetableGrid({
-  data,
-  editable,
-  pendingCount,
-  onSlot,
-}: {
-  data: TimetableData
-  editable: boolean
-  pendingCount: number
-  onSlot: (slot: { weekday: number; itemId: number; entry?: TimetableEntry }) => void
-}) {
-  return (
-    <div className="overflow-auto rounded-xl border bg-background">
-      <table className="w-full min-w-[920px] border-collapse text-sm">
-        <thead>
-          <tr className="bg-muted/50">
-            <th className="sticky left-0 z-10 w-32 border-r border-b bg-muted/80 p-3 text-center font-medium">
-              课节
-            </th>
-            {data.days.map((day) => (
-              <th key={day.weekday} className="min-w-40 border-b p-3 text-center font-medium">
-                {weekdayName[day.weekday]}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {data.items.map((item) => (
-            <tr key={item.id}>
-              <th className="sticky left-0 z-10 border-r border-b bg-background p-3 text-center align-middle">
-                <p className="font-medium">{item.name}</p>
-                <p className="mt-1 text-xs font-normal text-muted-foreground">
-                  {item.start_time.slice(0, 5)}–{item.end_time.slice(0, 5)}
-                </p>
-              </th>
-              {data.days.map((day) => {
-                const entries = data.entries.filter(
-                  (entry) => entry.weekday === day.weekday && entry.item_id === item.id,
-                )
-                return (
-                  <td
-                    key={day.weekday}
-                    className="h-24 border-r border-b p-1.5 align-top last:border-r-0"
-                  >
-                    {entries.length > 0 ? (
-                      <div className="grid h-full gap-1.5">
-                        {entries.map((entry) => (
-                          <button
-                            key={entry.id}
-                            type="button"
-                            className={`min-h-10 w-full rounded-lg border p-2 text-left transition hover:border-primary/40 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 ${courseTone(entry.course.name)}`}
-                            onClick={() => onSlot({ weekday: day.weekday, itemId: item.id, entry })}
-                          >
-                            <div className="flex items-start justify-between gap-1">
-                              <span className="font-medium">{entry.course.name}</span>
-                              <span className="flex shrink-0 items-center gap-1">
-                                {entry.week_pattern !== "all" && (
-                                  <Badge
-                                    variant="outline"
-                                    className="h-4 border-current/20 bg-white/55 px-1 text-[10px] dark:bg-background/45"
-                                  >
-                                    {weekPatternName(entry)}
-                                  </Badge>
-                                )}
-                                {entry.is_locked && (
-                                  <LockIcon className="size-3 text-muted-foreground" />
-                                )}
-                              </span>
-                            </div>
-                            <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                              {entrySecondary(entry, data.view)}
-                            </p>
-                          </button>
-                        ))}
-                      </div>
-                    ) : editable && item.allows_course && pendingCount > 0 ? (
-                      <button
-                        type="button"
-                        aria-label={`${weekdayName[day.weekday]}${item.name}安排待排课程`}
-                        className="group flex h-full min-h-20 w-full flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-[var(--timetable-notice-border)] bg-[var(--timetable-notice-background)] text-[var(--timetable-notice-foreground)] transition-colors hover:bg-[var(--timetable-notice-background-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--timetable-notice-border)]/40"
-                        onClick={() => onSlot({ weekday: day.weekday, itemId: item.id })}
-                      >
-                        <PlusIcon className="size-4" />
-                        <span className="text-xs font-medium">可安排</span>
-                      </button>
-                    ) : null}
-                  </td>
-                )
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
 function versionStatusName(status: TimetableVersion["status"]) {
   return status === "draft" ? "草稿" : status === "active" ? "当前" : "历史"
 }
@@ -1235,42 +1162,6 @@ function remapHistoryEntry(
       targetEntryId: action.targetEntryId === from ? to : action.targetEntryId,
     }
   return { ...action, entryId: action.entryId === from ? to : action.entryId }
-}
-
-function weekPatternName(entry: TimetableEntry) {
-  if (entry.week_pattern === "a") return "单周"
-  if (entry.week_pattern === "b") return "双周"
-  if (entry.week_pattern === "specified") {
-    const weeks = entry.active_weeks ?? []
-    return weeks.length > 3 ? `${weeks.slice(0, 3).join("/")}…周` : `${weeks.join("/")}周`
-  }
-  return "每周"
-}
-
-function entryTargetName(entry: TimetableEntry) {
-  return entry.school_class?.name ?? entry.teaching_group?.name ?? "未设置授课对象"
-}
-
-function entrySecondary(entry: TimetableEntry, view: View) {
-  const teachers = entry.teachers?.length
-    ? entry.teachers.map((teacher) => teacher.name).join("、")
-    : entry.teacher.name
-  if (view === "teacher") return `${entryTargetName(entry)} · ${entry.actual_room.name}`
-  if (view === "room") return `${entryTargetName(entry)} · ${teachers}`
-  return `${teachers} · ${entry.actual_room.name}`
-}
-
-function courseTone(course: string) {
-  const tones = [
-    "border-[var(--timetable-blue-border)] bg-[var(--timetable-blue-background)]",
-    "border-[var(--timetable-green-border)] bg-[var(--timetable-green-background)]",
-    "border-[var(--timetable-amber-border)] bg-[var(--timetable-amber-background)]",
-    "border-[var(--timetable-violet-border)] bg-[var(--timetable-violet-background)]",
-    "border-[var(--timetable-rose-border)] bg-[var(--timetable-rose-background)]",
-    "border-[var(--timetable-cyan-border)] bg-[var(--timetable-cyan-background)]",
-  ]
-  const index = Array.from(course).reduce((sum, character) => sum + character.charCodeAt(0), 0)
-  return tones[index % tones.length]
 }
 
 function SlotDialog({
@@ -1509,19 +1400,19 @@ function SlotDialog({
     }
   }
   return (
-    <Sheet open={slot !== null} onOpenChange={(next) => !next && onClose()}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-[460px]">
-        <SheetHeader>
-          <SheetTitle>{entry ? "课程详情与诊断" : "安排课程"}</SheetTitle>
-          <SheetDescription>
+    <Dialog open={slot !== null} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="flex max-h-[calc(100svh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[520px]">
+        <DialogHeader className="border-b p-6 pr-16">
+          <DialogTitle>{entry ? "课程详情与诊断" : "安排课程"}</DialogTitle>
+          <DialogDescription>
             {entry
               ? readOnly
                 ? "只读查看课程详情。"
                 : "可移动、锁定或移除这节课。锁定后必须先解锁才能移动。"
               : `${weekdayName[slot?.weekday ?? 0]} · ${items.find((item) => item.id === slot?.itemId)?.name ?? ""}`}
-          </SheetDescription>
-        </SheetHeader>
-        <div className="grid gap-6 px-6 pb-6">
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid min-h-0 flex-1 gap-6 overflow-y-auto p-6">
           {entry ? (
             <div className="rounded-2xl bg-muted/50 p-4">
               <div className="flex flex-wrap items-center gap-2">
@@ -1540,21 +1431,12 @@ function SlotDialog({
             </div>
           ) : (
             <Field label="任课关系">
-              <select
-                className="h-9 rounded-2xl bg-input/50 px-3 text-sm"
+              <AssignmentPicker
+                assignments={candidates}
+                requireConfirmed
                 value={assignmentId}
-                onChange={(event) => setAssignmentId(event.target.value)}
-              >
-                {candidates.map((assignment) => (
-                  <option key={assignment.id} value={assignment.id}>
-                    {assignment.school_class?.name ??
-                      assignment.teaching_group?.name ??
-                      "未设置授课对象"}{" "}
-                    · {assignment.course.name} · {assignment.teacher.name}（余{" "}
-                    {assignment.remaining ?? assignment.weekly_items}）
-                  </option>
-                ))}
-              </select>
+                onValueChange={setAssignmentId}
+              />
               {candidates.length === 0 && (
                 <span className="text-xs text-muted-foreground">
                   当前视角下没有仍有未排课时的任课关系。
@@ -1565,25 +1447,25 @@ function SlotDialog({
           {(entry || assignmentId) && (
             <div className="grid grid-cols-2 gap-3">
               <Field label="星期">
-                <select
-                  className="h-9 rounded-md border bg-background px-3 text-sm"
-                  value={weekday}
+                <SimpleSelect
+                  className="w-full"
+                  value={String(weekday)}
                   disabled={readOnly}
-                  onChange={(event) => setWeekday(Number(event.target.value))}
+                  onValueChange={(value) => setWeekday(Number(value))}
                 >
                   {days.map((day) => (
                     <option key={day.weekday} value={day.weekday}>
                       {weekdayName[day.weekday]}
                     </option>
                   ))}
-                </select>
+                </SimpleSelect>
               </Field>
               <Field label="课节">
-                <select
-                  className="h-9 rounded-md border bg-background px-3 text-sm"
-                  value={itemId}
+                <SimpleSelect
+                  className="w-full"
+                  value={String(itemId)}
                   disabled={readOnly}
-                  onChange={(event) => setItemId(Number(event.target.value))}
+                  onValueChange={(value) => setItemId(Number(value))}
                 >
                   {items
                     .filter((item) => item.allows_course)
@@ -1592,7 +1474,7 @@ function SlotDialog({
                         {item.name}
                       </option>
                     ))}
-                </select>
+                </SimpleSelect>
               </Field>
             </div>
           )}
@@ -1614,10 +1496,10 @@ function SlotDialog({
                 <p className="font-medium">与另一节课交换</p>
               </div>
               <Field label="目标课程">
-                <select
-                  className="h-9 rounded-md border bg-background px-3 text-sm"
+                <SimpleSelect
+                  className="w-full"
                   value={swapTargetId}
-                  onChange={(event) => setSwapTargetId(event.target.value)}
+                  onValueChange={setSwapTargetId}
                 >
                   <option value="">选择当前视角中的另一节课</option>
                   {swapTargets.map((target) => (
@@ -1627,7 +1509,7 @@ function SlotDialog({
                       {target.course.name} · {entryTargetName(target)}
                     </option>
                   ))}
-                </select>
+                </SimpleSelect>
               </Field>
               {swapTargetId && (
                 <SwapDiagnosisPanel
@@ -1669,7 +1551,7 @@ function SlotDialog({
             </div>
           )}
         </div>
-        <SheetFooter className="flex-row flex-wrap justify-end border-t">
+        <DialogFooter className="flex-row flex-wrap justify-end border-t p-6">
           {entry ? (
             <>
               <Button
@@ -1710,9 +1592,9 @@ function SlotDialog({
               </Button>
             </>
           )}
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 

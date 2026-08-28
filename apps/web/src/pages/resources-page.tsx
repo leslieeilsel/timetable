@@ -27,6 +27,7 @@ import { api, apiAllPages, ApiError, apiMessage, jsonBody } from "@/lib/api"
 import type { Grade, Course, Teacher, Room, PaginationMeta } from "@/lib/types"
 import { PageHeader, EmptyList, ErrorState, LoadingState, Field } from "@/components/page"
 import { ListToolbar, ToolbarSelect } from "@/components/list-toolbar"
+import { SimpleSelect } from "@/components/simple-select"
 import { StatusBadge } from "@/components/status-badge"
 import { TableActionButton } from "@/components/table-action-button"
 import { TablePagination } from "@/components/table-pagination"
@@ -65,6 +66,12 @@ const descriptions: Record<Kind, string> = {
   teachers: "维护教师、工号和任教课程；停用教师后不能继续用于新任课关系。",
   courses: "维护全校共用课程及课表简称；历史任课关系会保留原有课程信息。",
   rooms: "维护普通教室和专用教室；停用教室前请先检查开放学期中的排课。",
+}
+const namePlaceholders: Record<Kind, string> = {
+  grades: "例如：七年级",
+  teachers: "例如：王静",
+  courses: "例如：语文",
+  rooms: "例如：博学楼101教室",
 }
 const roomTypes = [
   ["classroom", "普通教室"],
@@ -595,6 +602,7 @@ function ResourceDialog({
                     <Input
                       value={name}
                       onChange={(event) => setName(event.target.value)}
+                      placeholder={namePlaceholders.teachers}
                       autoFocus
                     />
                   </Field>
@@ -602,6 +610,7 @@ function ResourceDialog({
                     <Input
                       value={secondary}
                       onChange={(event) => setSecondary(event.target.value)}
+                      placeholder="例如：T001"
                     />
                   </Field>
                   <label className="flex min-h-10 cursor-pointer items-center gap-2 text-sm">
@@ -642,6 +651,7 @@ function ResourceDialog({
                   />
                   <Input
                     aria-label="搜索课程"
+                    surface="filter"
                     className="pl-9"
                     placeholder="搜索课程"
                     value={courseSearch}
@@ -717,7 +727,12 @@ function ResourceDialog({
             </DialogHeader>
             <div className="grid gap-4">
               <Field label="名称">
-                <Input value={name} onChange={(event) => setName(event.target.value)} autoFocus />
+                <Input
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder={namePlaceholders[kind]}
+                  autoFocus
+                />
               </Field>
               {kind === "grades" && (
                 <Field label="排序">
@@ -731,22 +746,22 @@ function ResourceDialog({
               )}
               {kind === "courses" && (
                 <Field label="简称（可选）">
-                  <Input value={secondary} onChange={(event) => setSecondary(event.target.value)} />
+                  <Input
+                    value={secondary}
+                    onChange={(event) => setSecondary(event.target.value)}
+                    placeholder="例如：信息"
+                  />
                 </Field>
               )}
               {kind === "rooms" && (
                 <Field label="教室类型">
-                  <select
-                    className="h-8 rounded-2xl bg-input/50 px-3 text-sm outline-none"
-                    value={secondary}
-                    onChange={(event) => setSecondary(event.target.value)}
-                  >
+                  <SimpleSelect className="w-full" value={secondary} onValueChange={setSecondary}>
                     {roomTypes.map(([value, label]) => (
                       <option key={value} value={value}>
                         {label}
                       </option>
                     ))}
-                  </select>
+                  </SimpleSelect>
                 </Field>
               )}
               <label className="flex items-center gap-2 text-sm">

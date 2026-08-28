@@ -65,7 +65,7 @@ export function Field({
   children: ReactNode
 }) {
   return (
-    <label className="grid gap-2 text-sm">
+    <label className="grid content-start gap-2 text-sm">
       <span className="font-medium">{label}</span>
       {children}
       {error && <span className="text-xs text-destructive">{error}</span>}

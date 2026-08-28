@@ -15,6 +15,8 @@ import type {
 } from "@/lib/types"
 import { EmptyList, ErrorState, Field, LoadingState, PageHeader } from "@/components/page"
 import { ListToolbar, ToolbarSelect } from "@/components/list-toolbar"
+import { ClassPicker, RoomPicker, TeacherPicker } from "@/components/resource-picker"
+import { SimpleSelect } from "@/components/simple-select"
 import { StatusBadge } from "@/components/status-badge"
 import { TablePagination } from "@/components/table-pagination"
 import { Button } from "@/components/ui/button"
@@ -483,19 +485,7 @@ function ClassRoomMigrationDialog({
           </DialogDescription>
         </DialogHeader>
         <Field label="目标教室">
-          <select
-            className="h-8 rounded-2xl bg-input/50 px-3 text-sm"
-            value={roomId}
-            onChange={(event) => setRoomId(event.target.value)}
-          >
-            {rooms
-              .filter((item) => item.is_active)
-              .map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-          </select>
+          <RoomPicker rooms={rooms} value={roomId} onValueChange={setRoomId} />
         </Field>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
@@ -584,68 +574,39 @@ function ClassSettingDialog({
         </DialogHeader>
         <div className="grid gap-4">
           <Field label="班级">
-            <select
-              className="h-8 rounded-2xl bg-input/50 px-3 text-sm"
+            <ClassPicker
+              classes={classes}
+              statusById={Object.fromEntries(
+                classes.map((item) => {
+                  const configured = settings.some((setting) => setting.school_class_id === item.id)
+                  return [
+                    item.id,
+                    {
+                      label: configured ? "已配置" : "未配置",
+                    },
+                  ]
+                }),
+              )}
               value={classId}
-              onChange={(event) => setClassId(event.target.value)}
-            >
-              <optgroup label="未配置">
-                {available.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </optgroup>
-              <optgroup label="已配置">
-                {settings.map((item) => (
-                  <option key={item.school_class_id} value={item.school_class_id}>
-                    {item.school_class.name}
-                  </option>
-                ))}
-              </optgroup>
-            </select>
+              onValueChange={setClassId}
+            />
           </Field>
           <Field label="固定教室">
-            <select
-              className="h-8 rounded-2xl bg-input/50 px-3 text-sm"
-              value={roomId}
-              onChange={(event) => setRoomId(event.target.value)}
-            >
-              <option value="">未设置</option>
-              {rooms
-                .filter((item) => item.is_active)
-                .map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-            </select>
+            <RoomPicker rooms={rooms} value={roomId} onValueChange={setRoomId} clearable />
           </Field>
           <Field label="班主任（可选）">
-            <select
-              className="h-8 rounded-2xl bg-input/50 px-3 text-sm"
+            <TeacherPicker
+              teachers={teachers}
               value={teacherId}
-              onChange={(event) => setTeacherId(event.target.value)}
-            >
-              <option value="">未设置</option>
-              {teachers
-                .filter((item) => item.is_active)
-                .map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-            </select>
+              onValueChange={setTeacherId}
+              clearable
+            />
           </Field>
           <Field label="状态">
-            <select
-              className="h-8 rounded-2xl bg-input/50 px-3 text-sm"
-              value={status}
-              onChange={(event) => setStatus(event.target.value)}
-            >
+            <SimpleSelect className="w-full" value={status} onValueChange={setStatus}>
               <option value="active">启用</option>
               <option value="inactive">停用</option>
-            </select>
+            </SimpleSelect>
           </Field>
         </div>
         <DialogFooter>
@@ -766,7 +727,11 @@ function TemplateDialog({
         </DialogHeader>
         <div className="grid gap-5">
           <Field label="模板名称">
-            <Input value={name} onChange={(event) => setName(event.target.value)} />
+            <Input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="例如：初中标准作息"
+            />
           </Field>
           <Field label="启用星期">
             <div className="flex flex-wrap gap-2">
@@ -833,21 +798,20 @@ function TemplateDialog({
                   <Field label="名称">
                     <Input
                       value={item.name}
+                      placeholder="例如：第1节"
                       onChange={(event) => update(index, { name: event.target.value })}
                     />
                   </Field>
                   <Field label="类型">
-                    <select
-                      className="h-8 w-full rounded-2xl bg-input/50 px-3 text-sm"
+                    <SimpleSelect
+                      className="w-full"
                       value={item.type}
-                      onChange={(event) =>
-                        update(index, { type: event.target.value as ItemForm["type"] })
-                      }
+                      onValueChange={(value) => update(index, { type: value as ItemForm["type"] })}
                     >
                       <option value="course">课程</option>
                       <option value="fixed_non_course">固定非课程</option>
                       <option value="self_study">自习</option>
-                    </select>
+                    </SimpleSelect>
                   </Field>
                   <Field label="开始">
                     <Input

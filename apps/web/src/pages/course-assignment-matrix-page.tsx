@@ -35,6 +35,8 @@ import {
   type GroupedAssignmentView,
 } from "@/components/grouped-assignments-view"
 import { ListToolbar, ToolbarSelect } from "@/components/list-toolbar"
+import { RoomPicker, TeacherPicker } from "@/components/resource-picker"
+import { SimpleSelect } from "@/components/simple-select"
 import { EmptyList, ErrorState, Field, LoadingState, PageHeader } from "@/components/page"
 import { SchedulingWorkflow } from "@/components/scheduling-workflow"
 import { StatusBadge } from "@/components/status-badge"
@@ -115,9 +117,6 @@ const groupedSearchPlaceholders: Record<GroupedAssignmentView, string> = {
   course: "搜索课程、班级或教师",
   room: "搜索教室、班级或课程",
 }
-
-const selectClass =
-  "h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none transition-[border-color,box-shadow] focus:border-ring focus:ring-3 focus:ring-ring/20"
 
 export function CourseAssignmentMatrixPage() {
   const { semesterId, context } = useResolvedSemesterId()
@@ -1466,21 +1465,11 @@ function BatchAssignmentDialog({
         </DialogHeader>
         <div className="grid gap-4">
           <Field label="主讲教师">
-            <select
-              className={selectClass}
+            <TeacherPicker
+              teachers={teachers}
               value={form.teacherId}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, teacherId: event.target.value }))
-              }
-            >
-              {teachers
-                .filter((item) => item.is_active)
-                .map((teacher) => (
-                  <option key={teacher.id} value={teacher.id}>
-                    {teacher.name}
-                  </option>
-                ))}
-            </select>
+              onValueChange={(value) => setForm((current) => ({ ...current, teacherId: value }))}
+            />
           </Field>
           <div className="grid grid-cols-3 gap-3">
             <Field label="周课时">
@@ -1504,13 +1493,13 @@ function BatchAssignmentDialog({
               />
             </Field>
             <Field label="周型">
-              <select
-                className={selectClass}
+              <SimpleSelect
+                className="w-full"
                 value={form.weekPattern}
-                onChange={(event) =>
+                onValueChange={(value) =>
                   setForm((current) => ({
                     ...current,
-                    weekPattern: event.target.value as WeekPattern,
+                    weekPattern: value as WeekPattern,
                   }))
                 }
               >
@@ -1518,7 +1507,7 @@ function BatchAssignmentDialog({
                 <option value="a">单周 / A 周</option>
                 <option value="b">双周 / B 周</option>
                 <option value="specified">指定周</option>
-              </select>
+              </SimpleSelect>
             </Field>
           </div>
           {form.weekPattern === "specified" && (
@@ -1534,37 +1523,29 @@ function BatchAssignmentDialog({
           )}
           <div className="grid grid-cols-2 gap-3">
             <Field label="教室方式">
-              <select
-                className={selectClass}
+              <SimpleSelect
+                className="w-full"
                 value={form.roomMode}
-                onChange={(event) =>
+                onValueChange={(value) =>
                   setForm((current) => ({
                     ...current,
-                    roomMode: event.target.value as "class_default" | "specified",
+                    roomMode: value as "class_default" | "specified",
                   }))
                 }
               >
                 <option value="class_default">班级固定教室</option>
                 <option value="specified">指定教室</option>
-              </select>
+              </SimpleSelect>
             </Field>
             {form.roomMode === "specified" && (
               <Field label="指定教室">
-                <select
-                  className={selectClass}
+                <RoomPicker
+                  rooms={rooms}
                   value={form.specifiedRoomId}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, specifiedRoomId: event.target.value }))
+                  onValueChange={(value) =>
+                    setForm((current) => ({ ...current, specifiedRoomId: value }))
                   }
-                >
-                  {rooms
-                    .filter((item) => item.is_active)
-                    .map((room) => (
-                      <option key={room.id} value={room.id}>
-                        {room.name}
-                      </option>
-                    ))}
-                </select>
+                />
               </Field>
             )}
           </div>

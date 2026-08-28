@@ -12,6 +12,8 @@ import type {
   WeekPattern,
 } from "@/lib/types"
 import { Field } from "@/components/page"
+import { ClassPicker, CoursePicker, RoomPicker, TeacherPicker } from "@/components/resource-picker"
+import { SimpleSelect } from "@/components/simple-select"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -29,9 +31,6 @@ export interface AssignmentEditorSeed {
   schoolClassId?: number
   courseId?: number
 }
-
-const selectClass =
-  "h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none transition-[border-color,box-shadow] focus:border-ring focus:ring-3 focus:ring-ring/20"
 
 export function AssignmentEditorDialog({
   seed,
@@ -185,12 +184,12 @@ export function AssignmentEditorDialog({
         <div className="grid max-h-[65vh] gap-5 overflow-y-auto pr-1">
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="授课对象类型">
-              <select
-                className={selectClass}
+              <SimpleSelect
+                className="w-full"
                 value={form.targetType}
                 disabled={Boolean(seed?.schoolClassId)}
-                onChange={(event) => {
-                  const targetType = event.target.value as "class" | "group"
+                onValueChange={(value) => {
+                  const targetType = value as "class" | "group"
                   setForm((current) => ({
                     ...current,
                     targetType,
@@ -200,34 +199,36 @@ export function AssignmentEditorDialog({
               >
                 <option value="class">班级</option>
                 <option value="group">教学组（合班 / 拆班 / 走班）</option>
-              </select>
+              </SimpleSelect>
             </Field>
             {form.targetType === "class" ? (
               <Field label="班级">
-                <select
-                  className={selectClass}
+                <ClassPicker
+                  classes={settings.map((item) => item.school_class)}
+                  statusById={Object.fromEntries(
+                    settings.map((item) => [
+                      item.school_class_id,
+                      {
+                        disabled: item.status !== "active",
+                        label: item.status === "active" ? "可选" : "本学期已停用",
+                        reason: item.status === "active" ? undefined : "班级本学期配置已停用",
+                      },
+                    ]),
+                  )}
                   value={form.schoolClassId}
                   disabled={Boolean(seed?.schoolClassId)}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, schoolClassId: event.target.value }))
+                  onValueChange={(value) =>
+                    setForm((current) => ({ ...current, schoolClassId: value }))
                   }
-                >
-                  {settings
-                    .filter((item) => item.status === "active")
-                    .map((item) => (
-                      <option key={item.school_class_id} value={item.school_class_id}>
-                        {item.school_class.name}
-                      </option>
-                    ))}
-                </select>
+                />
               </Field>
             ) : (
               <Field label="教学组">
-                <select
-                  className={selectClass}
+                <SimpleSelect
+                  className="w-full"
                   value={form.teachingGroupId}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, teachingGroupId: event.target.value }))
+                  onValueChange={(value) =>
+                    setForm((current) => ({ ...current, teachingGroupId: value }))
                   }
                 >
                   <option value="">请选择教学组</option>
@@ -238,57 +239,33 @@ export function AssignmentEditorDialog({
                         {group.name}（{group.school_classes.length} 个班）
                       </option>
                     ))}
-                </select>
+                </SimpleSelect>
               </Field>
             )}
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="课程">
-              <select
-                className={selectClass}
+              <CoursePicker
+                courses={courses}
                 value={form.courseId}
                 disabled={Boolean(seed?.courseId)}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, courseId: event.target.value }))
-                }
-              >
-                {courses
-                  .filter((item) => item.is_active)
-                  .map((course) => (
-                    <option key={course.id} value={course.id}>
-                      {course.name}
-                    </option>
-                  ))}
-              </select>
+                onValueChange={(value) => setForm((current) => ({ ...current, courseId: value }))}
+              />
             </Field>
             <Field label="主讲教师">
-              <select
-                className={selectClass}
+              <TeacherPicker
+                teachers={teachers}
+                courseId={selectedCourseId || null}
                 value={form.teacherId}
-                onChange={(event) =>
+                onValueChange={(value) =>
                   setForm((current) => ({
                     ...current,
-                    teacherId: event.target.value,
-                    collaboratorIds: current.collaboratorIds.filter(
-                      (id) => id !== Number(event.target.value),
-                    ),
+                    teacherId: value,
+                    collaboratorIds: current.collaboratorIds.filter((id) => id !== Number(value)),
                   }))
                 }
-              >
-                {activeTeachers.map((teacher) => {
-                  const qualified = teacher.courses?.some(
-                    (course) => course.id === selectedCourseId,
-                  )
-                  return (
-                    <option key={teacher.id} value={teacher.id}>
-                      {teacher.name}
-                      {teacher.employee_no ? ` · ${teacher.employee_no}` : ""}
-                      {qualified ? "" : "（未标记任教资格）"}
-                    </option>
-                  )
-                })}
-              </select>
+              />
             </Field>
           </div>
           {!teacherQualified && (
@@ -357,13 +334,13 @@ export function AssignmentEditorDialog({
               />
             </Field>
             <Field label="教学周型">
-              <select
-                className={selectClass}
+              <SimpleSelect
+                className="w-full"
                 value={form.weekPattern}
-                onChange={(event) =>
+                onValueChange={(value) =>
                   setForm((current) => ({
                     ...current,
-                    weekPattern: event.target.value as WeekPattern,
+                    weekPattern: value as WeekPattern,
                   }))
                 }
               >
@@ -371,7 +348,7 @@ export function AssignmentEditorDialog({
                 <option value="a">单周 / A 周</option>
                 <option value="b">双周 / B 周</option>
                 <option value="specified">指定教学周</option>
-              </select>
+              </SimpleSelect>
             </Field>
           </div>
           {invalidSession && (
@@ -391,39 +368,30 @@ export function AssignmentEditorDialog({
 
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="教室方式">
-              <select
-                className={selectClass}
+              <SimpleSelect
+                className="w-full"
                 value={form.targetType === "group" ? "specified" : form.roomMode}
                 disabled={form.targetType === "group"}
-                onChange={(event) =>
+                onValueChange={(value) =>
                   setForm((current) => ({
                     ...current,
-                    roomMode: event.target.value as "class_default" | "specified",
+                    roomMode: value as "class_default" | "specified",
                   }))
                 }
               >
                 <option value="class_default">使用班级固定教室</option>
                 <option value="specified">指定教室</option>
-              </select>
+              </SimpleSelect>
             </Field>
             {(form.targetType === "group" || form.roomMode === "specified") && (
               <Field label="指定教室">
-                <select
-                  className={selectClass}
+                <RoomPicker
+                  rooms={rooms}
                   value={form.specifiedRoomId}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, specifiedRoomId: event.target.value }))
+                  onValueChange={(value) =>
+                    setForm((current) => ({ ...current, specifiedRoomId: value }))
                   }
-                >
-                  <option value="">请选择教室</option>
-                  {rooms
-                    .filter((item) => item.is_active)
-                    .map((room) => (
-                      <option key={room.id} value={room.id}>
-                        {room.name}
-                      </option>
-                    ))}
-                </select>
+                />
               </Field>
             )}
           </div>

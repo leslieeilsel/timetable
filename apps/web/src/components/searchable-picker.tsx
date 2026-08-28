@@ -1,6 +1,7 @@
 import { Combobox } from "@base-ui/react/combobox"
 import { CheckIcon, ChevronsUpDownIcon, SearchIcon, XIcon } from "lucide-react"
 
+import { ResourcePicker } from "@/components/resource-picker"
 import { cn } from "@/lib/utils"
 
 export interface SearchableOption {
@@ -105,61 +106,45 @@ export function SearchablePicker({
   value: number | null
   onValueChange: (value: number | null) => void
 }) {
-  const selected = options.find((option) => option.id === value) ?? null
-
   return (
-    <Combobox.Root<SearchableOption>
-      items={options}
-      value={selected}
-      onValueChange={(option) => onValueChange(option?.id ?? null)}
-      itemToStringLabel={(option) => option.label}
-      isItemEqualToValue={(option, current) => option.id === current.id}
-      filter={optionFilter}
-      autoHighlight
+    <ResourcePicker
+      value={value ? String(value) : ""}
+      onValueChange={(next) => onValueChange(next ? Number(next) : null)}
+      items={options.map((option) => ({
+        value: String(option.id),
+        label: option.label,
+        description: option.description,
+        searchText: option.searchText ?? "",
+        disabled: option.disabled,
+        disabledReason: option.disabled ? "当前对象不可选" : undefined,
+        status: option.disabled ? "不可选" : "可选",
+        statusTone: option.disabled ? "muted" : "success",
+      }))}
+      columns={[
+        {
+          key: "name",
+          label: "名称",
+          className: "min-w-52",
+          render: (item) => <span className="font-medium">{item.label}</span>,
+        },
+        {
+          key: "description",
+          label: "说明",
+          className: "min-w-52 whitespace-normal text-muted-foreground",
+          render: (item) => item.description ?? "—",
+        },
+      ]}
+      title={`选择${ariaLabel.replace(/^搜索/, "")}`}
+      description="通过名称或说明快速定位作用对象"
+      ariaLabel={ariaLabel}
+      placeholder={placeholder}
+      searchPlaceholder={searchPlaceholder}
+      emptyDescription={emptyDescription ?? emptyTitle}
+      invalid={invalid}
       disabled={disabled}
-    >
-      <Combobox.InputGroup
-        className={cn(
-          "relative flex h-8 w-full items-center rounded-2xl border border-transparent bg-input/50 transition-[border-color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30",
-          invalid && "border-destructive ring-3 ring-destructive/20",
-          disabled && "pointer-events-none opacity-50",
-          className,
-        )}
-      >
-        <SearchIcon className="ml-2.5 size-4 shrink-0 text-muted-foreground" />
-        <Combobox.Input
-          aria-label={ariaLabel}
-          placeholder={selected ? searchPlaceholder : placeholder}
-          aria-invalid={invalid || undefined}
-          className="h-full min-w-0 flex-1 border-0 bg-transparent px-2 text-sm outline-none placeholder:text-muted-foreground"
-        />
-        <span className="mr-1 flex items-center">
-          <Combobox.Clear
-            aria-label="清除选择"
-            className="hidden size-6 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground data-visible:flex"
-          >
-            <XIcon className="size-3.5" />
-          </Combobox.Clear>
-          <Combobox.Trigger
-            aria-label="展开选项"
-            className="flex size-6 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            <ChevronsUpDownIcon className="size-3.5" />
-          </Combobox.Trigger>
-        </span>
-      </Combobox.InputGroup>
-      <Combobox.Portal>
-        <Combobox.Positioner className="z-[80] outline-none" sideOffset={6} align="start">
-          <Combobox.Popup className={popupClass}>
-            <ResultList
-              options={options}
-              emptyTitle={emptyTitle}
-              emptyDescription={emptyDescription}
-            />
-          </Combobox.Popup>
-        </Combobox.Positioner>
-      </Combobox.Portal>
-    </Combobox.Root>
+      className={className}
+      clearable
+    />
   )
 }
 
@@ -198,7 +183,7 @@ export function SearchableMultiPicker({
     >
       <Combobox.InputGroup
         className={cn(
-          "relative flex min-h-8 w-full cursor-text items-center rounded-2xl border border-transparent bg-input/50 px-2 py-1 transition-[border-color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30",
+          "relative flex min-h-8 w-full cursor-text items-center rounded-2xl border border-input bg-background px-2 py-1 transition-[border-color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30",
           invalid && "border-destructive ring-3 ring-destructive/20",
           disabled && "pointer-events-none opacity-50",
           className,

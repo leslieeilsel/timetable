@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react"
+import { SimpleSelect } from "@/components/simple-select"
 import { Button } from "@/components/ui/button"
 
 const defaultPageSizeOptions = [20, 50, 100]
@@ -76,20 +77,20 @@ export function TablePagination({
           第 {rangeStart}–{rangeEnd} {unit}
         </span>
         <span className="h-4 w-px bg-border" aria-hidden="true" />
-        <label className="flex items-center gap-2">
-          <select
-            aria-label="每页条数"
-            className="h-8 rounded-md border-0 bg-transparent px-2 text-foreground outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/20"
-            value={pageSize}
-            onChange={(event) => onPageSizeChange(Number(event.target.value))}
+        <div className="flex items-center gap-2">
+          <SimpleSelect
+            label="每页条数"
+            className="w-auto text-foreground"
+            value={String(pageSize)}
+            onValueChange={(value) => onPageSizeChange(Number(value))}
           >
             {pageSizeOptions.map((size) => (
               <option key={size} value={size}>
                 每页 {size} {unit}
               </option>
             ))}
-          </select>
-        </label>
+          </SimpleSelect>
+        </div>
       </div>
       <div className="flex items-center gap-1.5 self-end sm:self-auto">
         <Button

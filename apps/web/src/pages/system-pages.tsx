@@ -7,6 +7,7 @@ import { api, apiMessage, jsonBody } from "@/lib/api"
 import type { AcademicYear, PaginationMeta, Semester, User } from "@/lib/types"
 import { EmptyList, ErrorState, Field, LoadingState, PageHeader } from "@/components/page"
 import { ListToolbar, ToolbarSelect } from "@/components/list-toolbar"
+import { SimpleSelect } from "@/components/simple-select"
 import { StatusBadge } from "@/components/status-badge"
 import { TableActionButton } from "@/components/table-action-button"
 import { TablePagination } from "@/components/table-pagination"
@@ -293,6 +294,7 @@ function UserDialog({
           <Field label="姓名">
             <Input
               value={form.name}
+              placeholder="例如：张老师"
               onChange={(event) => setForm({ ...form, name: event.target.value })}
             />
           </Field>
@@ -300,32 +302,31 @@ function UserDialog({
             <Input
               type="email"
               value={form.email}
+              placeholder="name@school.edu"
               onChange={(event) => setForm({ ...form, email: event.target.value })}
             />
           </Field>
           <Field label="角色">
-            <select
-              className="h-8 rounded-2xl bg-input/50 px-3 text-sm"
+            <SimpleSelect
+              className="w-full"
               value={form.role}
-              onChange={(event) => setForm({ ...form, role: event.target.value })}
+              onValueChange={(value) => setForm({ ...form, role: value })}
             >
               <option value="viewer">查看者</option>
               <option value="scheduler">排课员</option>
               <option value="admin">管理员</option>
-            </select>
+            </SimpleSelect>
           </Field>
           {user ? (
             <Field label="账号状态">
-              <select
-                className="h-8 rounded-2xl bg-input/50 px-3 text-sm"
+              <SimpleSelect
+                className="w-full"
                 value={form.is_active ? "active" : "inactive"}
-                onChange={(event) =>
-                  setForm({ ...form, is_active: event.target.value === "active" })
-                }
+                onValueChange={(value) => setForm({ ...form, is_active: value === "active" })}
               >
                 <option value="active">启用</option>
                 <option value="inactive">停用</option>
-              </select>
+              </SimpleSelect>
             </Field>
           ) : (
             <Field label="临时密码">
@@ -497,18 +498,14 @@ export function SettingsPage() {
           <div className="mt-7 grid gap-5 sm:grid-cols-[140px_minmax(0,1fr)] sm:items-start">
             <p className="pt-3 text-sm font-medium">开放学期</p>
             <div className="max-w-2xl">
-              <select
-                className="h-9 w-full rounded-md border bg-background px-3 text-sm outline-none focus:border-ring focus:ring-3 focus:ring-ring/20"
-                value={selected}
-                onChange={(event) => setSelected(event.target.value)}
-              >
+              <SimpleSelect className="w-full" value={selected} onValueChange={setSelected}>
                 <option value="">不设置</option>
                 {semesters.data?.map((semester) => (
                   <option key={semester.id} value={semester.id}>
                     {semester.year_name} · {semester.name}
                   </option>
                 ))}
-              </select>
+              </SimpleSelect>
               {selectedSemester && (
                 <p className="mt-4 text-sm text-muted-foreground">
                   {selectedSemester.start_date} 至 {selectedSemester.end_date}
@@ -525,16 +522,12 @@ export function SettingsPage() {
           <div className="mt-7 grid gap-5 sm:grid-cols-[140px_minmax(0,1fr)] sm:items-start">
             <p className="pt-3 text-sm font-medium">IANA 时区</p>
             <div className="max-w-2xl">
-              <select
-                value={timezone}
-                onChange={(event) => setTimezone(event.target.value)}
-                className="h-9 w-full rounded-md border bg-background px-3 text-sm outline-none focus:border-ring focus:ring-3 focus:ring-ring/20"
-              >
+              <SimpleSelect value={timezone} onValueChange={setTimezone} className="w-full">
                 <option value="Asia/Shanghai">Asia/Shanghai</option>
                 <option value="Asia/Hong_Kong">Asia/Hong_Kong</option>
                 <option value="Asia/Taipei">Asia/Taipei</option>
                 <option value="Asia/Singapore">Asia/Singapore</option>
-              </select>
+              </SimpleSelect>
               <div className="mt-5 flex items-center gap-4 border-y py-4 text-sm">
                 <span className="font-medium">当前学校时间</span>
                 <span className="text-muted-foreground">{schoolTime}</span>

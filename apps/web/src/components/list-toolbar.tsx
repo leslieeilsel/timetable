@@ -1,5 +1,12 @@
-import { useEffect, useRef, type ReactNode } from "react"
-import { ChevronDownIcon, SearchIcon } from "lucide-react"
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from "react"
+import { CornerDownLeftIcon, SearchIcon } from "lucide-react"
+import { SimpleSelect } from "@/components/simple-select"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 
@@ -21,8 +28,13 @@ export function ListToolbar({
   className?: string
 }) {
   const searchRef = useRef<HTMLInputElement>(null)
+  const composingRef = useRef(false)
+  const [draftSearch, setDraftSearch] = useState(search ?? "")
   const hasFilters = Boolean(onSearchChange || children)
   const hasControls = Boolean(hasFilters || actions)
+  useEffect(() => {
+    setDraftSearch(search ?? "")
+  }, [search])
   useEffect(() => {
     if (!onSearchChange) return
     const focusSearch = (event: KeyboardEvent) => {
@@ -34,6 +46,18 @@ export function ListToolbar({
     window.addEventListener("keydown", focusSearch)
     return () => window.removeEventListener("keydown", focusSearch)
   }, [onSearchChange])
+
+  const submitSearch = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== "Enter" || composingRef.current || event.nativeEvent.isComposing) return
+    event.preventDefault()
+    onSearchChange?.(draftSearch)
+  }
+
+  const updateDraftSearch = (value: string) => {
+    setDraftSearch(value)
+    if (value === "" && search) onSearchChange?.("")
+  }
+
   if (!hasControls) return null
 
   return (
@@ -49,14 +73,27 @@ export function ListToolbar({
           <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             ref={searchRef}
-            value={search}
-            onChange={(event) => onSearchChange(event.target.value)}
+            surface="filter"
+            type="search"
+            enterKeyHint="search"
+            value={draftSearch}
+            onChange={(event) => updateDraftSearch(event.target.value)}
+            onCompositionStart={() => {
+              composingRef.current = true
+            }}
+            onCompositionEnd={(event) => {
+              composingRef.current = false
+              setDraftSearch(event.currentTarget.value)
+            }}
+            onKeyDown={submitSearch}
             placeholder={searchPlaceholder}
             aria-label={searchPlaceholder}
+            aria-keyshortcuts="Enter Meta+K Control+K"
+            title="按 Enter 搜索"
             className="pl-9 pr-11"
           />
-          <kbd className="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 rounded-lg border bg-muted/60 px-1.5 py-0.5 font-sans text-[11px] text-muted-foreground">
-            ⌘K
+          <kbd className="pointer-events-none absolute top-1/2 right-2.5 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded-lg border bg-muted/60 text-muted-foreground">
+            <CornerDownLeftIcon className="size-3.5" aria-hidden="true" />
           </kbd>
         </label>
       )}
@@ -94,19 +131,14 @@ export function ToolbarSelect({
   className?: string
 }) {
   return (
-    <span className="relative inline-flex shrink-0">
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        aria-label={label}
-        className={cn(
-          "h-9 min-w-36 appearance-none rounded-md border border-input bg-background py-1 pr-9 pl-3 text-sm text-foreground outline-none transition-colors hover:bg-muted/40 focus:border-ring focus:ring-3 focus:ring-ring/20",
-          className,
-        )}
-      >
-        {children}
-      </select>
-      <ChevronDownIcon className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-    </span>
+    <SimpleSelect
+      value={value}
+      onValueChange={onChange}
+      label={label}
+      surface="filter"
+      className={cn("min-w-36", className)}
+    >
+      {children}
+    </SimpleSelect>
   )
 }

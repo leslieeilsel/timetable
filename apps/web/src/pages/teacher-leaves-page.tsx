@@ -24,8 +24,11 @@ import type {
   TeacherLeaveDetail,
   TeacherLeavePreview,
 } from "@/lib/types"
+import { DatePicker, DateTimePicker } from "@/components/date-picker"
 import { EmptyList, ErrorState, Field, LoadingState, PageHeader } from "@/components/page"
 import { ListToolbar, ToolbarSelect } from "@/components/list-toolbar"
+import { TeacherPicker } from "@/components/resource-picker"
+import { SimpleSelect } from "@/components/simple-select"
 import { StatusBadge } from "@/components/status-badge"
 import { TablePagination } from "@/components/table-pagination"
 import {
@@ -36,15 +39,14 @@ import {
 } from "@/lib/url-state"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet"
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import {
   Table,
   TableBody,
@@ -54,8 +56,6 @@ import {
   TableRow,
 } from "@/components/ui/table"
 
-const selectClass =
-  "h-9 w-full rounded-md border bg-background px-3 text-sm outline-none transition-[border-color,box-shadow] focus:border-ring focus:ring-3 focus:ring-ring/20"
 const leaveTypeLabels: Record<TeacherLeave["type"], string> = {
   sick: "病假",
   personal: "事假",
@@ -189,20 +189,20 @@ export function TeacherLeavesPage() {
               <option value="active">生效中</option>
               <option value="cancelled">已取消</option>
             </ToolbarSelect>
-            <Input
-              type="date"
-              aria-label="影响开始日期"
+            <DatePicker
+              label="影响开始日期"
+              surface="filter"
               className="w-40"
               value={dateFrom}
-              onChange={(event) => setDateFrom(event.target.value)}
+              onValueChange={setDateFrom}
             />
             <span className="text-sm text-muted-foreground">至</span>
-            <Input
-              type="date"
-              aria-label="影响结束日期"
+            <DatePicker
+              label="影响结束日期"
+              surface="filter"
               className="w-40"
               value={dateTo}
-              onChange={(event) => setDateTo(event.target.value)}
+              onValueChange={setDateTo}
             />
           </ListToolbar>
           {leaves.isLoading ? (
@@ -299,7 +299,7 @@ export function TeacherLeavesPage() {
           setSelectedLeaveId(leaveId)
         }}
       />
-      <LeaveDetailSheet
+      <LeaveDetailDialog
         leaveId={selectedLeaveId}
         semesterId={semesterId}
         onClose={() => setSelectedLeaveId(null)}
@@ -402,64 +402,59 @@ function LeaveEditor({
   }
 
   return (
-    <Sheet open={open} onOpenChange={(next) => !next && onClose()}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-[620px]">
-        <SheetHeader className="border-b pr-14">
-          <SheetTitle>登记教师请假</SheetTitle>
-          <SheetDescription>保存前先列出这个时间段内实际发生且受影响的课程。</SheetDescription>
-        </SheetHeader>
-        <form className="grid gap-5 p-6" onSubmit={(event) => void runPreview(event)}>
+    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="flex max-h-[calc(100svh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[620px]">
+        <DialogHeader className="border-b p-6 pr-16">
+          <DialogTitle>登记教师请假</DialogTitle>
+          <DialogDescription>保存前先列出这个时间段内实际发生且受影响的课程。</DialogDescription>
+        </DialogHeader>
+        <form
+          className="grid min-h-0 flex-1 gap-5 overflow-y-auto p-6"
+          onSubmit={(event) => void runPreview(event)}
+        >
           <Field label="请假教师">
-            <select
-              required
-              className={selectClass}
+            <TeacherPicker
+              teachers={teachers}
               value={form.teacher_id}
-              onChange={(event) => update("teacher_id", event.target.value)}
-            >
-              <option value="">请选择教师</option>
-              {teachers
-                .filter((teacher) => teacher.is_active)
-                .map((teacher) => (
-                  <option key={teacher.id} value={teacher.id}>
-                    {teacher.name} {teacher.employee_no ? `· ${teacher.employee_no}` : ""}
-                  </option>
-                ))}
-            </select>
+              onValueChange={(value) => update("teacher_id", value)}
+            />
           </Field>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="开始时间">
-              <Input
+              <DateTimePicker
                 required
-                type="datetime-local"
                 min={semester ? `${semester.start_date}T00:00` : undefined}
                 max={semester ? `${semester.end_date}T23:59` : undefined}
                 value={form.starts_at}
-                onChange={(event) => update("starts_at", event.target.value)}
+                onValueChange={(value) => update("starts_at", value)}
+                label="开始时间"
+                className="w-full"
               />
             </Field>
             <Field label="结束时间">
-              <Input
+              <DateTimePicker
                 required
-                type="datetime-local"
                 min={form.starts_at || (semester ? `${semester.start_date}T00:00` : undefined)}
                 max={semester ? `${semester.end_date}T23:59` : undefined}
                 value={form.ends_at}
-                onChange={(event) => update("ends_at", event.target.value)}
+                onValueChange={(value) => update("ends_at", value)}
+                label="结束时间"
+                className="w-full"
               />
             </Field>
           </div>
           <Field label="请假类型">
-            <select
-              className={selectClass}
+            <SimpleSelect
+              className="w-full"
               value={form.type}
-              onChange={(event) => update("type", event.target.value as TeacherLeave["type"])}
+              onValueChange={(value) => update("type", value as TeacherLeave["type"])}
             >
               {Object.entries(leaveTypeLabels).map(([value, label]) => (
                 <option key={value} value={value}>
                   {label}
                 </option>
               ))}
-            </select>
+            </SimpleSelect>
           </Field>
           <Field label="原因或说明">
             <textarea
@@ -473,7 +468,7 @@ function LeaveEditor({
           {preview && <LeavePreviewPanel preview={preview} />}
           <button type="submit" className="hidden" aria-hidden="true" />
         </form>
-        <SheetFooter className="flex-row flex-wrap justify-end border-t bg-background/95">
+        <DialogFooter className="flex-row flex-wrap justify-end border-t bg-background/95 p-6">
           <Button variant="outline" onClick={onClose} disabled={busy}>
             取消
           </Button>
@@ -485,9 +480,9 @@ function LeaveEditor({
             <CheckCircle2Icon />
             确认登记
           </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -537,7 +532,7 @@ type RecommendationChoice = {
   recommendations: SubstituteRecommendation[]
 }
 
-function LeaveDetailSheet({
+function LeaveDetailDialog({
   leaveId,
   semesterId,
   onClose,
@@ -680,171 +675,166 @@ function LeaveDetailSheet({
   }
 
   return (
-    <Sheet open={leaveId !== null} onOpenChange={(next) => !next && onClose()}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-[720px]">
-        <SheetHeader className="border-b pr-14">
-          <SheetTitle>请假影响与代课安排</SheetTitle>
-          <SheetDescription>每条推荐都说明依据；保存后只覆盖对应实际日期。</SheetDescription>
-        </SheetHeader>
-        {detail.isLoading ? (
-          <LoadingState />
-        ) : detail.isError || !data ? (
-          <ErrorState retry={() => void detail.refetch()} />
-        ) : (
-          <div className="grid gap-5 p-6">
-            <div className="rounded-xl border bg-muted/20 p-4">
-              <div className="flex flex-wrap items-start gap-3">
-                <span className="flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary">
-                  <CircleUserRoundIcon className="size-5" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-semibold">{data.leave.teacher.name}</p>
-                    <Badge variant="outline">{leaveTypeLabels[data.leave.type]}</Badge>
-                    <StatusBadge value={data.leave.status} />
+    <Dialog open={leaveId !== null} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="flex max-h-[calc(100svh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[720px]">
+        <DialogHeader className="border-b p-6 pr-16">
+          <DialogTitle>请假影响与代课安排</DialogTitle>
+          <DialogDescription>每条推荐都说明依据；保存后只覆盖对应实际日期。</DialogDescription>
+        </DialogHeader>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {detail.isLoading ? (
+            <LoadingState />
+          ) : detail.isError || !data ? (
+            <ErrorState retry={() => void detail.refetch()} />
+          ) : (
+            <div className="grid gap-5 p-6">
+              <div className="rounded-xl border bg-muted/20 p-4">
+                <div className="flex flex-wrap items-start gap-3">
+                  <span className="flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <CircleUserRoundIcon className="size-5" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-semibold">{data.leave.teacher.name}</p>
+                      <Badge variant="outline">{leaveTypeLabels[data.leave.type]}</Badge>
+                      <StatusBadge value={data.leave.status} />
+                    </div>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {dateTimeLabel(data.leave.starts_at)} 至 {dateTimeLabel(data.leave.ends_at)}
+                    </p>
+                    {data.leave.reason && <p className="mt-2 text-sm">{data.leave.reason}</p>}
                   </div>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {dateTimeLabel(data.leave.starts_at)} 至 {dateTimeLabel(data.leave.ends_at)}
-                  </p>
-                  {data.leave.reason && <p className="mt-2 text-sm">{data.leave.reason}</p>}
                 </div>
               </div>
-            </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <div>
-                <h2 className="font-semibold">受影响课程</h2>
-                <p className="mt-0.5 text-sm text-muted-foreground">
-                  共 {data.affected_count} 节 · 已安排 {activeSubstitutions.size} 节 · 待处理{" "}
-                  {unresolved.length} 节
-                </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <div>
+                  <h2 className="font-semibold">受影响课程</h2>
+                  <p className="mt-0.5 text-sm text-muted-foreground">
+                    共 {data.affected_count} 节 · 已安排 {activeSubstitutions.size} 节 · 待处理{" "}
+                    {unresolved.length} 节
+                  </p>
+                </div>
+                {data.leave.status === "active" && unresolved.length > 0 && (
+                  <Button
+                    className="ml-auto"
+                    variant="outline"
+                    onClick={() => void autoMatch()}
+                    disabled={busy}
+                  >
+                    {busy ? <LoaderCircleIcon className="animate-spin" /> : <SparklesIcon />}
+                    智能匹配全部
+                  </Button>
+                )}
               </div>
-              {data.leave.status === "active" && unresolved.length > 0 && (
-                <Button
-                  className="ml-auto"
-                  variant="outline"
-                  onClick={() => void autoMatch()}
-                  disabled={busy}
-                >
-                  {busy ? <LoaderCircleIcon className="animate-spin" /> : <SparklesIcon />}
-                  智能匹配全部
-                </Button>
-              )}
-            </div>
 
-            {data.affected.length === 0 ? (
-              <EmptyList title="没有课程受影响" description="当前时间段无需安排代课。" />
-            ) : (
-              <div className="space-y-3">
-                {data.affected.map((row) => {
-                  const key = rowKey(row)
-                  const existing =
-                    row.original_entry_id === null
-                      ? undefined
-                      : activeSubstitutions.get(substitutionKey(row.original_entry_id, row.date))
-                  const choice = choices[key]
-                  const selected = choice?.recommendations.find(
-                    (item) => item.teacher.id === choice.teacherId,
-                  )
-                  const loading = loadingKeys.includes(key)
-                  return (
-                    <div key={key} className="rounded-xl border p-4">
-                      <div className="flex flex-wrap items-start gap-3">
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-semibold text-muted-foreground">
-                            {dateLabel(row.date)} · {row.item_name} · {shortTime(row.start_time)}–
-                            {shortTime(row.end_time)}
-                          </p>
-                          <p className="mt-1 font-medium">
-                            {row.target_name} · {row.course_name}
-                          </p>
-                          <p className="mt-1 text-sm text-muted-foreground">
-                            原教师：{data.leave.teacher.name} · {row.room_name}
-                          </p>
+              {data.affected.length === 0 ? (
+                <EmptyList title="没有课程受影响" description="当前时间段无需安排代课。" />
+              ) : (
+                <div className="space-y-3">
+                  {data.affected.map((row) => {
+                    const key = rowKey(row)
+                    const existing =
+                      row.original_entry_id === null
+                        ? undefined
+                        : activeSubstitutions.get(substitutionKey(row.original_entry_id, row.date))
+                    const choice = choices[key]
+                    const selected = choice?.recommendations.find(
+                      (item) => item.teacher.id === choice.teacherId,
+                    )
+                    const loading = loadingKeys.includes(key)
+                    return (
+                      <div key={key} className="rounded-xl border p-4">
+                        <div className="flex flex-wrap items-start gap-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-semibold text-muted-foreground">
+                              {dateLabel(row.date)} · {row.item_name} · {shortTime(row.start_time)}–
+                              {shortTime(row.end_time)}
+                            </p>
+                            <p className="mt-1 font-medium">
+                              {row.target_name} · {row.course_name}
+                            </p>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                              原教师：{data.leave.teacher.name} · {row.room_name}
+                            </p>
+                          </div>
+                          {existing && (
+                            <Badge className="bg-emerald-600">
+                              <UserRoundCheckIcon />
+                              {existing.replacement_teacher.name} 代课
+                            </Badge>
+                          )}
                         </div>
-                        {existing && (
-                          <Badge className="bg-emerald-600">
-                            <UserRoundCheckIcon />
-                            {existing.replacement_teacher.name} 代课
-                          </Badge>
+
+                        {!existing &&
+                          data.leave.status === "active" &&
+                          row.original_entry_id !== null && (
+                            <div className="mt-3 border-t pt-3">
+                              {!choice ? (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={loading || busy}
+                                  onClick={() => void loadOne(row)}
+                                >
+                                  {loading ? (
+                                    <LoaderCircleIcon className="animate-spin" />
+                                  ) : (
+                                    <SparklesIcon />
+                                  )}
+                                  推荐代课教师
+                                </Button>
+                              ) : choice.recommendations.length === 0 ? (
+                                <p className="flex gap-2 text-sm text-amber-700">
+                                  <AlertTriangleIcon className="mt-0.5 size-4 shrink-0" />
+                                  暂无同时满足学科资格、空闲和未请假条件的教师。
+                                </p>
+                              ) : (
+                                <div className="grid gap-3">
+                                  <TeacherPicker
+                                    teachers={choice.recommendations.map((item) => item.teacher)}
+                                    value={String(choice.teacherId)}
+                                    onValueChange={(value) =>
+                                      setChoices((current) => ({
+                                        ...current,
+                                        [key]: { ...choice, teacherId: Number(value) },
+                                      }))
+                                    }
+                                  />
+                                  {selected && (
+                                    <div className="rounded-lg bg-muted/35 px-3 py-2.5 text-sm">
+                                      <p className="font-medium">
+                                        为什么推荐 {selected.teacher.name}
+                                      </p>
+                                      <ul className="mt-1.5 grid gap-1 text-muted-foreground sm:grid-cols-2">
+                                        {selected.reasons.map((reason) => (
+                                          <li key={reason} className="flex gap-1.5">
+                                            <CheckCircle2Icon className="mt-0.5 size-3.5 shrink-0 text-emerald-600" />
+                                            {reason}
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        {!existing && row.original_entry_id === null && (
+                          <p className="mt-3 border-t pt-3 text-sm text-amber-700">
+                            这是日期例外生成的补课，请到“临时调课”中更换教师。
+                          </p>
                         )}
                       </div>
-
-                      {!existing &&
-                        data.leave.status === "active" &&
-                        row.original_entry_id !== null && (
-                          <div className="mt-3 border-t pt-3">
-                            {!choice ? (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={loading || busy}
-                                onClick={() => void loadOne(row)}
-                              >
-                                {loading ? (
-                                  <LoaderCircleIcon className="animate-spin" />
-                                ) : (
-                                  <SparklesIcon />
-                                )}
-                                推荐代课教师
-                              </Button>
-                            ) : choice.recommendations.length === 0 ? (
-                              <p className="flex gap-2 text-sm text-amber-700">
-                                <AlertTriangleIcon className="mt-0.5 size-4 shrink-0" />
-                                暂无同时满足学科资格、空闲和未请假条件的教师。
-                              </p>
-                            ) : (
-                              <div className="grid gap-3">
-                                <select
-                                  className={selectClass}
-                                  value={choice.teacherId}
-                                  onChange={(event) =>
-                                    setChoices((current) => ({
-                                      ...current,
-                                      [key]: { ...choice, teacherId: Number(event.target.value) },
-                                    }))
-                                  }
-                                >
-                                  {choice.recommendations.map((item) => (
-                                    <option key={item.teacher.id} value={item.teacher.id}>
-                                      {item.teacher.name} · 适配 {item.score} 分 · 当天
-                                      {item.daily_load} 节 / 本周 {item.weekly_load} 节
-                                    </option>
-                                  ))}
-                                </select>
-                                {selected && (
-                                  <div className="rounded-lg bg-muted/35 px-3 py-2.5 text-sm">
-                                    <p className="font-medium">
-                                      为什么推荐 {selected.teacher.name}
-                                    </p>
-                                    <ul className="mt-1.5 grid gap-1 text-muted-foreground sm:grid-cols-2">
-                                      {selected.reasons.map((reason) => (
-                                        <li key={reason} className="flex gap-1.5">
-                                          <CheckCircle2Icon className="mt-0.5 size-3.5 shrink-0 text-emerald-600" />
-                                          {reason}
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      {!existing && row.original_entry_id === null && (
-                        <p className="mt-3 border-t pt-3 text-sm text-amber-700">
-                          这是日期例外生成的补课，请到“临时调课”中更换教师。
-                        </p>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        )}
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
         {data && (
-          <SheetFooter className="flex-row flex-wrap justify-end border-t bg-background/95">
+          <DialogFooter className="flex-row flex-wrap justify-end border-t bg-background/95 p-6">
             {data.leave.status === "active" && (
               <Button
                 variant="ghost"
@@ -867,10 +857,10 @@ function LeaveDetailSheet({
                 保存代课安排
               </Button>
             )}
-          </SheetFooter>
+          </DialogFooter>
         )}
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   )
 }
 

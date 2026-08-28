@@ -6,6 +6,7 @@ import { api, apiMessage, jsonBody } from "@/lib/api"
 import type { ClassSetting, PaginationMeta, TeachingGroup, TeachingGroupMode } from "@/lib/types"
 import { EmptyList, ErrorState, Field, LoadingState } from "@/components/page"
 import { ListToolbar, ToolbarSelect } from "@/components/list-toolbar"
+import { SimpleSelect } from "@/components/simple-select"
 import { StatusBadge } from "@/components/status-badge"
 import { TableActionButton } from "@/components/table-action-button"
 import { TablePagination } from "@/components/table-pagination"
@@ -28,9 +29,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-
-const selectClass =
-  "h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none transition-[border-color,box-shadow] focus:border-ring focus:ring-3 focus:ring-ring/20"
 
 export function TeachingGroupManager({
   open,
@@ -331,35 +329,35 @@ function TeachingGroupForm({
           />
         </Field>
         <Field label="组织方式">
-          <select
-            className={selectClass}
+          <SimpleSelect
+            className="w-full"
             value={form.mode}
-            onChange={(event) =>
+            onValueChange={(value) =>
               setForm((current) => ({
                 ...current,
-                mode: event.target.value as TeachingGroupMode,
+                mode: value as TeachingGroupMode,
               }))
             }
           >
             <option value="combined">合班</option>
             <option value="split">拆班</option>
             <option value="roaming">走班</option>
-          </select>
+          </SimpleSelect>
         </Field>
         <Field label="状态">
-          <select
-            className={selectClass}
+          <SimpleSelect
+            className="w-full"
             value={form.status}
-            onChange={(event) =>
+            onValueChange={(value) =>
               setForm((current) => ({
                 ...current,
-                status: event.target.value as "active" | "inactive",
+                status: value as "active" | "inactive",
               }))
             }
           >
             <option value="active">启用</option>
             <option value="inactive">停用</option>
-          </select>
+          </SimpleSelect>
         </Field>
       </div>
       <Field label={`包含班级（已选 ${form.schoolClassIds.length} 个）`}>

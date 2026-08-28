@@ -30,6 +30,8 @@ import type {
 import { EmptyList, ErrorState, Field, LoadingState, PageHeader } from "@/components/page"
 import { GridSelectionOverlay } from "@/components/grid-selection-frame"
 import { ListToolbar, ToolbarSelect } from "@/components/list-toolbar"
+import { AssignmentPicker, RoomPicker } from "@/components/resource-picker"
+import { SimpleSelect } from "@/components/simple-select"
 import { SchedulingWorkflow } from "@/components/scheduling-workflow"
 import { StatusBadge } from "@/components/status-badge"
 import {
@@ -69,8 +71,6 @@ import {
 } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
 
-const selectClass =
-  "h-8 w-full rounded-2xl border border-transparent bg-input/50 px-2.5 text-sm outline-none transition-[border-color,box-shadow] focus:border-ring focus:ring-3 focus:ring-ring/30 disabled:pointer-events-none disabled:opacity-50"
 const weekdayNames = ["", "周一", "周二", "周三", "周四", "周五", "周六", "周日"]
 
 export function SchedulingConstraintsPage() {
@@ -1008,26 +1008,26 @@ function RuleDialog({
                 <RuleFormSection title="1. 定义规则">
                   <div className="grid gap-4 sm:grid-cols-2">
                     <Field label="约束强度">
-                      <select
-                        className={selectClass}
+                      <SimpleSelect
+                        className="w-full"
                         value={kind}
                         autoFocus
-                        onChange={(event) => {
-                          const next = event.target.value as RuleKind
+                        onValueChange={(value) => {
+                          const next = value as RuleKind
                           setRuleKind(next)
                           setPreset((current) => linkedPresetForKind(current, next))
                         }}
                       >
                         <option value="hard">必须满足（硬约束）</option>
                         <option value="soft">尽量满足（软规则）</option>
-                      </select>
+                      </SimpleSelect>
                     </Field>
                     <Field label="规则意图">
-                      <select
-                        className={selectClass}
+                      <SimpleSelect
+                        className="w-full"
                         value={preset}
-                        onChange={(event) => {
-                          const next = event.target.value as RulePreset
+                        onValueChange={(value) => {
+                          const next = value as RulePreset
                           setPreset(next)
                           setRelatedAssignmentIds([])
                           if (["daily_limit", "consecutive_limit"].includes(next) && !targetType) {
@@ -1051,7 +1051,7 @@ function RuleDialog({
                             </option>
                           )
                         })}
-                      </select>
+                      </SimpleSelect>
                     </Field>
                   </div>
                   {(limitConfiguration || preset === "mutual_exclusion") && (
@@ -1077,16 +1077,16 @@ function RuleDialog({
                       )}
                       {preset === "mutual_exclusion" && (
                         <Field label="错峰范围">
-                          <select
-                            className={selectClass}
+                          <SimpleSelect
+                            className="w-full"
                             value={exclusionMode}
-                            onChange={(event) =>
-                              setExclusionMode(event.target.value as "same_slot" | "same_day")
+                            onValueChange={(value) =>
+                              setExclusionMode(value as "same_slot" | "same_day")
                             }
                           >
                             <option value="same_slot">不能在同一课节</option>
                             <option value="same_day">不能在同一天</option>
-                          </select>
+                          </SimpleSelect>
                         </Field>
                       )}
                     </div>
@@ -1132,11 +1132,11 @@ function RuleDialog({
                 <RuleFormSection title="2. 选择作用范围">
                   {!relationBased && (
                     <Field label="作用对象类型">
-                      <select
-                        className={selectClass}
+                      <SimpleSelect
+                        className="w-full"
                         value={targetType}
-                        onChange={(event) => {
-                          setTargetType(event.target.value)
+                        onValueChange={(value) => {
+                          setTargetType(value)
                           setTargetId("")
                           setRelatedAssignmentIds([])
                         }}
@@ -1149,7 +1149,7 @@ function RuleDialog({
                         <option value="grade">年级</option>
                         <option value="teaching_assignment">任课关系</option>
                         <option value="teaching_group">教学组</option>
-                      </select>
+                      </SimpleSelect>
                     </Field>
                   )}
                   {targetType && (
@@ -1472,32 +1472,19 @@ function PlacementDialog({
         </DialogHeader>
         <form className="grid gap-4" onSubmit={(event) => void save(event)}>
           <Field label="任课关系">
-            <select
-              className={selectClass}
+            <AssignmentPicker
+              assignments={assignments}
               value={assignmentId}
-              onChange={(event) => {
-                setAssignmentId(event.target.value)
-                const assignment = assignments.find(
-                  (item) => item.id === Number(event.target.value),
-                )
+              onValueChange={(selectedId) => {
+                setAssignmentId(selectedId)
+                const assignment = assignments.find((item) => item.id === Number(selectedId))
                 if (assignment) setWeekPattern(assignment.week_pattern)
               }}
-            >
-              {assignments.map((assignment) => (
-                <option key={assignment.id} value={assignment.id}>
-                  {assignmentTarget(assignment)} · {assignment.course.name} ·{" "}
-                  {assignment.teacher.name}
-                </option>
-              ))}
-            </select>
+            />
           </Field>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="星期">
-              <select
-                className={selectClass}
-                value={weekday}
-                onChange={(event) => setWeekday(event.target.value)}
-              >
+              <SimpleSelect className="w-full" value={weekday} onValueChange={setWeekday}>
                 {template?.days
                   .filter((day) => day.is_enabled)
                   .map((day) => (
@@ -1505,14 +1492,10 @@ function PlacementDialog({
                       {weekdayNames[day.weekday]}
                     </option>
                   ))}
-              </select>
+              </SimpleSelect>
             </Field>
             <Field label="课节">
-              <select
-                className={selectClass}
-                value={itemId}
-                onChange={(event) => setItemId(event.target.value)}
-              >
+              <SimpleSelect className="w-full" value={itemId} onValueChange={setItemId}>
                 {template?.items
                   .filter((item) => item.is_active && item.allows_course)
                   .map((item) => (
@@ -1520,38 +1503,25 @@ function PlacementDialog({
                       {item.name} · {item.start_time.slice(0, 5)}
                     </option>
                   ))}
-              </select>
+              </SimpleSelect>
             </Field>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="周型（随任课关系）">
-              <select
-                className={selectClass}
+              <SimpleSelect
+                className="w-full"
                 value={weekPattern}
                 disabled
-                onChange={(event) => setWeekPattern(event.target.value as WeekPattern)}
+                onValueChange={(value) => setWeekPattern(value as WeekPattern)}
               >
                 <option value="all">每周</option>
                 <option value="a">A 周</option>
                 <option value="b">B 周</option>
                 <option value="specified">指定教学周</option>
-              </select>
+              </SimpleSelect>
             </Field>
             <Field label="指定教室（可选）">
-              <select
-                className={selectClass}
-                value={roomId}
-                onChange={(event) => setRoomId(event.target.value)}
-              >
-                <option value="">按任课关系解析</option>
-                {rooms
-                  .filter((room) => room.is_active)
-                  .map((room) => (
-                    <option key={room.id} value={room.id}>
-                      {room.name}
-                    </option>
-                  ))}
-              </select>
+              <RoomPicker rooms={rooms} value={roomId} onValueChange={setRoomId} clearable />
             </Field>
           </div>
           <label className="flex items-center gap-2 text-sm">
