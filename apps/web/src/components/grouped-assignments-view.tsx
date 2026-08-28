@@ -291,7 +291,8 @@ export function GroupedAssignmentsTable({
                   key={`${group.key}:${assignment.id}`}
                   className={cn(
                     entryIndex === 0 && groupIndex > 0 && "border-t-2",
-                    assignment.status === "draft" && "bg-amber-50/65 hover:bg-amber-50",
+                    assignment.status === "draft" &&
+                      "bg-amber-50/65 hover:bg-amber-50 dark:bg-amber-950/45 dark:hover:bg-amber-950/60",
                     assignment.status === "inactive" && "text-muted-foreground",
                   )}
                 >
@@ -301,8 +302,12 @@ export function GroupedAssignmentsTable({
                       rowSpan={group.entries.length}
                       className="w-56 border-r border-b bg-muted/[0.18] p-4 text-left align-top font-normal whitespace-normal"
                     >
-                      <p className="font-semibold text-foreground">{group.name}</p>
-                      <p className="mt-1 text-sm text-muted-foreground">{group.subtitle}</p>
+                      <p className="font-semibold text-foreground [overflow-wrap:anywhere]">
+                        {group.name}
+                      </p>
+                      <p className="mt-1 text-sm text-muted-foreground [overflow-wrap:anywhere]">
+                        {group.subtitle}
+                      </p>
                       <div className="mt-4 grid gap-1 text-sm text-muted-foreground">
                         <p>
                           {group.entries.length} 项任课 · 周 {group.weeklyItems} 节
@@ -319,7 +324,7 @@ export function GroupedAssignmentsTable({
                       </div>
                     </th>
                   )}
-                  <TableCell className="whitespace-normal">
+                  <TableCell className="whitespace-normal [overflow-wrap:anywhere]">
                     <p className="font-medium text-foreground">
                       {view === "class" ? assignment.course.name : assignmentTarget(assignment)}
                     </p>
@@ -327,7 +332,7 @@ export function GroupedAssignmentsTable({
                       <p className="mt-0.5 text-sm text-muted-foreground">{entry.contextLabel}</p>
                     )}
                   </TableCell>
-                  <TableCell className="whitespace-normal">
+                  <TableCell className="whitespace-normal [overflow-wrap:anywhere]">
                     {view === "class" || view === "course"
                       ? teacherLabel(assignment)
                       : assignment.course.name}
@@ -338,7 +343,9 @@ export function GroupedAssignmentsTable({
                     </TableCell>
                   )}
                   {view === "room" && (
-                    <TableCell className="whitespace-normal">{teacherLabel(assignment)}</TableCell>
+                    <TableCell className="whitespace-normal [overflow-wrap:anywhere]">
+                      {teacherLabel(assignment)}
+                    </TableCell>
                   )}
                   <TableCell>
                     <p>
@@ -351,7 +358,11 @@ export function GroupedAssignmentsTable({
                       {weekPatternLabel(assignment.week_pattern)}
                     </p>
                   </TableCell>
-                  {view !== "room" && <TableCell>{entry.resolvedRoomName}</TableCell>}
+                  {view !== "room" && (
+                    <TableCell className="whitespace-normal [overflow-wrap:anywhere]">
+                      {entry.resolvedRoomName}
+                    </TableCell>
+                  )}
                   <TableCell className="tabular-nums">
                     {assignment.scheduled ?? 0}/{assignment.weekly_items}
                   </TableCell>
@@ -374,16 +385,18 @@ export function GroupedAssignmentsTable({
           )}
         </TableBody>
       </Table>
-      <TablePagination
-        page={pagination.page}
-        pageSize={pagination.pageSize}
-        totalItems={pagination.totalItems}
-        totalPages={pagination.totalPages}
-        unit={groupLabels[view]}
-        pageSizeOptions={[10, 20, 50]}
-        onPageChange={pagination.onPageChange}
-        onPageSizeChange={pagination.onPageSizeChange}
-      />
+      <div className="[&>div>div:last-child]:max-w-full [&>div>div:last-child]:flex-wrap [&>div>div:last-child]:self-stretch [&>div>div:last-child]:justify-end sm:[&>div>div:last-child]:flex-nowrap sm:[&>div>div:last-child]:self-auto">
+        <TablePagination
+          page={pagination.page}
+          pageSize={pagination.pageSize}
+          totalItems={pagination.totalItems}
+          totalPages={pagination.totalPages}
+          unit={groupLabels[view]}
+          pageSizeOptions={[10, 20, 50]}
+          onPageChange={pagination.onPageChange}
+          onPageSizeChange={pagination.onPageSizeChange}
+        />
+      </div>
     </>
   )
 }
