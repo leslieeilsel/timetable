@@ -156,7 +156,7 @@ export function AcademicYearsPage() {
                         <div className="flex items-center gap-2">
                           <StatusBadge value={year.status} />
                           {isCurrent && (
-                            <span className="rounded border px-1.5 py-0.5 text-xs">当前</span>
+                            <span className="rounded-lg border px-1.5 py-0.5 text-xs">当前</span>
                           )}
                         </div>
                       </TableCell>

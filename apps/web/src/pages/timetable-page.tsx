@@ -672,7 +672,7 @@ export function TimetablePage() {
               打印 / PDF
             </Button>
             <span className="h-4 w-px bg-border" aria-hidden="true" />
-            <span className="font-medium text-emerald-600">
+            <span className="font-medium text-emerald-600 dark:text-emerald-400">
               已排 {scheduled}/{required}
             </span>
             <span className="h-4 w-px bg-border" aria-hidden="true" />
@@ -682,7 +682,7 @@ export function TimetablePage() {
               className={
                 hardConflictCount > 0
                   ? "font-medium text-destructive"
-                  : "font-medium text-emerald-600"
+                  : "font-medium text-emerald-600 dark:text-emerald-400"
               }
             >
               冲突 {hardConflictCount}
@@ -690,7 +690,9 @@ export function TimetablePage() {
             {softWarningCount > 0 && (
               <>
                 <span className="h-4 w-px bg-border" aria-hidden="true" />
-                <span className="font-medium text-amber-700">提醒 {softWarningCount}</span>
+                <span className="font-medium text-amber-700 dark:text-amber-300">
+                  提醒 {softWarningCount}
+                </span>
               </>
             )}
             {selectedVersion && selectedVersion.status !== "draft" && (
@@ -748,11 +750,11 @@ export function TimetablePage() {
           </div>
         )}
         {selectedVersion && versionIsStale && (
-          <div className="mb-3 flex flex-col gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 lg:flex-row lg:items-center">
-            <AlertTriangleIcon className="size-5 shrink-0 text-amber-700" />
+          <div className="mb-3 flex flex-col gap-3 rounded-lg border border-[var(--timetable-notice-border)] bg-[var(--timetable-notice-background)] px-4 py-3 text-sm text-[var(--timetable-notice-foreground)] lg:flex-row lg:items-center">
+            <AlertTriangleIcon className="size-5 shrink-0 text-[var(--timetable-notice-accent)]" />
             <div className="min-w-0 flex-1">
               <p className="font-medium">此课表生成后，任课或排课规则又发生了变化</p>
-              <p className="mt-0.5 text-amber-900/80">
+              <p className="mt-0.5 text-[var(--timetable-notice-muted)]">
                 它仍可作为历史快照查看，但不代表当前完整课表
                 {remaining > 0 ? `；当前还有 ${remaining} 节课程待排。` : "。"}
               </p>
@@ -792,11 +794,11 @@ export function TimetablePage() {
           </div>
         )}
         {selectedVersion && !versionIsStale && remaining > 0 && (
-          <div className="mb-3 flex flex-col gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 lg:flex-row lg:items-center">
-            <AlertTriangleIcon className="size-5 shrink-0 text-amber-700" />
+          <div className="mb-3 flex flex-col gap-3 rounded-lg border border-[var(--timetable-notice-border)] bg-[var(--timetable-notice-background)] px-4 py-3 text-sm text-[var(--timetable-notice-foreground)] lg:flex-row lg:items-center">
+            <AlertTriangleIcon className="size-5 shrink-0 text-[var(--timetable-notice-accent)]" />
             <div className="min-w-0 flex-1">
               <p className="font-medium">这份课表还没有排完整</p>
-              <p className="mt-0.5 text-amber-900/80">
+              <p className="mt-0.5 text-[var(--timetable-notice-muted)]">
                 还有 {remaining} 节课程待排；标有“可安排”的空白课节可以手工检查，也可以自动补齐。
               </p>
             </div>
@@ -833,7 +835,7 @@ export function TimetablePage() {
               selectedVersion.status !== "draft" &&
               canMutate &&
               !versionIsStale && (
-                <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+                <div className="mb-3 rounded-lg border border-[var(--timetable-notice-border)] bg-[var(--timetable-notice-background)] px-4 py-3 text-sm text-[var(--timetable-notice-foreground)]">
                   <span>当前是只读版本。创建调整草稿后才能移动、锁定或新增课程。</span>
                 </div>
               )}
@@ -1179,7 +1181,7 @@ function TimetableGrid({
                                 {entry.week_pattern !== "all" && (
                                   <Badge
                                     variant="outline"
-                                    className="h-4 border-current/20 bg-white/55 px-1 text-[10px]"
+                                    className="h-4 border-current/20 bg-white/55 px-1 text-[10px] dark:bg-background/45"
                                   >
                                     {weekPatternName(entry)}
                                   </Badge>
@@ -1199,7 +1201,7 @@ function TimetableGrid({
                       <button
                         type="button"
                         aria-label={`${weekdayName[day.weekday]}${item.name}安排待排课程`}
-                        className="group flex h-full min-h-20 w-full flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-amber-300/80 bg-amber-50/35 text-amber-800 transition-colors hover:border-amber-400 hover:bg-amber-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/40"
+                        className="group flex h-full min-h-20 w-full flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-[var(--timetable-notice-border)] bg-[var(--timetable-notice-background)] text-[var(--timetable-notice-foreground)] transition-colors hover:bg-[var(--timetable-notice-background-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--timetable-notice-border)]/40"
                         onClick={() => onSlot({ weekday: day.weekday, itemId: item.id })}
                       >
                         <PlusIcon className="size-4" />
@@ -1260,12 +1262,12 @@ function entrySecondary(entry: TimetableEntry, view: View) {
 
 function courseTone(course: string) {
   const tones = [
-    "border-blue-100 bg-blue-50/80",
-    "border-emerald-100 bg-emerald-50/80",
-    "border-amber-100 bg-amber-50/80",
-    "border-violet-100 bg-violet-50/80",
-    "border-rose-100 bg-rose-50/80",
-    "border-cyan-100 bg-cyan-50/80",
+    "border-[var(--timetable-blue-border)] bg-[var(--timetable-blue-background)]",
+    "border-[var(--timetable-green-border)] bg-[var(--timetable-green-background)]",
+    "border-[var(--timetable-amber-border)] bg-[var(--timetable-amber-background)]",
+    "border-[var(--timetable-violet-border)] bg-[var(--timetable-violet-background)]",
+    "border-[var(--timetable-rose-border)] bg-[var(--timetable-rose-background)]",
+    "border-[var(--timetable-cyan-border)] bg-[var(--timetable-cyan-background)]",
   ]
   const index = Array.from(course).reduce((sum, character) => sum + character.charCodeAt(0), 0)
   return tones[index % tones.length]
@@ -1745,13 +1747,13 @@ function PlacementDiagnosis({
     <div
       className={
         diagnosis.allowed
-          ? "rounded-xl border border-emerald-200 bg-emerald-50/70 px-4 py-3"
+          ? "rounded-xl border border-[var(--timetable-success-border)] bg-[var(--timetable-success-background)] px-4 py-3"
           : "rounded-xl border border-destructive/25 bg-destructive/5 px-4 py-3"
       }
     >
       <div className="flex items-start gap-2">
         {diagnosis.allowed ? (
-          <CheckCircle2Icon className="mt-0.5 size-4 shrink-0 text-emerald-600" />
+          <CheckCircle2Icon className="mt-0.5 size-4 shrink-0 text-[var(--timetable-success-accent)]" />
         ) : (
           <AlertTriangleIcon className="mt-0.5 size-4 shrink-0 text-destructive" />
         )}
@@ -1776,7 +1778,7 @@ function PlacementDiagnosis({
         </ul>
       )}
       {diagnosis.soft_warnings.length > 0 && (
-        <ul className="mt-3 grid gap-1 border-t border-amber-200 pt-3 text-sm text-amber-900">
+        <ul className="mt-3 grid gap-1 border-t border-[var(--timetable-notice-border)] pt-3 text-sm text-[var(--timetable-notice-muted)]">
           {diagnosis.soft_warnings.map((warning) => (
             <li key={warning}>· {warning}</li>
           ))}
@@ -1837,13 +1839,13 @@ function SwapDiagnosisPanel({
     <div
       className={
         diagnosis.allowed
-          ? "rounded-xl border border-emerald-200 bg-emerald-50/70 px-4 py-3"
+          ? "rounded-xl border border-[var(--timetable-success-border)] bg-[var(--timetable-success-background)] px-4 py-3"
           : "rounded-xl border border-destructive/25 bg-destructive/5 px-4 py-3"
       }
     >
       <p className="flex items-center gap-2 font-medium">
         {diagnosis.allowed ? (
-          <CheckCircle2Icon className="size-4 text-emerald-600" />
+          <CheckCircle2Icon className="size-4 text-[var(--timetable-success-accent)]" />
         ) : (
           <AlertTriangleIcon className="size-4 text-destructive" />
         )}

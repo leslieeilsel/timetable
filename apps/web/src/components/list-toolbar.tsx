@@ -55,7 +55,7 @@ export function ListToolbar({
             aria-label={searchPlaceholder}
             className="pl-9 pr-11"
           />
-          <kbd className="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 rounded border bg-muted/60 px-1.5 py-0.5 font-sans text-[11px] text-muted-foreground">
+          <kbd className="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 rounded-lg border bg-muted/60 px-1.5 py-0.5 font-sans text-[11px] text-muted-foreground">
             ⌘K
           </kbd>
         </label>

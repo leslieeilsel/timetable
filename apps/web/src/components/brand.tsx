@@ -9,7 +9,7 @@ export function LogoMark({ className, alt = "", ...props }: LogoMarkProps) {
     <img
       src="/brand/logo-mark.svg"
       alt={alt}
-      className={cn("shrink-0 select-none", className)}
+      className={cn("shrink-0 select-none dark:invert", className)}
       draggable={false}
       {...props}
     />

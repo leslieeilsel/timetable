@@ -1,5 +1,6 @@
 import { Link, Outlet, useLocation, useNavigate } from "react-router"
-import { CalendarDaysIcon, ChevronDownIcon, LogOutIcon, UserRoundIcon } from "lucide-react"
+import { ChevronDownIcon, LogOutIcon, MoonIcon, SunIcon } from "lucide-react"
+import { useTheme } from "next-themes"
 import { AppSidebar } from "@/components/app-sidebar"
 import { useAuth } from "@/lib/auth"
 import {
@@ -54,6 +55,8 @@ export function WorkspaceShell() {
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const { user, logout } = useAuth()
+  const { resolvedTheme, setTheme } = useTheme()
+  const isDark = resolvedTheme === "dark"
   const { semesterId } = useResolvedSemesterId()
   const parts = pathname.split("/").filter(Boolean)
   const part = parts.at(-1)
@@ -76,7 +79,7 @@ export function WorkspaceShell() {
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
-        <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b border-border/50 bg-background/95 px-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_1px_12px_rgba(24,24,20,0.035)] supports-[backdrop-filter]:bg-background/70 supports-[backdrop-filter]:backdrop-blur-2xl supports-[backdrop-filter]:backdrop-saturate-150 lg:px-5">
+        <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b border-border/50 bg-background/95 px-4 supports-[backdrop-filter]:bg-background/70 supports-[backdrop-filter]:backdrop-blur-2xl supports-[backdrop-filter]:backdrop-saturate-150 lg:px-5">
           <SidebarTrigger className="-ml-1 rounded-full border bg-background md:hidden" />
           <Breadcrumb className="min-w-0 flex-1 overflow-hidden">
             <BreadcrumbList className="flex-nowrap overflow-hidden">
@@ -122,8 +125,19 @@ export function WorkspaceShell() {
             </BreadcrumbList>
           </Breadcrumb>
           <div className="ml-auto flex shrink-0 items-center gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="text-muted-foreground"
+              aria-label={isDark ? "切换到浅色模式" : "切换到深色模式"}
+              aria-pressed={isDark}
+              title={isDark ? "切换到浅色模式" : "切换到深色模式"}
+              onClick={() => setTheme(isDark ? "light" : "dark")}
+            >
+              {isDark ? <SunIcon /> : <MoonIcon />}
+            </Button>
             <div className="hidden items-center gap-2 text-sm whitespace-nowrap text-muted-foreground lg:flex">
-              <CalendarDaysIcon className="size-4" />
               <time dateTime={today}>
                 {today} {weekday}
               </time>
@@ -134,7 +148,6 @@ export function WorkspaceShell() {
                   <Button variant="ghost" className="ml-1 gap-2 px-2.5" aria-label={user?.name} />
                 }
               >
-                <UserRoundIcon />
                 <span className="hidden sm:inline">{user?.name}</span>
                 <ChevronDownIcon className="size-3.5 text-muted-foreground" />
               </DropdownMenuTrigger>

@@ -7,9 +7,13 @@ import {
   type ReactNode,
 } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { PlusIcon } from "lucide-react"
+import { CircleHelpIcon, PlusIcon } from "lucide-react"
 import { toast } from "sonner"
 import { api, apiAllPages, apiMessage, jsonBody } from "@/lib/api"
+import {
+  supportsConstraintKindCategory,
+  unsupportedConstraintReason,
+} from "@/lib/scheduling-constraint-support"
 import { useResolvedSemesterId } from "@/lib/semester"
 import type {
   ClassSetting,
@@ -54,6 +58,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import {
   Table,
   TableBody,
@@ -364,6 +369,29 @@ export function SchedulingConstraintsPage() {
                         <TableCell>{rule.weight ?? "—"}</TableCell>
                         <TableCell>
                           <StatusBadge value={rule.status} />
+                          {rule.status !== "active" &&
+                            !supportsConstraintKindCategory(rule.kind, rule.category) && (
+                              <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                                <span>暂不支持启用</span>
+                                <Tooltip>
+                                  <TooltipTrigger
+                                    delay={150}
+                                    render={
+                                      <button
+                                        type="button"
+                                        className="inline-flex size-4 items-center justify-center rounded-full outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+                                        aria-label="查看暂不支持启用的原因"
+                                      />
+                                    }
+                                  >
+                                    <CircleHelpIcon className="size-3.5" aria-hidden="true" />
+                                  </TooltipTrigger>
+                                  <TooltipContent sideOffset={6}>
+                                    {unsupportedConstraintReason}
+                                  </TooltipContent>
+                                </Tooltip>
+                              </div>
+                            )}
                         </TableCell>
                         <TableCell className="text-right">
                           {rule.source === "system" ? (
@@ -375,6 +403,16 @@ export function SchedulingConstraintsPage() {
                               </TableActionButton>
                               <TableActionButton
                                 intent={rule.status === "active" ? "deactivate" : "activate"}
+                                disabled={
+                                  rule.status !== "active" &&
+                                  !supportsConstraintKindCategory(rule.kind, rule.category)
+                                }
+                                title={
+                                  rule.status !== "active" &&
+                                  !supportsConstraintKindCategory(rule.kind, rule.category)
+                                    ? unsupportedConstraintReason
+                                    : undefined
+                                }
                                 onClick={() =>
                                   void ruleAction(
                                     rule,
@@ -382,7 +420,11 @@ export function SchedulingConstraintsPage() {
                                   )
                                 }
                               >
-                                {rule.status === "active" ? "停用" : "启用"}
+                                {rule.status === "active"
+                                  ? "停用"
+                                  : supportsConstraintKindCategory(rule.kind, rule.category)
+                                    ? "启用"
+                                    : "暂不支持"}
                               </TableActionButton>
                               <TableActionButton
                                 intent="delete"
@@ -608,14 +650,27 @@ const rulePresetOptions: Record<RuleKind, { value: RulePreset; label: string }[]
 }
 
 function linkedPresetForKind(preset: RulePreset, kind: RuleKind): RulePreset {
-  if (rulePresetOptions[kind].some((option) => option.value === preset)) return preset
+  if (
+    rulePresetOptions[kind].some((option) => option.value === preset) &&
+    supportsConstraintKindCategory(kind, constraintCategoryForPreset(preset))
+  )
+    return preset
   if (kind === "hard") {
-    if (preset === "teacher_gaps") return "daily_limit"
     return "unavailable"
   }
-  if (preset === "synchronization") return "distribution"
-  if (preset === "mutual_exclusion") return "spacing"
   return "avoid"
+}
+
+function constraintCategoryForPreset(preset: RulePreset) {
+  if (preset === "unavailable") return "availability"
+  if (preset === "daily_limit") return "daily_load"
+  if (preset === "consecutive_limit") return "consecutive_items"
+  if (preset === "spacing") return "spacing"
+  if (preset === "synchronization") return "synchronization"
+  if (preset === "mutual_exclusion") return "mutual_exclusion"
+  if (preset === "distribution") return "course_distribution"
+  if (preset === "teacher_gaps") return "teacher_gaps"
+  return "preferred_slot"
 }
 
 function RuleFormSection({
@@ -790,6 +845,11 @@ function RuleDialog({
     items.filter((item) => item.start_time >= "12:00").map((item) => `${day.weekday}:${item.id}`),
   )
   const relatedCount = relatedAssignmentIds.filter((id) => String(id) !== targetId).length
+  const selectedCategory = constraintCategoryForPreset(preset)
+  const selectedCombinationSupported = supportsConstraintKindCategory(
+    effectiveKind,
+    selectedCategory,
+  )
   const preview = rulePreview({
     preset,
     kind: effectiveKind,
@@ -817,6 +877,7 @@ function RuleDialog({
     targetError ? "选择具体对象" : null,
     slotError ? "选择生效课节" : null,
     relationError ? "选择关联任课关系" : null,
+    !selectedCombinationSupported ? "选择当前求解器支持的规则组合" : null,
   ].filter((item): item is string => Boolean(item))
   const targetTypeLabel =
     {
@@ -864,24 +925,7 @@ function RuleDialog({
     event.preventDefault()
     setAttemptedSubmit(true)
     if (missingRequirements.length > 0 || !etag) return
-    const category =
-      preset === "unavailable"
-        ? "availability"
-        : preset === "daily_limit"
-          ? "daily_load"
-          : preset === "consecutive_limit"
-            ? "consecutive_items"
-            : preset === "spacing"
-              ? "spacing"
-              : preset === "synchronization"
-                ? "synchronization"
-                : preset === "mutual_exclusion"
-                  ? "mutual_exclusion"
-                  : preset === "distribution"
-                    ? "course_distribution"
-                    : preset === "teacher_gaps"
-                      ? "teacher_gaps"
-                      : "preferred_slot"
+    const category = constraintCategoryForPreset(preset)
     const requirement =
       preset === "unavailable"
         ? { available: false }
@@ -995,11 +1039,18 @@ function RuleDialog({
                           }
                         }}
                       >
-                        {rulePresetOptions[kind].map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
+                        {rulePresetOptions[kind].map((option) => {
+                          const supported = supportsConstraintKindCategory(
+                            kind,
+                            constraintCategoryForPreset(option.value),
+                          )
+                          return (
+                            <option key={option.value} value={option.value} disabled={!supported}>
+                              {option.label}
+                              {supported ? "" : "（当前暂不支持）"}
+                            </option>
+                          )
+                        })}
                       </select>
                     </Field>
                   </div>
