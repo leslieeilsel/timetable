@@ -35,6 +35,7 @@ return new class extends Migration
             });
 
         Schema::table('substitutions', function (Blueprint $table): void {
+            $table->index('original_entry_id', 'idx_substitution_original_entry');
             $table->dropUnique('uq_substitution_entry_date');
             $table->unique(
                 ['teacher_leave_id', 'original_entry_id', 'effective_date', 'replaced_teacher_id'],
@@ -57,6 +58,7 @@ return new class extends Migration
         Schema::table('substitutions', function (Blueprint $table): void {
             $table->dropUnique('uq_substitution_leave_entry_date_teacher');
             $table->unique(['original_entry_id', 'effective_date'], 'uq_substitution_entry_date');
+            $table->dropIndex('idx_substitution_original_entry');
             $table->dropConstrainedForeignId('replaced_teacher_id');
         });
     }
