@@ -149,7 +149,7 @@ class CatalogController
 
     public function teacherCourses(Request $request, Teacher $teacher): JsonResponse
     {
-        $data = $request->validate(['course_ids' => ['required', 'array'], 'course_ids.*' => ['integer', 'distinct', 'exists:courses,id']]);
+        $data = $request->validate(['course_ids' => ['present', 'array'], 'course_ids.*' => ['integer', 'distinct', 'exists:courses,id']]);
 
         return DB::transaction(function () use ($request, $teacher, $data): JsonResponse {
             [$actor, $settings] = $this->guard->catalog($request);

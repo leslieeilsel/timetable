@@ -41,10 +41,15 @@ it('updates a teacher course assignment through the declared pivot table', funct
     ])->assertCreated();
     $teacherId = $teacherResponse->json('data.id');
 
-    $this->withHeader('If-Match', $teacherResponse->headers->get('ETag'))
+    $assigned = $this->withHeader('If-Match', $teacherResponse->headers->get('ETag'))
         ->putJson("/api/v1/teachers/{$teacherId}/courses", ['course_ids' => [$courseId]])
         ->assertOk()
         ->assertJsonPath('data.courses.0.id', $courseId);
+
+    $this->withHeader('If-Match', $assigned->headers->get('ETag'))
+        ->putJson("/api/v1/teachers/{$teacherId}/courses", ['course_ids' => []])
+        ->assertOk()
+        ->assertJsonCount(0, 'data.courses');
 });
 
 it('builds a semester and rejects a teacher conflict in the same slot', function (): void {
