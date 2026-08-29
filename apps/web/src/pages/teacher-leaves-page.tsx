@@ -216,7 +216,7 @@ export function TeacherLeavesPage() {
             />
           ) : (
             <>
-              <Table>
+              <Table responsive>
                 <TableHeader>
                   <TableRow>
                     <TableHead>教师</TableHead>
@@ -231,32 +231,36 @@ export function TeacherLeavesPage() {
                 <TableBody>
                   {leaves.data.data.map((leave) => (
                     <TableRow key={leave.id}>
-                      <TableCell>
+                      <TableCell data-label="教师">
                         <p className="font-medium">{leave.teacher.name}</p>
                         <p className="mt-0.5 text-xs text-muted-foreground">
                           {leave.teacher.employee_no ?? "未设置工号"}
                         </p>
                       </TableCell>
-                      <TableCell className="whitespace-nowrap">
+                      <TableCell data-label="请假时间" className="whitespace-nowrap">
                         <p>{dateTimeLabel(leave.starts_at)}</p>
                         <p className="mt-0.5 text-xs text-muted-foreground">
                           至 {dateTimeLabel(leave.ends_at)}
                         </p>
                       </TableCell>
-                      <TableCell>{leaveTypeLabels[leave.type]}</TableCell>
-                      <TableCell className="max-w-72 truncate" title={leave.reason ?? undefined}>
+                      <TableCell data-label="类型">{leaveTypeLabels[leave.type]}</TableCell>
+                      <TableCell
+                        data-label="原因"
+                        className="max-w-72 truncate"
+                        title={leave.reason ?? undefined}
+                      >
                         {leave.reason || "—"}
                       </TableCell>
-                      <TableCell>
+                      <TableCell data-label="已安排代课">
                         <span className="font-medium tabular-nums">
                           {leave.substitutions_count ?? 0}
                         </span>
                         <span className="ml-1 text-muted-foreground">节</span>
                       </TableCell>
-                      <TableCell>
+                      <TableCell data-label="状态">
                         <StatusBadge value={leave.status} />
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell data-label="操作" className="text-right">
                         <Button
                           variant="ghost"
                           size="sm"
@@ -338,17 +342,20 @@ function LeaveEditor({
   const [preview, setPreview] = useState<TeacherLeavePreview | null>(null)
   const [previewEtag, setPreviewEtag] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [errors, setErrors] = useState<Partial<Record<keyof LeaveForm, string>>>({})
 
   useEffect(() => {
     if (!open) return
     setForm(emptyLeaveForm(semester))
     setPreview(null)
     setPreviewEtag(null)
+    setErrors({})
   }, [open, semester])
   const update = <K extends keyof LeaveForm>(key: K, value: LeaveForm[K]) => {
     setForm((current) => ({ ...current, [key]: value }))
     setPreview(null)
     setPreviewEtag(null)
+    setErrors((current) => ({ ...current, [key]: undefined }))
   }
   const payload = () => ({
     teacher_id: Number(form.teacher_id),
@@ -361,6 +368,12 @@ function LeaveEditor({
   const runPreview = async (event?: FormEvent) => {
     event?.preventDefault()
     if (!semesterId) return
+    const nextErrors = validateLeaveForm(form)
+    setErrors(nextErrors)
+    if (Object.values(nextErrors).some(Boolean)) {
+      toast.error("请先补齐标出的必填项")
+      return
+    }
     setBusy(true)
     try {
       const result = await api<TeacherLeavePreview>(
@@ -412,17 +425,19 @@ function LeaveEditor({
           className="grid min-h-0 flex-1 gap-5 overflow-y-auto p-6"
           onSubmit={(event) => void runPreview(event)}
         >
-          <Field label="请假教师">
+          <Field label="请假教师（必填）" error={errors.teacher_id}>
             <TeacherPicker
+              invalid={Boolean(errors.teacher_id)}
               teachers={teachers}
               value={form.teacher_id}
               onValueChange={(value) => update("teacher_id", value)}
             />
           </Field>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="开始时间">
+            <Field label="开始时间（必填）" error={errors.starts_at}>
               <DateTimePicker
                 required
+                invalid={Boolean(errors.starts_at)}
                 min={semester ? `${semester.start_date}T00:00` : undefined}
                 max={semester ? `${semester.end_date}T23:59` : undefined}
                 value={form.starts_at}
@@ -431,9 +446,10 @@ function LeaveEditor({
                 className="w-full"
               />
             </Field>
-            <Field label="结束时间">
+            <Field label="结束时间（必填）" error={errors.ends_at}>
               <DateTimePicker
                 required
+                invalid={Boolean(errors.ends_at)}
                 min={form.starts_at || (semester ? `${semester.start_date}T00:00` : undefined)}
                 max={semester ? `${semester.end_date}T23:59` : undefined}
                 value={form.ends_at}
@@ -484,6 +500,16 @@ function LeaveEditor({
       </DialogContent>
     </Dialog>
   )
+}
+
+function validateLeaveForm(form: LeaveForm) {
+  const errors: Partial<Record<keyof LeaveForm, string>> = {}
+  if (!form.teacher_id) errors.teacher_id = "请选择请假教师"
+  if (!form.starts_at) errors.starts_at = "请选择开始时间"
+  if (!form.ends_at) errors.ends_at = "请选择结束时间"
+  else if (form.starts_at && form.ends_at <= form.starts_at)
+    errors.ends_at = "结束时间必须晚于开始时间"
+  return errors
 }
 
 function LeavePreviewPanel({ preview }: { preview: TeacherLeavePreview }) {

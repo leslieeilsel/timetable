@@ -1,16 +1,14 @@
 import { describe, expect, it } from "vitest"
 
-import {
-  matchesResourceQuery,
-  resourcePinyin,
-  type ResourcePickerItem,
-} from "@/components/resource-picker"
+import { matchesResourceQuery, type ResourcePickerItem } from "@/components/resource-picker"
+import { resourcePinyin } from "@/lib/resource-pinyin"
 
 const teacher: ResourcePickerItem = {
   value: "108",
   label: "王静",
   description: "T-0108",
-  searchText: `${resourcePinyin("王静")} 语文 ${resourcePinyin("语文")}`,
+  searchText: "语文",
+  pinyinSource: "王静 语文",
   status: "可选",
   statusTone: "success",
 }
@@ -22,8 +20,9 @@ describe("resource picker search", () => {
   })
 
   it("matches full pinyin and pinyin initials", () => {
-    expect(matchesResourceQuery(teacher, "wangjing")).toBe(true)
-    expect(matchesResourceQuery(teacher, "wj")).toBe(true)
+    const pinyinSearchText = resourcePinyin(teacher.pinyinSource ?? teacher.label)
+    expect(matchesResourceQuery(teacher, "wangjing", pinyinSearchText)).toBe(true)
+    expect(matchesResourceQuery(teacher, "wj", pinyinSearchText)).toBe(true)
   })
 
   it("matches subject search text and rejects unrelated input", () => {

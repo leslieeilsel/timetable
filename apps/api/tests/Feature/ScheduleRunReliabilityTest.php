@@ -26,7 +26,13 @@ it('persists the complete scheduling input baseline and dispatches a recoverable
     $fixture = scheduleRunReliabilityFixture();
     $baseVersionId = addScheduleRunBaseVersion($fixture, $this->scheduler->id, true);
     DB::table('app_settings')->where('id', 1)->update(['catalog_revision' => 7]);
-    $etag = $this->getJson("/api/v1/semesters/{$fixture['semester_id']}")->assertOk()->headers->get('ETag');
+    $semester = $this->getJson("/api/v1/semesters/{$fixture['semester_id']}")
+        ->assertOk()
+        ->assertJsonPath('data.input_revision', '3')
+        ->assertJsonPath('data.assignment_revision', '2')
+        ->assertJsonPath('data.constraint_revision', '1')
+        ->assertJsonPath('data.timetable_revision', '4');
+    $etag = $semester->headers->get('ETag');
 
     $response = $this->withHeader('If-Match', $etag)
         ->postJson("/api/v1/semesters/{$fixture['semester_id']}/schedule-runs", scheduleRunPayload([

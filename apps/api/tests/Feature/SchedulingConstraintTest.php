@@ -150,12 +150,6 @@ it('rejects unsupported kind category pairs and non strict nested payloads', fun
         ['hard', 'course_distribution', ['max_same_course_per_day' => 1]],
         ['hard', 'spacing', ['min_gap_days' => 1]],
         ['soft', 'daily_load', ['max_items_per_day' => 4]],
-        ['soft', 'consecutive_items', ['max_consecutive_items' => 3]],
-        ['soft', 'course_distribution', ['spread_across_weekdays' => true]],
-        ['soft', 'spacing', ['max_same_course_per_day' => 1]],
-        ['soft', 'workload_balance', ['balance_teacher_daily_load' => true]],
-        ['soft', 'teacher_gaps', ['minimize_teacher_gaps' => true]],
-        ['soft', 'course_priority', ['prefer_earlier_items' => ['数学']]],
     ] as [$kind, $category, $requirement]) {
         $this->withHeader('If-Match', $etag)
             ->postJson("/api/v1/semesters/{$semesterId}/scheduling-constraints", [
@@ -167,6 +161,31 @@ it('rejects unsupported kind category pairs and non strict nested payloads', fun
                 ...($kind === 'soft' ? ['weight' => 60] : []),
             ])->assertStatus(422)
             ->assertJsonPath('code', 'CONSTRAINT_KIND_CATEGORY_UNSUPPORTED');
+    }
+});
+
+it('accepts every template soft rule implemented by generation and manual diagnostics', function (): void {
+    [$semesterId] = constraintFixture();
+
+    foreach ([
+        ['course_distribution', ['spread_across_weekdays' => true]],
+        ['course_priority', ['prefer_earlier_items' => ['数学']]],
+        ['teacher_gaps', ['minimize_teacher_gaps' => true]],
+        ['workload_balance', ['balance_teacher_daily_load' => true]],
+        ['consecutive_items', ['max_consecutive_items' => 3]],
+        ['spacing', ['max_same_course_per_day' => 1]],
+    ] as [$category, $requirement]) {
+        $etag = $this->getJson("/api/v1/semesters/{$semesterId}")->assertOk()->headers->get('ETag');
+        $this->withHeader('If-Match', $etag)
+            ->postJson("/api/v1/semesters/{$semesterId}/scheduling-constraints", [
+                'name' => "可执行软规则 {$category}",
+                'kind' => 'soft',
+                'category' => $category,
+                'scope' => [],
+                'requirement' => $requirement,
+                'weight' => 60,
+            ])->assertCreated()
+            ->assertJsonPath('data.category', $category);
     }
 });
 

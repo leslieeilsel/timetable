@@ -7,7 +7,7 @@ import "./index.css"
 import "./app.css"
 import App from "./App.tsx"
 import { AuthProvider } from "@/lib/auth"
-import { Toaster } from "@/components/ui/sonner"
+import { DeferredToaster } from "@/components/deferred-toaster"
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -28,7 +28,7 @@ createRoot(document.getElementById("root")!).render(
         <BrowserRouter>
           <AuthProvider>
             <App />
-            <Toaster richColors closeButton />
+            <DeferredToaster />
           </AuthProvider>
         </BrowserRouter>
       </QueryClientProvider>

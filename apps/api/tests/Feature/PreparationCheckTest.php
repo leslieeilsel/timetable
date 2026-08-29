@@ -178,6 +178,20 @@ it('reports missing soft rules and current timetable as warnings', function (): 
         ->and($checks['current_version']['status'])->toBe('warning');
 });
 
+it('reports a current timetable based on older input as a warning', function (): void {
+    $fixture = preparationCheckFixture($this->scheduler->id);
+    DB::table('semesters')->where('id', $fixture['semester_id'])->increment('input_revision');
+
+    $response = $this->getJson("/api/v1/semesters/{$fixture['semester_id']}/preparation-check")
+        ->assertOk()
+        ->assertJsonPath('data.ready', true)
+        ->assertJsonPath('data.status', 'warning');
+    $check = collect($response->json('data.checks'))->firstWhere('key', 'current_version');
+
+    expect($check['status'])->toBe('warning')
+        ->and($check['message'])->toContain('输入已变化');
+});
+
 it('keeps preparation query count bounded for a medium school', function (): void {
     $this->seed(MediumSchoolSeeder::class);
     $semesterId = (int) DB::table('app_settings')->where('id', 1)->value('current_semester_id');
@@ -348,6 +362,7 @@ function preparationCheckFixture(int $userId): array
         'source' => 'manual',
         'created_by' => $userId,
         'input_revision' => 1,
+        'catalog_revision' => 0,
         'hard_conflict_count' => 0,
         'soft_warning_count' => 0,
         'activated_at' => $now,

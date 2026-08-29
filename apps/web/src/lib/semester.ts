@@ -114,7 +114,7 @@ export function resolveTimetableVersionSelection(
   }
 
   const editable = selectable.find((version) => version.status === "draft")
-  const preferred = editable ?? current ?? selectable[0]
+  const preferred = current ?? editable ?? selectable[0]
   return preferred ? String(preferred.id) : ""
 }
 

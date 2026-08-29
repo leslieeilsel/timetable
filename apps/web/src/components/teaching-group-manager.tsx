@@ -168,7 +168,7 @@ export function TeachingGroupManager({
                 }
               />
             ) : items.length ? (
-              <Table>
+              <Table responsive>
                 <TableHeader>
                   <TableRow>
                     <TableHead>名称</TableHead>
@@ -182,18 +182,20 @@ export function TeachingGroupManager({
                 <TableBody>
                   {items.map((group) => (
                     <TableRow key={group.id}>
-                      <TableCell className="font-medium">{group.name}</TableCell>
-                      <TableCell>{groupModeLabel(group.mode)}</TableCell>
-                      <TableCell className="max-w-80">
+                      <TableCell data-label="名称" className="font-medium">
+                        {group.name}
+                      </TableCell>
+                      <TableCell data-label="类型">{groupModeLabel(group.mode)}</TableCell>
+                      <TableCell data-label="包含班级" className="max-w-80">
                         <span className="line-clamp-2 text-sm text-muted-foreground">
                           {group.school_classes.map((item) => item.name).join("、")}
                         </span>
                       </TableCell>
-                      <TableCell>{group.assignments_count ?? 0} 条</TableCell>
-                      <TableCell>
+                      <TableCell data-label="任课关系">{group.assignments_count ?? 0} 条</TableCell>
+                      <TableCell data-label="状态">
                         <StatusBadge value={group.status} />
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell data-label="操作" className="text-right">
                         <div className="flex items-center justify-end gap-0.5">
                           <TableActionButton intent="edit" onClick={() => setEditing(group)}>
                             编辑

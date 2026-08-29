@@ -137,7 +137,7 @@ export function UsersPage() {
             {!users.data?.data.length ? (
               <EmptyList title="没有匹配的用户" description="请调整搜索词或筛选条件。" />
             ) : (
-              <Table>
+              <Table responsive>
                 <TableHeader>
                   <TableRow>
                     <TableHead>姓名</TableHead>
@@ -151,7 +151,7 @@ export function UsersPage() {
                 <TableBody>
                   {users.data.data.map((user) => (
                     <TableRow key={user.id}>
-                      <TableCell className="font-medium">
+                      <TableCell data-label="姓名" className="font-medium">
                         <span className="inline-flex items-center gap-3">
                           <span
                             className={`flex size-9 items-center justify-center rounded-full text-sm ${avatarTone(user.id)}`}
@@ -161,7 +161,7 @@ export function UsersPage() {
                           {user.name}
                         </span>
                       </TableCell>
-                      <TableCell>
+                      <TableCell data-label="邮箱">
                         <span className="inline-flex items-center gap-2">
                           {user.email}
                           <button
@@ -177,20 +177,20 @@ export function UsersPage() {
                           </button>
                         </span>
                       </TableCell>
-                      <TableCell>
+                      <TableCell data-label="角色">
                         <StatusBadge value={user.role} />
                       </TableCell>
-                      <TableCell>
+                      <TableCell data-label="状态">
                         <StatusBadge value={user.is_active ? "active" : "inactive"} />
                       </TableCell>
-                      <TableCell>
+                      <TableCell data-label="密码">
                         {user.must_change_password ? (
                           <span className="text-xs text-amber-700">待修改临时密码</span>
                         ) : (
                           <span className="text-xs text-muted-foreground">已设置</span>
                         )}
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell data-label="操作" className="text-right">
                         <div className="flex items-center justify-end gap-0.5">
                           <TableActionButton intent="edit" onClick={() => setEditing(user)}>
                             编辑
@@ -222,6 +222,7 @@ export function UsersPage() {
         )}
       </div>
       <UserDialog
+        key={editing === null ? "new" : (editing?.id ?? "closed")}
         open={editing !== undefined}
         user={editing}
         onClose={() => setEditing(undefined)}
@@ -243,23 +244,7 @@ function UserDialog({
   onClose: () => void
   onSaved: () => Promise<void>
 }) {
-  const [form, setForm] = useState({
-    name: "",
-    email: "",
-    role: "viewer",
-    is_active: true,
-    temporary_password: "",
-  })
-  useEffect(() => {
-    if (open)
-      setForm({
-        name: user?.name ?? "",
-        email: user?.email ?? "",
-        role: user?.role ?? "viewer",
-        is_active: user?.is_active ?? true,
-        temporary_password: "",
-      })
-  }, [open, user])
+  const [form, setForm] = useState(() => userForm(user))
   const save = async () => {
     try {
       await api(user ? `/api/v1/users/${user.id}` : "/api/v1/users", {
@@ -310,7 +295,7 @@ function UserDialog({
             <SimpleSelect
               className="w-full"
               value={form.role}
-              onValueChange={(value) => setForm({ ...form, role: value })}
+              onValueChange={(value) => setForm({ ...form, role: value as ManagedUser["role"] })}
             >
               <option value="viewer">查看者</option>
               <option value="scheduler">排课员</option>
@@ -353,6 +338,16 @@ function UserDialog({
       </DialogContent>
     </Dialog>
   )
+}
+
+function userForm(user: ManagedUser | null | undefined) {
+  return {
+    name: user?.name ?? "",
+    email: user?.email ?? "",
+    role: user?.role ?? "viewer",
+    is_active: user?.is_active ?? true,
+    temporary_password: "",
+  }
 }
 
 function ResetPasswordDialog({
@@ -498,7 +493,12 @@ export function SettingsPage() {
           <div className="mt-7 grid gap-5 sm:grid-cols-[140px_minmax(0,1fr)] sm:items-start">
             <p className="pt-3 text-sm font-medium">开放学期</p>
             <div className="max-w-2xl">
-              <SimpleSelect className="w-full" value={selected} onValueChange={setSelected}>
+              <SimpleSelect
+                className="w-full"
+                value={selected}
+                onValueChange={setSelected}
+                label="开放学期"
+              >
                 <option value="">不设置</option>
                 {semesters.data?.map((semester) => (
                   <option key={semester.id} value={semester.id}>
@@ -522,7 +522,12 @@ export function SettingsPage() {
           <div className="mt-7 grid gap-5 sm:grid-cols-[140px_minmax(0,1fr)] sm:items-start">
             <p className="pt-3 text-sm font-medium">IANA 时区</p>
             <div className="max-w-2xl">
-              <SimpleSelect value={timezone} onValueChange={setTimezone} className="w-full">
+              <SimpleSelect
+                value={timezone}
+                onValueChange={setTimezone}
+                className="w-full"
+                label="IANA 时区"
+              >
                 <option value="Asia/Shanghai">Asia/Shanghai</option>
                 <option value="Asia/Hong_Kong">Asia/Hong_Kong</option>
                 <option value="Asia/Taipei">Asia/Taipei</option>

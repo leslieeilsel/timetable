@@ -88,8 +88,9 @@ describe("timetable version selection", () => {
     expect(resolveTimetableVersionSelection(versions, "103", 101, "viewer")).toBe("101")
   })
 
-  it("keeps the latest draft as the editor default", () => {
-    expect(resolveTimetableVersionSelection(versions, "", 101, "scheduler")).toBe("103")
-    expect(resolveTimetableVersionSelection(versions, "", 101, "admin")).toBe("103")
+  it("defaults editors to the current version unless they explicitly select a draft", () => {
+    expect(resolveTimetableVersionSelection(versions, "", 101, "scheduler")).toBe("101")
+    expect(resolveTimetableVersionSelection(versions, "", 101, "admin")).toBe("101")
+    expect(resolveTimetableVersionSelection(versions, "103", 101, "admin")).toBe("103")
   })
 })

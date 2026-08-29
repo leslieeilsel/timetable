@@ -17,6 +17,16 @@ describe("API utilities", () => {
     expect(jsonBody({ weekday: 1 })).toBe('{"weekday":1}')
   })
 
+  it("turns validation envelopes into a specific field-level message", () => {
+    expect(
+      apiMessage(
+        new ApiError("请求数据校验失败", 422, "VALIDATION_FAILED", {
+          errors: { teacher_id: ["The teacher id field is required."] },
+        }),
+      ),
+    ).toBe("请检查“教师”，该字段缺失或格式不正确。")
+  })
+
   it("refreshes an expired CSRF cookie once before retrying a write", async () => {
     vi.stubGlobal("document", { cookie: "" })
     vi.stubGlobal("window", new EventTarget())

@@ -116,7 +116,7 @@ export function AcademicYearsPage() {
         ) : (
           <div className="surface-panel overflow-hidden">
             <ListToolbar actions={newYearButton} />
-            <Table>
+            <Table responsive>
               <TableHeader>
                 <TableRow>
                   <TableHead>学年</TableHead>
@@ -136,14 +136,18 @@ export function AcademicYearsPage() {
                   return (
                     <TableRow
                       key={year.id}
-                      className={isCurrent ? "border-l-4 border-l-primary" : undefined}
+                      className={
+                        isCurrent ? "bg-primary/[0.035] hover:bg-primary/[0.055]" : undefined
+                      }
                     >
-                      <TableCell className="font-medium">{year.name}</TableCell>
-                      <TableCell>
+                      <TableCell data-label="学年" className="font-medium">
+                        {year.name}
+                      </TableCell>
+                      <TableCell data-label="日期范围">
                         {year.start_date} 至 {year.end_date}
                       </TableCell>
-                      <TableCell>{classCount} 个班级</TableCell>
-                      <TableCell>
+                      <TableCell data-label="班级">{classCount} 个班级</TableCell>
+                      <TableCell data-label="学期">
                         <div className="min-w-20">
                           <span>{semesterCount}/2</span>
                           <div className="mt-1 h-1 w-10 overflow-hidden rounded-full bg-muted">
@@ -154,7 +158,7 @@ export function AcademicYearsPage() {
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell data-label="状态">
                         <div className="flex items-center gap-2">
                           <StatusBadge value={year.status} />
                           {isCurrent && (
@@ -162,7 +166,7 @@ export function AcademicYearsPage() {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell data-label="操作" className="text-right">
                         <Button
                           variant="ghost"
                           size="sm"
@@ -242,6 +246,7 @@ export function AcademicYearsPage() {
 
 export function AcademicYearDetailPage() {
   const { user } = useAuth()
+  const context = useSchoolContext()
   const { yearId = "" } = useParams()
   const id = Number(yearId)
   const client = useQueryClient()
@@ -401,7 +406,13 @@ export function AcademicYearDetailPage() {
       return false
     }
   }
-  if (years.isLoading || semesters.isLoading || classes.isLoading || grades.isLoading)
+  if (
+    context.isLoading ||
+    years.isLoading ||
+    semesters.isLoading ||
+    classes.isLoading ||
+    grades.isLoading
+  )
     return <LoadingState />
   if (!year) return <ErrorState retry={() => void years.refetch()} />
 
@@ -505,7 +516,7 @@ export function AcademicYearDetailPage() {
                   </ToolbarSelect>
                 </ListToolbar>
                 {classes.data?.data.length ? (
-                  <Table>
+                  <Table responsive>
                     <TableHeader>
                       <TableRow>
                         <TableHead>班级</TableHead>
@@ -518,13 +529,15 @@ export function AcademicYearDetailPage() {
                     <TableBody>
                       {classes.data?.data.map((item) => (
                         <TableRow key={item.id}>
-                          <TableCell className="font-medium">{item.name}</TableCell>
-                          <TableCell>{item.grade.name}</TableCell>
-                          <TableCell>{item.code || "—"}</TableCell>
-                          <TableCell>
+                          <TableCell data-label="班级" className="font-medium">
+                            {item.name}
+                          </TableCell>
+                          <TableCell data-label="年级">{item.grade.name}</TableCell>
+                          <TableCell data-label="编号">{item.code || "—"}</TableCell>
+                          <TableCell data-label="状态">
                             <StatusBadge value={item.status} />
                           </TableCell>
-                          <TableCell className="text-right">
+                          <TableCell data-label="操作" className="text-right">
                             <TableActionButton intent="edit" onClick={() => setClassModal(item)}>
                               编辑
                             </TableActionButton>
@@ -595,7 +608,7 @@ export function AcademicYearDetailPage() {
               />
             ) : (
               <>
-                <Table>
+                <Table responsive>
                   <TableHeader>
                     <TableRow>
                       <TableHead>学期</TableHead>
@@ -607,14 +620,16 @@ export function AcademicYearDetailPage() {
                   <TableBody>
                     {semestersPagination.items.map((semester) => (
                       <TableRow key={semester.id}>
-                        <TableCell className="font-medium">{semester.name}</TableCell>
-                        <TableCell>
+                        <TableCell data-label="学期" className="font-medium">
+                          {semester.name}
+                        </TableCell>
+                        <TableCell data-label="日期范围">
                           {semester.start_date} 至 {semester.end_date}
                         </TableCell>
-                        <TableCell>
+                        <TableCell data-label="状态">
                           <StatusBadge value={semester.status} />
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell data-label="操作" className="text-right">
                           <Button
                             size="sm"
                             variant="ghost"
@@ -644,13 +659,19 @@ export function AcademicYearDetailPage() {
                           )}
                           {semester.status === "open" && (
                             <>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => void semesterAction(semester, "current")}
-                              >
-                                设为当前
-                              </Button>
+                              {context.data?.current_semester?.id === semester.id ? (
+                                <span className="inline-flex h-8 items-center px-3 text-sm font-medium text-emerald-700 dark:text-emerald-400">
+                                  当前学期
+                                </span>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => void semesterAction(semester, "current")}
+                                >
+                                  设为当前
+                                </Button>
+                              )}
                               <Button
                                 size="sm"
                                 variant="ghost"

@@ -4,14 +4,20 @@ import { useAuth } from "@/lib/auth"
 import { pageTitleForPath, SYSTEM_NAME } from "@/lib/brand"
 import { useSchoolContext } from "@/lib/queries"
 import { semesterPath, type SemesterDestination } from "@/lib/semester"
-import { WorkspaceShell } from "@/components/workspace-shell"
 import { LoadingState } from "@/components/page"
 
 const LoginPage = lazy(() =>
   import("@/pages/auth-pages").then((module) => ({ default: module.LoginPage })),
 )
 const ChangePasswordPage = lazy(() =>
-  import("@/pages/auth-pages").then((module) => ({ default: module.ChangePasswordPage })),
+  import("@/pages/change-password-page").then((module) => ({
+    default: module.ChangePasswordPage,
+  })),
+)
+const ProtectedWorkspace = lazy(() =>
+  import("@/components/protected-workspace").then((module) => ({
+    default: module.ProtectedWorkspace,
+  })),
 )
 const DashboardPage = lazy(() =>
   import("@/pages/dashboard-page").then((module) => ({ default: module.DashboardPage })),
@@ -78,14 +84,6 @@ const UsersPage = lazy(() =>
 const SettingsPage = lazy(() =>
   import("@/pages/system-pages").then((module) => ({ default: module.SettingsPage })),
 )
-
-function ProtectedWorkspace() {
-  const { user, loading } = useAuth()
-  if (loading) return <LoadingState label="正在恢复会话…" />
-  if (!user) return <Navigate to="/login" replace />
-  if (user.must_change_password) return <Navigate to="/change-password" replace />
-  return <WorkspaceShell />
-}
 
 function RequireRole({
   roles,

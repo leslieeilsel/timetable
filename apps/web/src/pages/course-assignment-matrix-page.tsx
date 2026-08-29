@@ -891,7 +891,6 @@ export function CourseAssignmentMatrixPage() {
                                           ? 0
                                           : -1
                                       }
-                                      aria-label={`${classSetting.school_class.name}，${course.name}，${assignment ? `${assignment.teacher.name}，每周 ${assignment.weekly_items} 课时，${assignment.status === "draft" ? "待确认" : assignment.status === "confirmed" ? "已确认" : "已停用"}` : "未设置"}${selected ? "，已选中" : ""}`}
                                       aria-pressed={selected}
                                       className={cn(
                                         "group relative z-10 flex size-full min-h-24 flex-col items-start bg-transparent px-3 py-2 text-left outline-none transition-opacity",
@@ -908,6 +907,9 @@ export function CourseAssignmentMatrixPage() {
                                       onFocus={() => setFocusedKey(key)}
                                       onKeyDown={(event) => handleCellKey(event, cell)}
                                     >
+                                      <span className="sr-only">
+                                        {classSetting.school_class.name}，{course.name}。
+                                      </span>
                                       {assignment ? (
                                         <>
                                           <span className="flex w-full items-start gap-2">
@@ -947,6 +949,17 @@ export function CourseAssignmentMatrixPage() {
                                           </span>
                                         </>
                                       )}
+                                      <span className="sr-only">
+                                        ，
+                                        {assignment?.status === "draft"
+                                          ? "待确认"
+                                          : assignment?.status === "confirmed"
+                                            ? "已确认"
+                                            : assignment?.status === "inactive"
+                                              ? "已停用"
+                                              : "未设置"}
+                                        {selected ? "，已选中" : ""}
+                                      </span>
                                     </button>
                                   </td>
                                 )

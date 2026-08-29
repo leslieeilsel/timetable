@@ -7,6 +7,7 @@ use App\Enums\ConstraintKind;
 use App\Enums\ConstraintStatus;
 use App\Enums\ResourceStatus;
 use App\Enums\RoomMode;
+use App\Modules\AcademicCalendar\Models\AppSetting;
 use App\Modules\AcademicCalendar\Models\Semester;
 use App\Modules\SemesterClassSetting\Models\SemesterClassSetting;
 use App\Modules\TeachingAssignment\Models\TeachingAssignment;
@@ -158,14 +159,24 @@ class PreparationCheckService
             '/scheduling/constraints',
         );
 
+        $currentVersion = $semester->current_timetable_version_id === null
+            ? null
+            : $semester->currentTimetableVersion()->first();
+        $settings = AppSetting::query()->findOrFail(1);
+        $currentVersionStale = $currentVersion !== null
+            && ($currentVersion->input_revision !== (int) $semester->getRawOriginal('input_revision')
+                || $currentVersion->catalog_revision === null
+                || $currentVersion->catalog_revision !== (int) $settings->getRawOriginal('catalog_revision'));
         $checks[] = $this->check(
             'current_version',
             '当前课表可作为调整基线',
-            $semester->current_timetable_version_id === null ? 'warning' : 'passed',
-            $semester->current_timetable_version_id === null ? 1 : 0,
-            $semester->current_timetable_version_id === null
+            $currentVersion === null || $currentVersionStale ? 'warning' : 'passed',
+            $currentVersion === null || $currentVersionStale ? 1 : 0,
+            $currentVersion === null
                 ? '尚无当前课表，本次将从空白方案开始。'
-                : '已找到当前课表，可选择保留锁定课程或现有安排。',
+                : ($currentVersionStale
+                    ? '当前课表所依据的基础资料或排课输入已变化，请重新生成或创建新的调整基线。'
+                    : '已找到当前课表，可选择保留锁定课程或现有安排。'),
             '/scheduling/timetable',
         );
 

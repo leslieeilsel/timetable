@@ -1,21 +1,14 @@
 import { Link } from "react-router"
 import { useQuery } from "@tanstack/react-query"
 import { ArrowRightIcon, CalendarDaysIcon, CheckIcon, ClipboardCheckIcon } from "lucide-react"
-import { api, apiAllPages } from "@/lib/api"
+import { api } from "@/lib/api"
 import { useAuth } from "@/lib/auth"
-import type { ClassSetting, ScheduleTemplate, Semester, TeachingAssignment } from "@/lib/types"
+import type { DashboardSummary, Semester } from "@/lib/types"
 import { useSchoolContext } from "@/lib/queries"
 import { semesterPath } from "@/lib/semester"
 import { ErrorState, LoadingState, PageHeader } from "@/components/page"
 import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/status-badge"
-
-interface CompletenessItem {
-  required: number
-  scheduled: number
-  remaining: number
-  completed: boolean
-}
 
 export function DashboardPage() {
   const { user } = useAuth()
@@ -26,53 +19,50 @@ export function DashboardPage() {
     queryFn: () => api<Semester>(`/api/v1/semesters/${semesterId}`),
     enabled: semesterId !== null,
   })
-  const settings = useQuery({
-    queryKey: ["class-settings", semesterId],
-    queryFn: () => apiAllPages<ClassSetting>(`/api/v1/semesters/${semesterId}/class-settings`),
-    enabled: semesterId !== null,
-  })
-  const template = useQuery({
-    queryKey: ["schedule-template", semesterId],
-    queryFn: () =>
-      api<ScheduleTemplate | null>(`/api/v1/semesters/${semesterId}/schedule-template`),
-    enabled: semesterId !== null,
-  })
-  const assignments = useQuery({
-    queryKey: ["teaching-assignments", semesterId],
-    queryFn: () =>
-      apiAllPages<TeachingAssignment>(`/api/v1/semesters/${semesterId}/teaching-assignments`),
-    enabled: semesterId !== null,
-  })
-  const completeness = useQuery({
-    queryKey: ["completeness", semesterId],
-    queryFn: async () =>
-      (await api<CompletenessItem[]>(`/api/v1/semesters/${semesterId}/timetable/completeness`))
-        .data,
+  const summary = useQuery({
+    queryKey: ["dashboard-summary", semesterId],
+    queryFn: () => api<DashboardSummary>(`/api/v1/semesters/${semesterId}/dashboard-summary`),
     enabled: semesterId !== null,
   })
 
-  if (
-    context.isLoading ||
-    semester.isLoading ||
-    settings.isLoading ||
-    template.isLoading ||
-    assignments.isLoading ||
-    completeness.isLoading
-  )
-    return <LoadingState />
-  if (context.isError) return <ErrorState retry={() => void context.refetch()} />
+  if (context.isLoading || semester.isLoading || summary.isLoading) return <LoadingState />
+  if (context.isError || semester.isError || summary.isError)
+    return (
+      <ErrorState
+        retry={() => {
+          void context.refetch()
+          void semester.refetch()
+          void summary.refetch()
+        }}
+      />
+    )
 
   const current = semester.data?.data
-  const classCount = settings.data?.data.length ?? 0
-  const assignmentCount = assignments.data?.data.length ?? 0
-  const confirmedCount =
-    assignments.data?.data.filter((assignment) => assignment.status === "confirmed").length ?? 0
-  const scheduled = completeness.data?.reduce((sum, item) => sum + item.scheduled, 0) ?? 0
-  const required = completeness.data?.reduce((sum, item) => sum + item.required, 0) ?? 0
-  const remaining = completeness.data?.reduce((sum, item) => sum + item.remaining, 0) ?? 0
-  const templateReady = Boolean(template.data?.data)
+  const dashboard = summary.data?.data
+  const classCount = dashboard?.class_count ?? 0
+  const assignmentCount = dashboard?.assignment_count ?? 0
+  const confirmedCount = dashboard?.confirmed_count ?? 0
+  const scheduled = dashboard?.scheduled ?? 0
+  const required = dashboard?.required ?? 0
+  const remaining = dashboard?.remaining ?? 0
+  const templateReady = dashboard?.template_ready ?? false
+  const currentVersionId = dashboard?.current_version_id ?? null
+  const currentVersionIsStale = dashboard?.current_version_is_stale ?? false
+  const workingDraftId = dashboard?.working_draft_id ?? null
+  const hasFreshWorkingDraft =
+    workingDraftId !== null && dashboard?.working_draft_is_stale === false
+  const shouldContinueWorkingDraft =
+    hasFreshWorkingDraft && (!currentVersionId || currentVersionIsStale)
+  const hardConflictCount = dashboard?.current_version_hard_conflict_count ?? 0
+  const softWarningCount = dashboard?.current_version_soft_warning_count ?? 0
   const blocked =
-    !classCount || !templateReady || confirmedCount !== assignmentCount || remaining > 0
+    !classCount ||
+    !templateReady ||
+    confirmedCount !== assignmentCount ||
+    remaining > 0 ||
+    !currentVersionId ||
+    currentVersionIsStale ||
+    hardConflictCount > 0
   const startDelta = current
     ? daysBetween(new Date(), new Date(`${current.start_date}T00:00:00`))
     : null
@@ -108,7 +98,9 @@ export function DashboardPage() {
                 {startDelta !== null && startDelta >= 0 && (
                   <>
                     <span className="h-4 w-px bg-border" aria-hidden="true" />
-                    <span className="font-medium text-emerald-600">距开学 {startDelta} 天</span>
+                    <span className="font-medium text-emerald-700 dark:text-emerald-400">
+                      距开学 {startDelta} 天
+                    </span>
                   </>
                 )}
               </p>
@@ -149,6 +141,9 @@ export function DashboardPage() {
             confirmedCount={confirmedCount}
             scheduled={scheduled}
             required={required}
+            hasCurrentVersion={currentVersionId !== null}
+            currentVersionIsStale={currentVersionIsStale}
+            hasFreshWorkingDraft={hasFreshWorkingDraft}
           />
 
           <div className="grid gap-6 xl:grid-cols-[1.5fr_0.75fr]">
@@ -159,30 +154,70 @@ export function DashboardPage() {
                   <ClipboardCheckIcon className="size-5" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium">{remaining ? "继续完成排课" : "开学前复核课表"}</p>
+                  <p className="font-medium">
+                    {shouldContinueWorkingDraft
+                      ? "继续复核最新草稿"
+                      : !currentVersionId
+                        ? "生成并确认当前课表"
+                        : currentVersionIsStale
+                          ? "基础数据已变化，需要重新生成"
+                          : remaining
+                            ? "继续完成排课"
+                            : "开学前复核课表"}
+                  </p>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    {remaining
-                      ? `还有 ${remaining} 节课程未安排，建议优先处理高周课时任务。`
-                      : "课表已完整，建议分别从班级、教师和教室视角检查结果。"}
+                    {shouldContinueWorkingDraft
+                      ? "已有基于最新资料生成的草稿，请完成复核后再设为当前课表。"
+                      : !currentVersionId
+                        ? "当前还没有已确认课表，请从完整候选方案中选择并设为当前课表。"
+                        : currentVersionIsStale
+                          ? "当前课表仍可查看，但已不能作为可靠的调整基线；请按最新规则和资料重新生成。"
+                          : remaining
+                            ? `还有 ${remaining} 节课程未安排，建议优先处理高周课时任务。`
+                            : "课表已完整，建议分别从班级、教师和教室视角检查结果。"}
                   </p>
                 </div>
                 <Button
                   variant="outline"
                   nativeButton={false}
-                  render={<Link to={semesterPath(current.id, "timetable")} />}
+                  render={
+                    <Link
+                      to={
+                        shouldContinueWorkingDraft
+                          ? `${semesterPath(current.id, "timetable")}?version=${workingDraftId}`
+                          : semesterPath(
+                              current.id,
+                              !currentVersionId || currentVersionIsStale ? "generate" : "timetable",
+                            )
+                      }
+                    />
+                  }
                 >
-                  查看课表
+                  {shouldContinueWorkingDraft
+                    ? "继续编辑草稿"
+                    : !currentVersionId || currentVersionIsStale
+                      ? "前往方案生成"
+                      : "查看课表"}
                 </Button>
               </div>
               <h3 className="mt-6 text-base font-semibold">需要关注</h3>
               <div className="mt-3 grid min-h-40 place-items-center rounded-xl border p-6 text-center">
                 {blocked ? (
-                  <div>
-                    <p className="font-medium">仍有准备项未完成</p>
+                  <div className="max-w-md">
+                    <p className="font-medium">仍有需要处理的项目</p>
+                    <ul className="mt-2 list-disc space-y-1 pl-5 text-left text-sm text-muted-foreground">
+                      {!classCount && <li>尚未配置学期班级</li>}
+                      {!templateReady && <li>尚未设置可用作息模板</li>}
+                      {confirmedCount !== assignmentCount && <li>仍有任课关系未确认</li>}
+                      {!currentVersionId && <li>尚未设置当前课表</li>}
+                      {currentVersionIsStale && <li>当前课表依据的数据已变化</li>}
+                      {remaining > 0 && <li>仍有 {remaining} 节课程未安排</li>}
+                      {hardConflictCount > 0 && <li>当前课表仍有 {hardConflictCount} 个硬冲突</li>}
+                    </ul>
                   </div>
                 ) : (
                   <div>
-                    <span className="mx-auto flex size-10 items-center justify-center rounded-full border border-emerald-500 text-emerald-600">
+                    <span className="mx-auto flex size-10 items-center justify-center rounded-full border border-emerald-600 text-emerald-700 dark:border-emerald-400 dark:text-emerald-400">
                       <CheckIcon className="size-5" />
                     </span>
                     <p className="mt-4 font-medium">暂无阻塞项</p>
@@ -201,7 +236,26 @@ export function DashboardPage() {
                   value={`${assignmentCount} 条 · 已确认 ${confirmedCount} 条`}
                 />
                 <SummaryRow label="已排课时" value={`${scheduled} / ${required}`} />
-                <SummaryRow label="冲突" value="0 个冲突" />
+                <SummaryRow
+                  label="当前课表"
+                  value={
+                    !currentVersionId
+                      ? "未设置"
+                      : currentVersionIsStale
+                        ? `${dashboard?.current_version_name ?? "已设置"} · 数据已变化`
+                        : (dashboard?.current_version_name ?? "已设置")
+                  }
+                />
+                <SummaryRow
+                  label="当前课表冲突与提醒"
+                  value={`${hardConflictCount} 个硬冲突 · ${softWarningCount} 个软提醒`}
+                />
+                {dashboard?.working_draft_id && (
+                  <SummaryRow
+                    label="最近草稿"
+                    value={`${dashboard.working_draft_name ?? "未命名草稿"}${dashboard.working_draft_is_stale ? " · 数据已变化" : " · 可继续编辑"}`}
+                  />
+                )}
               </dl>
             </section>
           </div>
@@ -218,6 +272,9 @@ function Workflow({
   confirmedCount,
   scheduled,
   required,
+  hasCurrentVersion,
+  currentVersionIsStale,
+  hasFreshWorkingDraft,
 }: {
   classCount: number
   templateReady: boolean
@@ -225,6 +282,9 @@ function Workflow({
   confirmedCount: number
   scheduled: number
   required: number
+  hasCurrentVersion: boolean
+  currentVersionIsStale: boolean
+  hasFreshWorkingDraft: boolean
 }) {
   const steps = [
     { label: "基础资料", note: "年级、教师、课程、教室", done: true },
@@ -241,8 +301,13 @@ function Workflow({
     },
     {
       label: "排课",
-      note: `${scheduled}/${required} 节`,
-      done: required > 0 && scheduled === required,
+      note:
+        currentVersionIsStale && hasFreshWorkingDraft
+          ? "最新草稿待确认"
+          : currentVersionIsStale
+            ? "当前课表数据已变化"
+            : `${scheduled}/${required} 节`,
+      done: hasCurrentVersion && !currentVersionIsStale && required > 0 && scheduled === required,
     },
   ]
   return (
@@ -252,7 +317,9 @@ function Workflow({
           <div className="flex items-center gap-3">
             <span
               className={`flex size-8 shrink-0 items-center justify-center rounded-full border text-sm font-semibold ${
-                step.done ? "border-emerald-500 text-emerald-600" : "border-primary text-primary"
+                step.done
+                  ? "border-emerald-600 text-emerald-700 dark:border-emerald-400 dark:text-emerald-400"
+                  : "border-primary text-primary"
               }`}
             >
               {index + 1}
@@ -260,7 +327,11 @@ function Workflow({
             <p className="font-medium">{step.label}</p>
           </div>
           <div className="ml-11 xl:mt-3 xl:ml-0">
-            <p className={`text-sm ${step.done ? "text-emerald-600" : "text-amber-700"}`}>
+            <p
+              className={`text-sm ${
+                step.done ? "text-emerald-700 dark:text-emerald-400" : "text-amber-700"
+              }`}
+            >
               {step.done ? "已完成" : "待处理"} · {step.note}
             </p>
           </div>

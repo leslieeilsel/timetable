@@ -663,7 +663,14 @@ class MediumSchoolSeeder extends Seeder
             ['避免同一课程同日重复', 'soft', 'spacing', 85, ['max_same_course_per_day' => 1], '除连堂配置外，同一班级同一课程每天尽量只安排一次。'],
         ];
         $timestamp = now();
-        $activeTemplateCategories = [];
+        $activeTemplateCategories = [
+            'course_distribution',
+            'course_priority',
+            'teacher_gaps',
+            'workload_balance',
+            'consecutive_items',
+            'spacing',
+        ];
         foreach ($definitions as [$name, $kind, $category, $weight, $requirement, $explanation]) {
             DB::table('scheduling_constraints')->insert([
                 'semester_id' => $semester['id'],
@@ -707,6 +714,7 @@ class MediumSchoolSeeder extends Seeder
             'source' => 'manual',
             'created_by' => $creatorId,
             'input_revision' => 1,
+            'catalog_revision' => 1,
             'hard_conflict_count' => 0,
             'soft_warning_count' => 0,
             'activated_at' => $timestamp,

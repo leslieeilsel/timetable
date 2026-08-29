@@ -29,11 +29,18 @@ export function TimetableGrid({
       <table className="w-full min-w-[920px] border-collapse text-sm">
         <thead>
           <tr className="bg-muted/50">
-            <th className="sticky left-0 z-10 w-32 border-r border-b bg-muted/80 p-3 text-center font-medium">
+            <th
+              scope="col"
+              className="sticky left-0 z-10 w-32 border-r border-b bg-muted/80 p-3 text-center font-medium"
+            >
               课节
             </th>
             {data.days.map((day) => (
-              <th key={day.weekday} className="min-w-40 border-b p-3 text-center font-medium">
+              <th
+                key={day.weekday}
+                scope="col"
+                className="min-w-40 border-b p-3 text-center font-medium"
+              >
                 {weekdayName[day.weekday]}
               </th>
             ))}
@@ -42,7 +49,10 @@ export function TimetableGrid({
         <tbody>
           {data.items.map((item) => (
             <tr key={item.id}>
-              <th className="sticky left-0 z-10 border-r border-b bg-background p-3 text-center align-middle">
+              <th
+                scope="row"
+                className="sticky left-0 z-10 border-r border-b bg-background p-3 text-center align-middle"
+              >
                 <p className="font-medium">{item.name}</p>
                 <p className="mt-1 text-xs font-normal text-muted-foreground">
                   {item.start_time.slice(0, 5)}–{item.end_time.slice(0, 5)}

@@ -11,6 +11,7 @@ use App\Modules\Identity\Http\Controllers\UserController;
 use App\Modules\Resources\Http\Controllers\CatalogController;
 use App\Modules\Resources\Http\Controllers\SchoolClassController;
 use App\Modules\ScheduleTemplate\Http\Controllers\ScheduleTemplateController;
+use App\Modules\Scheduling\Http\Controllers\DashboardSummaryController;
 use App\Modules\Scheduling\Http\Controllers\FixedPlacementController;
 use App\Modules\Scheduling\Http\Controllers\PreparationCheckController;
 use App\Modules\Scheduling\Http\Controllers\ScheduleCandidateController;
@@ -130,6 +131,7 @@ Route::prefix('v1')->group(function (): void {
 
         Route::get('/semesters/{semester}/scheduling-constraints', [SchedulingConstraintController::class, 'index']);
         Route::get('/semesters/{semester}/preparation-check', PreparationCheckController::class);
+        Route::get('/semesters/{semester}/dashboard-summary', DashboardSummaryController::class);
         Route::post('/semesters/{semester}/scheduling-constraints', [SchedulingConstraintController::class, 'store']);
         Route::patch('/semesters/{semester}/scheduling-constraints/{constraint}', [SchedulingConstraintController::class, 'update']);
         Route::delete('/semesters/{semester}/scheduling-constraints/{constraint}', [SchedulingConstraintController::class, 'destroy']);

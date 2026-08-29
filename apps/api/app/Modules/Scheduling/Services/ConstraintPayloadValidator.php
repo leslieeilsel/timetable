@@ -135,6 +135,12 @@ class ConstraintPayloadValidator
         ];
         $soft = [
             ConstraintCategory::PreferredSlot,
+            ConstraintCategory::CourseDistribution,
+            ConstraintCategory::Spacing,
+            ConstraintCategory::WorkloadBalance,
+            ConstraintCategory::ConsecutiveItems,
+            ConstraintCategory::TeacherGaps,
+            ConstraintCategory::CoursePriority,
         ];
 
         return in_array($category, $kind === ConstraintKind::Hard ? $hard : $soft, true);

@@ -81,10 +81,10 @@ export interface Semester {
   end_date: string
   status: LifecycleStatus
   etag: string
-  timetable_revision: number
-  input_revision: number
-  assignment_revision: number
-  constraint_revision: number
+  timetable_revision: number | string
+  input_revision: number | string
+  assignment_revision: number | string
+  constraint_revision: number | string
   current_timetable_version_id: number | null
   academic_year?: AcademicYear
 }
@@ -214,6 +214,26 @@ export interface PreparationCheck {
   recent_runs: ScheduleRun[]
 }
 
+export interface DashboardSummary {
+  class_count: number
+  template_ready: boolean
+  assignment_count: number
+  confirmed_count: number
+  scheduled: number
+  required: number
+  remaining: number
+  current_version_id: number | null
+  current_version_name: string | null
+  current_version_status: TimetableVersion["status"] | null
+  current_version_is_stale: boolean
+  current_version_quality_score: string | null
+  current_version_hard_conflict_count: number
+  current_version_soft_warning_count: number
+  working_draft_id: number | null
+  working_draft_name: string | null
+  working_draft_is_stale: boolean
+}
+
 export interface SchedulingConstraint {
   id: number
   semester_id: number
@@ -335,6 +355,7 @@ export interface TimetableVersion {
   source_candidate_id: number | null
   base_version_id: number | null
   input_revision: number
+  catalog_revision: number | null
   quality_score: string | null
   score_breakdown: ScheduleCandidateScore | null
   hard_conflict_count: number

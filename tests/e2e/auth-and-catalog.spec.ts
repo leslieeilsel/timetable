@@ -15,8 +15,12 @@ async function submitLogin(page: Page, password: string) {
 
 async function ensureResourcesOpen(page: Page) {
   const teacherLink = page.getByRole("link", { name: "教师", exact: true })
-  if (!(await teacherLink.isVisible())) {
-    await page.getByRole("button", { name: "基础资料", exact: true }).click()
+  if (await teacherLink.isVisible()) return
+
+  const resourcesButton = page.getByRole("button", { name: "基础资料", exact: true })
+  await expect(resourcesButton).toBeVisible()
+  if ((await resourcesButton.getAttribute("aria-expanded")) !== "true") {
+    await resourcesButton.click()
   }
   await expect(teacherLink).toBeVisible()
 }
@@ -66,6 +70,6 @@ test("管理员首次改密、会话恢复、维护资料并安全退出", async
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   )
-  await page.getByRole("button", { name: "Toggle Sidebar" }).last().click()
+  await page.getByRole("button", { name: "切换侧边栏" }).last().click()
   await ensureResourcesOpen(page)
 })

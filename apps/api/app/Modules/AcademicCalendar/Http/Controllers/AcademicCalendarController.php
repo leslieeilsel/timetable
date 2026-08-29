@@ -394,6 +394,10 @@ class AcademicCalendarController
             'end_date' => $semester->end_date->toDateString(),
             'status' => $semester->status->value,
             'current_timetable_version_id' => $semester->current_timetable_version_id,
+            'timetable_revision' => (string) $semester->getRawOriginal('timetable_revision'),
+            'input_revision' => (string) $semester->getRawOriginal('input_revision'),
+            'assignment_revision' => (string) $semester->getRawOriginal('assignment_revision'),
+            'constraint_revision' => (string) $semester->getRawOriginal('constraint_revision'),
             'etag' => $this->etags->semester($semester, $settings),
         ];
 

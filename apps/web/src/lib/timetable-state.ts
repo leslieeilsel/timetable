@@ -6,7 +6,7 @@ export function isTimetableVersionStale(
   semester: Pick<Semester, "input_revision">,
   version: Pick<TimetableVersion, "input_revision"> | null | undefined,
 ) {
-  return Boolean(version && version.input_revision !== semester.input_revision)
+  return Boolean(version && String(version.input_revision) !== String(semester.input_revision))
 }
 
 export function pendingItemsForResource(

@@ -324,7 +324,7 @@ function ResourceTable({
   onDelete: (item: Resource) => void
 }) {
   return (
-    <Table>
+    <Table responsive>
       <TableHeader>
         <TableRow>
           <TableHead>名称</TableHead>
@@ -344,7 +344,7 @@ function ResourceTable({
       <TableBody>
         {items.map((item) => (
           <TableRow key={item.id}>
-            <TableCell className="font-medium">
+            <TableCell data-label="名称" className="font-medium">
               <span className="inline-flex items-center gap-2.5">
                 {kind === "teachers" && (
                   <span
@@ -366,28 +366,32 @@ function ResourceTable({
                 {resourceName(item)}
               </span>
             </TableCell>
-            {kind === "grades" && <TableCell>{(item as Grade).sort_order}</TableCell>}
+            {kind === "grades" && (
+              <TableCell data-label="排序">{(item as Grade).sort_order}</TableCell>
+            )}
             {kind === "teachers" && (
               <>
-                <TableCell>{(item as Teacher).employee_no || "—"}</TableCell>
-                <TableCell className="text-muted-foreground">
+                <TableCell data-label="工号">{(item as Teacher).employee_no || "—"}</TableCell>
+                <TableCell data-label="任教课程" className="text-muted-foreground">
                   {(item as Teacher).courses?.map((course) => course.name).join("、") || "未设置"}
                 </TableCell>
               </>
             )}
-            {kind === "courses" && <TableCell>{(item as Course).short_name || "—"}</TableCell>}
+            {kind === "courses" && (
+              <TableCell data-label="简称">{(item as Course).short_name || "—"}</TableCell>
+            )}
             {kind === "rooms" && (
-              <TableCell>
+              <TableCell data-label="类型">
                 <span className="rounded-md bg-muted px-2 py-1 text-xs text-foreground/80">
                   {roomTypes.find(([value]) => value === (item as Room).type)?.[1] ??
                     (item as Room).type}
                 </span>
               </TableCell>
             )}
-            <TableCell>
+            <TableCell data-label="状态">
               <StatusBadge value={item.is_active ? "active" : "inactive"} />
             </TableCell>
-            <TableCell className="text-right">
+            <TableCell data-label="操作" className="text-right">
               <div className="flex items-center justify-end gap-0.5">
                 <TableActionButton intent="edit" onClick={() => onEdit(item)}>
                   编辑

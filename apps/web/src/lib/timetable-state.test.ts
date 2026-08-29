@@ -50,6 +50,9 @@ describe("timetable version state", () => {
     expect(
       isTimetableVersionStale({ input_revision: 20 }, { input_revision: 20 } as TimetableVersion),
     ).toBe(false)
+    expect(
+      isTimetableVersionStale({ input_revision: "20" }, { input_revision: 20 } as TimetableVersion),
+    ).toBe(false)
   })
 
   it("counts only remaining items belonging to the current resource", () => {

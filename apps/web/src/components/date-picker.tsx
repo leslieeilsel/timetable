@@ -54,6 +54,7 @@ type DatePickerProps = {
   disabled?: boolean
   required?: boolean
   ariaDescribedBy?: string
+  invalid?: boolean
   surface?: "form" | "filter"
 }
 
@@ -68,6 +69,7 @@ export function DatePicker({
   disabled,
   required,
   ariaDescribedBy,
+  invalid,
   surface = "form",
 }: DatePickerProps) {
   const [open, setOpen] = useState(false)
@@ -84,9 +86,11 @@ export function DatePicker({
             type="button"
             variant="outline"
             data-empty={!selected}
-            aria-label={label ? `${label}：${displayValue}` : undefined}
-            aria-required={required}
+            aria-label={
+              label ? `${label}${required ? "（必填）" : ""}：${displayValue}` : undefined
+            }
             aria-describedby={ariaDescribedBy}
+            aria-invalid={invalid || undefined}
             className={cn(
               "justify-start border-input bg-background text-left font-normal data-[empty=true]:text-muted-foreground dark:bg-background",
               surface === "filter" && "border-transparent bg-input/50 dark:bg-input/50",
@@ -143,6 +147,7 @@ export function DateTimePicker({
   disabled,
   required,
   ariaDescribedBy,
+  invalid,
   surface = "form",
 }: DatePickerProps) {
   const [open, setOpen] = useState(false)
@@ -175,9 +180,11 @@ export function DateTimePicker({
             type="button"
             variant="outline"
             data-empty={!selected}
-            aria-label={label ? `${label}：${displayValue}` : undefined}
-            aria-required={required}
+            aria-label={
+              label ? `${label}${required ? "（必填）" : ""}：${displayValue}` : undefined
+            }
             aria-describedby={ariaDescribedBy}
+            aria-invalid={invalid || undefined}
             className={cn(
               "justify-start border-input bg-background text-left font-normal data-[empty=true]:text-muted-foreground dark:bg-background",
               surface === "filter" && "border-transparent bg-input/50 dark:bg-input/50",

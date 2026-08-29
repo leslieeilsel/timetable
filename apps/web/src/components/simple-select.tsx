@@ -61,6 +61,7 @@ export function SimpleSelect({
   name,
   label,
   autoFocus,
+  invalid,
   surface = "form",
 }: {
   value: string
@@ -72,6 +73,7 @@ export function SimpleSelect({
   name?: string
   label?: string
   autoFocus?: boolean
+  invalid?: boolean
   surface?: "form" | "filter"
 }) {
   const items = collectItems(children)
@@ -87,6 +89,7 @@ export function SimpleSelect({
       <SelectTrigger
         className={className}
         aria-label={label}
+        aria-invalid={invalid || undefined}
         autoFocus={autoFocus}
         surface={surface}
       >

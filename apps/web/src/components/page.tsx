@@ -58,17 +58,23 @@ export function EmptyList({
 export function Field({
   label,
   error,
+  errorId,
   children,
 }: {
   label: string
   error?: string
+  errorId?: string
   children: ReactNode
 }) {
   return (
     <label className="grid content-start gap-2 text-sm">
       <span className="font-medium">{label}</span>
       {children}
-      {error && <span className="text-xs text-destructive">{error}</span>}
+      {error && (
+        <span id={errorId} role="alert" className="text-xs text-destructive">
+          {error}
+        </span>
+      )}
     </label>
   )
 }

@@ -274,7 +274,7 @@ export function SemesterSetupPage() {
                   </ToolbarSelect>
                 </ListToolbar>
                 {settings.data?.data.length ? (
-                  <Table>
+                  <Table responsive>
                     <TableHeader>
                       <TableRow>
                         <TableHead>班级</TableHead>
@@ -287,17 +287,21 @@ export function SemesterSetupPage() {
                     <TableBody>
                       {settings.data?.data.map((item) => (
                         <TableRow key={item.id}>
-                          <TableCell className="font-medium">{item.school_class.name}</TableCell>
-                          <TableCell>
+                          <TableCell data-label="班级" className="font-medium">
+                            {item.school_class.name}
+                          </TableCell>
+                          <TableCell data-label="固定教室">
                             {item.fixed_room?.name ?? (
                               <span className="text-destructive">未设置</span>
                             )}
                           </TableCell>
-                          <TableCell>{item.homeroom_teacher?.name ?? "—"}</TableCell>
-                          <TableCell>
+                          <TableCell data-label="班主任">
+                            {item.homeroom_teacher?.name ?? "—"}
+                          </TableCell>
+                          <TableCell data-label="状态">
                             <StatusBadge value={item.status} />
                           </TableCell>
-                          <TableCell className="text-right">
+                          <TableCell data-label="操作" className="text-right">
                             <Button
                               variant="ghost"
                               size="sm"

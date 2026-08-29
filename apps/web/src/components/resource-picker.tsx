@@ -15,7 +15,6 @@ import {
   SearchIcon,
   XIcon,
 } from "lucide-react"
-import { pinyin } from "pinyin-pro"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -52,6 +51,7 @@ export interface ResourcePickerItem {
   label: string
   description?: string
   searchText: string
+  pinyinSource?: string
   disabled?: boolean
   disabledReason?: string
   status: string
@@ -83,22 +83,17 @@ function normalized(value: string) {
   return value.trim().toLocaleLowerCase("zh-CN")
 }
 
-export function resourcePinyin(value: string) {
-  const full = pinyin(value, { toneType: "none" })
-  const compact = full.replaceAll(" ", "")
-  const initials = pinyin(value, {
-    toneType: "none",
-    pattern: "first",
-    separator: "",
-  })
-  return `${full} ${compact} ${initials}`
-}
-
-export function matchesResourceQuery(item: ResourcePickerItem, query: string) {
+export function matchesResourceQuery(
+  item: ResourcePickerItem,
+  query: string,
+  pinyinSearchText = "",
+) {
   const needle = normalized(query)
   return (
     !needle ||
-    normalized(`${item.label} ${item.description ?? ""} ${item.searchText}`).includes(needle)
+    normalized(
+      `${item.label} ${item.description ?? ""} ${item.searchText} ${pinyinSearchText}`,
+    ).includes(needle)
   )
 }
 
@@ -187,10 +182,18 @@ export function ResourcePicker({
   const [highlightedValue, setHighlightedValue] = useState(value)
   const [onlySelectable, setOnlySelectable] = useState(defaultOnlySelectable)
   const [facetValues, setFacetValues] = useState<Record<string, string>>({})
+  const [pinyinIndex, setPinyinIndex] = useState<{
+    signature: string
+    values: Record<string, string>
+  } | null>(null)
+  const [pinyinLoading, setPinyinLoading] = useState(false)
   const rowRefs = useRef(new Map<string, HTMLTableRowElement>())
 
   const selected = items.find((item) => item.value === value)
   const hasDisabledItems = items.some((item) => item.disabled)
+  const pinyinSignature = items.map((item) => `${item.value}:${item.pinyinSource ?? ""}`).join("|")
+  const activePinyinIndex =
+    pinyinIndex?.signature === pinyinSignature ? pinyinIndex.values : undefined
 
   const resetDialog = () => {
     setDraftQuery("")
@@ -207,7 +210,7 @@ export function ResourcePicker({
     () =>
       items.filter((item) => {
         if (onlySelectable && item.disabled) return false
-        if (!matchesResourceQuery(item, query)) return false
+        if (!matchesResourceQuery(item, query, activePinyinIndex?.[item.value])) return false
         return facets.every((facet) => {
           const selectedFacet = facetValues[facet.key] ?? facet.defaultValue ?? "all"
           if (selectedFacet === "all") return true
@@ -216,8 +219,31 @@ export function ResourcePicker({
           )
         })
       }),
-    [facetValues, facets, items, onlySelectable, query],
+    [activePinyinIndex, facetValues, facets, items, onlySelectable, query],
   )
+
+  const applySearch = async () => {
+    const nextQuery = draftQuery
+    if (!/[a-z]/i.test(nextQuery)) {
+      setQuery(nextQuery)
+      return
+    }
+    if (activePinyinIndex) {
+      setQuery(nextQuery)
+      return
+    }
+    setPinyinLoading(true)
+    try {
+      const { resourcePinyin } = await import("@/lib/resource-pinyin")
+      const values = Object.fromEntries(
+        items.map((item) => [item.value, resourcePinyin(item.pinyinSource ?? item.label)]),
+      )
+      setPinyinIndex({ signature: pinyinSignature, values })
+      setQuery(nextQuery)
+    } finally {
+      setPinyinLoading(false)
+    }
+  }
 
   useEffect(() => {
     if (!open) return
@@ -274,7 +300,6 @@ export function ResourcePicker({
         <Button
           type="button"
           variant="outline"
-          aria-label={ariaLabel}
           aria-haspopup="dialog"
           aria-expanded={open}
           aria-invalid={invalid || undefined}
@@ -292,6 +317,7 @@ export function ResourcePicker({
             {selected ? "更换" : "选择"}
             <ChevronDownIcon className="size-3.5" />
           </span>
+          <span className="sr-only">，{ariaLabel}</span>
         </Button>
         {clearable && selected && !disabled && (
           <Button
@@ -321,13 +347,14 @@ export function ResourcePicker({
                 autoFocus
                 value={draftQuery}
                 aria-label={searchPlaceholder}
+                aria-busy={pinyinLoading || undefined}
                 placeholder={searchPlaceholder}
                 className="h-11 bg-background pr-10 pl-9 text-base sm:pr-24"
                 onChange={(event) => setDraftQuery(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.nativeEvent.isComposing) {
                     event.preventDefault()
-                    setQuery(draftQuery)
+                    void applySearch()
                   } else if (event.key === "ArrowDown") {
                     event.preventDefault()
                     const first = visibleItems.find((item) => !item.disabled)
@@ -351,7 +378,7 @@ export function ResourcePicker({
                   </Button>
                 )}
                 <span className="hidden rounded-md border bg-muted/50 px-2 py-1 text-xs text-muted-foreground sm:inline-flex">
-                  Enter 搜索
+                  {pinyinLoading ? "正在准备拼音搜索…" : "Enter 搜索"}
                 </span>
               </div>
             </div>
@@ -624,7 +651,8 @@ export function TeacherPicker({
       value: String(teacher.id),
       label: teacher.name,
       description: teacher.employee_no ?? undefined,
-      searchText: `${resourcePinyin(teacher.name)} ${teacher.employee_no ?? ""} ${(teacher.courses ?? []).map((course) => `${course.name} ${resourcePinyin(course.name)} ${course.short_name ?? ""}`).join(" ")}`,
+      searchText: `${teacher.employee_no ?? ""} ${(teacher.courses ?? []).map((course) => `${course.name} ${course.short_name ?? ""}`).join(" ")}`,
+      pinyinSource: `${teacher.name} ${(teacher.courses ?? []).map((course) => course.name).join(" ")}`,
       disabled,
       disabledReason: !teacher.is_active
         ? "教师已停用"
@@ -729,7 +757,8 @@ export function ClassPicker({
       value: String(schoolClass.id),
       label: schoolClass.name,
       description: schoolClass.code ?? undefined,
-      searchText: `${resourcePinyin(schoolClass.name)} ${schoolClass.code ?? ""} ${schoolClass.grade.name} ${resourcePinyin(schoolClass.grade.name)}`,
+      searchText: `${schoolClass.code ?? ""} ${schoolClass.grade.name}`,
+      pinyinSource: `${schoolClass.name} ${schoolClass.grade.name}`,
       disabled,
       disabledReason:
         customStatus?.reason ?? (schoolClass.status !== "active" ? "班级已停用" : undefined),
@@ -820,7 +849,8 @@ export function RoomPicker({
       value: String(room.id),
       label: room.name,
       description: typeLabel(room.type),
-      searchText: `${resourcePinyin(room.name)} ${room.type} ${typeLabel(room.type)} ${resourcePinyin(typeLabel(room.type))}`,
+      searchText: `${room.type} ${typeLabel(room.type)}`,
+      pinyinSource: `${room.name} ${typeLabel(room.type)}`,
       disabled,
       disabledReason: reason ?? (!room.is_active ? "场地已停用" : undefined),
       status: !room.is_active ? "已停用" : reason ? "当前不可用" : "可选",
@@ -878,7 +908,8 @@ export function CoursePicker({ courses, ...props }: CommonPickerProps & { course
     value: String(course.id),
     label: course.name,
     description: course.short_name ?? undefined,
-    searchText: `${resourcePinyin(course.name)} ${course.short_name ?? ""}`,
+    searchText: course.short_name ?? "",
+    pinyinSource: course.name,
     disabled: !course.is_active,
     disabledReason: !course.is_active ? "课程已停用" : undefined,
     status: course.is_active ? "已启用" : "已停用",
@@ -954,7 +985,8 @@ export function AssignmentPicker({
       value: String(assignment.id),
       label: `${assignmentTarget(assignment)} · ${assignment.course.name} · ${assignment.teacher.name}`,
       description: assignment.teacher.employee_no ?? undefined,
-      searchText: `${assignmentTarget(assignment)} ${resourcePinyin(assignmentTarget(assignment))} ${assignment.course.name} ${resourcePinyin(assignment.course.name)} ${assignment.course.short_name ?? ""} ${assignment.teacher.name} ${resourcePinyin(assignment.teacher.name)} ${assignment.teacher.employee_no ?? ""}`,
+      searchText: `${assignmentTarget(assignment)} ${assignment.course.name} ${assignment.course.short_name ?? ""} ${assignment.teacher.name} ${assignment.teacher.employee_no ?? ""}`,
+      pinyinSource: `${assignmentTarget(assignment)} ${assignment.course.name} ${assignment.teacher.name}`,
       disabled,
       disabledReason:
         assignment.status === "inactive"

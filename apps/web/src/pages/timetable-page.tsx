@@ -31,6 +31,7 @@ import {
   isTimetableVersionStale,
   pendingItemsForResource,
 } from "@/lib/timetable-state"
+import { mergeSearchParams, useHashPreservingSearchParams } from "@/lib/url-state"
 import type {
   ClassSetting,
   ScheduleDay,
@@ -207,9 +208,10 @@ export function TimetablePage() {
   const { semesterId, context } = useResolvedSemesterId()
   const client = useQueryClient()
   const navigate = useNavigate()
+  const [params, setParams] = useHashPreservingSearchParams()
   const [view, setView] = useState<View>("class")
   const [resourceId, setResourceId] = useState("")
-  const [selectedVersionId, setSelectedVersionId] = useState("")
+  const [selectedVersionId, setSelectedVersionId] = useState(() => params.get("version") ?? "")
   const [full, setFull] = useState(false)
   const [history, setHistory] = useState<TimetableEditAction[]>([])
   const [historyIndex, setHistoryIndex] = useState(0)
@@ -286,6 +288,7 @@ export function TimetablePage() {
     )
   }, [resources])
   useEffect(() => {
+    if (!versions.isSuccess) return
     setSelectedVersionId((current) =>
       resolveTimetableVersionSelection(
         availableVersions,
@@ -294,7 +297,23 @@ export function TimetablePage() {
         user?.role,
       ),
     )
-  }, [availableVersions, semester.data?.data.current_timetable_version_id, user?.role])
+  }, [
+    availableVersions,
+    semester.data?.data.current_timetable_version_id,
+    user?.role,
+    versions.isSuccess,
+  ])
+  const selectVersion = (value: string, clearCreated = true) => {
+    setSelectedVersionId(value)
+    setParams(
+      (current) =>
+        mergeSearchParams(current, {
+          version: value || null,
+          created: clearCreated ? null : current.get("created"),
+        }),
+      { replace: true },
+    )
+  }
   useEffect(() => {
     setHistory([])
     setHistoryIndex(0)
@@ -464,7 +483,7 @@ export function TimetablePage() {
   if (
     semester.isLoading ||
     settings.isLoading ||
-    assignments.isLoading ||
+    (view !== "class" && assignments.isLoading) ||
     rooms.isLoading ||
     versions.isLoading
   )
@@ -480,8 +499,11 @@ export function TimetablePage() {
   const scheduled = completeness.data?.reduce((sum, item) => sum + item.scheduled, 0) ?? 0
   const required = completeness.data?.reduce((sum, item) => sum + item.required, 0) ?? 0
   const versionIsStale = isTimetableVersionStale(current, selectedVersion)
+  const assignmentsReady = assignments.isSuccess
   const canEdit =
-    canMutate && (!selectedVersion || (selectedVersion.status === "draft" && !versionIsStale))
+    assignmentsReady &&
+    canMutate &&
+    (!selectedVersion || (selectedVersion.status === "draft" && !versionIsStale))
   const resourcePendingItems = pendingItemsForResource(
     assignments.data?.data ?? [],
     view,
@@ -515,7 +537,7 @@ export function TimetablePage() {
           }),
         },
       )
-      setSelectedVersionId(String(result.data.id))
+      selectVersion(String(result.data.id))
       toast.success("编辑草稿已创建")
       await refresh()
     } catch (error) {
@@ -579,6 +601,19 @@ export function TimetablePage() {
         description="二维网格只用于真实排课；切换班级、教师和教室可从不同角度检查结果。"
       />
       <div className="p-4 md:p-7">
+        {params.get("created") && params.get("version") === selectedVersionId && (
+          <div
+            role="status"
+            className="mb-4 flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/45 dark:text-emerald-200"
+          >
+            <CheckCircle2Icon className="mt-0.5 size-4 shrink-0" />
+            <span>
+              {params.get("created") === "current"
+                ? "新方案已设为当前课表，并已自动打开。"
+                : "新草稿已创建并自动打开，可以立即继续调整与诊断。"}
+            </span>
+          </div>
+        )}
         <div className="mb-5 flex flex-col gap-3 border-b pb-5 2xl:flex-row 2xl:items-center 2xl:justify-between">
           <div className="flex flex-wrap items-center gap-3">
             <Tabs value={view} onValueChange={(value) => setView(value as View)}>
@@ -593,7 +628,7 @@ export function TimetablePage() {
               value={selectedVersionId}
               label="选择课表版本"
               surface="filter"
-              onValueChange={setSelectedVersionId}
+              onValueChange={selectVersion}
             >
               {user?.role === "viewer" && !selectedVersionId && (
                 <option value="">暂无已发布的当前课表</option>
@@ -604,7 +639,7 @@ export function TimetablePage() {
               {selectableVersions.map((version) => (
                 <option key={version.id} value={version.id}>
                   v{version.version_no} · {version.name} · {versionStatusName(version.status)}
-                  {version.input_revision !== current.input_revision ? " · 数据已变化" : ""}
+                  {isTimetableVersionStale(current, version) ? " · 数据已变化" : ""}
                 </option>
               ))}
             </SimpleSelect>
@@ -695,7 +730,7 @@ export function TimetablePage() {
               打印 / PDF
             </Button>
             <span className="h-4 w-px bg-border" aria-hidden="true" />
-            <span className="font-medium text-emerald-600 dark:text-emerald-400">
+            <span className="font-medium text-emerald-700 dark:text-emerald-400">
               已排 {scheduled}/{required}
             </span>
             <span className="h-4 w-px bg-border" aria-hidden="true" />
@@ -705,7 +740,7 @@ export function TimetablePage() {
               className={
                 hardConflictCount > 0
                   ? "font-medium text-destructive"
-                  : "font-medium text-emerald-600 dark:text-emerald-400"
+                  : "font-medium text-emerald-700 dark:text-emerald-400"
               }
             >
               冲突 {hardConflictCount}
@@ -887,13 +922,15 @@ export function TimetablePage() {
               </span>
               <span className="h-4 w-px bg-border" aria-hidden="true" />
               <span>
-                {canEdit && resourcePendingItems > 0
-                  ? `当前资源还有 ${resourcePendingItems} 节待排；标有“可安排”的空白课节可检查并安排`
-                  : canEdit
-                    ? "当前资源已排完整，其余空白是正常空堂"
-                    : versionIsStale
-                      ? "输入数据已变化，旧版本不能继续手工编辑；请自动补齐或重新生成"
-                      : "空白格表示该课节未安排课程；只读版本不能直接编辑"}
+                {!assignmentsReady
+                  ? "正在载入待排课程与编辑状态…"
+                  : canEdit && resourcePendingItems > 0
+                    ? `当前资源还有 ${resourcePendingItems} 节待排；标有“可安排”的空白课节可检查并安排`
+                    : canEdit
+                      ? "当前资源已排完整，其余空白是正常空堂"
+                      : versionIsStale
+                        ? "输入数据已变化，旧版本不能继续手工编辑；请自动补齐或重新生成"
+                        : "空白格表示该课节未安排课程；只读版本不能直接编辑"}
               </span>
             </p>
           </>

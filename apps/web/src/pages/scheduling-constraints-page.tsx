@@ -327,7 +327,7 @@ export function SchedulingConstraintsPage() {
               <EmptyList title="没有匹配的规则" description="新增一条学校规则，或清空筛选条件。" />
             ) : (
               <>
-                <Table>
+                <Table responsive>
                   <TableHeader>
                     <TableRow>
                       <TableHead>名称</TableHead>
@@ -342,10 +342,10 @@ export function SchedulingConstraintsPage() {
                   <TableBody>
                     {rules.data.data.map((rule) => (
                       <TableRow key={rule.id}>
-                        <TableCell>
+                        <TableCell data-label="名称">
                           <p className="font-medium">{rule.name}</p>
                         </TableCell>
-                        <TableCell>
+                        <TableCell data-label="类型">
                           <span
                             className={
                               rule.kind === "hard"
@@ -356,7 +356,7 @@ export function SchedulingConstraintsPage() {
                             {rule.kind === "hard" ? "硬约束" : "软规则"}
                           </span>
                         </TableCell>
-                        <TableCell>
+                        <TableCell data-label="作用对象">
                           {targetLabel(rule, {
                             teachers: teachers.data?.data ?? [],
                             courses: courses.data?.data ?? [],
@@ -365,9 +365,9 @@ export function SchedulingConstraintsPage() {
                             assignments: assignments.data?.data ?? [],
                           })}
                         </TableCell>
-                        <TableCell>{scopeLabel(rule.scope)}</TableCell>
-                        <TableCell>{rule.weight ?? "—"}</TableCell>
-                        <TableCell>
+                        <TableCell data-label="生效范围">{scopeLabel(rule.scope)}</TableCell>
+                        <TableCell data-label="权重">{rule.weight ?? "—"}</TableCell>
+                        <TableCell data-label="状态">
                           <StatusBadge value={rule.status} />
                           {rule.status !== "active" &&
                             !supportsConstraintKindCategory(rule.kind, rule.category) && (
@@ -393,7 +393,7 @@ export function SchedulingConstraintsPage() {
                               </div>
                             )}
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell data-label="操作" className="text-right">
                           {rule.source === "system" ? (
                             <span className="text-xs text-muted-foreground">系统内置</span>
                           ) : (
@@ -483,7 +483,7 @@ export function SchedulingConstraintsPage() {
               />
             ) : (
               <>
-                <Table>
+                <Table responsive>
                   <TableHeader>
                     <TableRow>
                       <TableHead>班级/教学组 · 课程</TableHead>
@@ -498,20 +498,26 @@ export function SchedulingConstraintsPage() {
                   <TableBody>
                     {placements.data.data.map((placement) => (
                       <TableRow key={placement.id}>
-                        <TableCell className="font-medium">
+                        <TableCell data-label="班级/教学组 · 课程" className="font-medium">
                           {assignmentTarget(placement.teaching_assignment)} ·{" "}
                           {placement.teaching_assignment.course.name}
                         </TableCell>
-                        <TableCell>{placement.teaching_assignment.teacher.name}</TableCell>
-                        <TableCell>
+                        <TableCell data-label="教师">
+                          {placement.teaching_assignment.teacher.name}
+                        </TableCell>
+                        <TableCell data-label="时间">
                           {weekdayNames[placement.weekday]} · {placement.item.name}
                         </TableCell>
-                        <TableCell>{placement.room?.name ?? "按任课关系解析"}</TableCell>
-                        <TableCell>{weekPatternLabel(placement.week_pattern)}</TableCell>
-                        <TableCell>
+                        <TableCell data-label="教室">
+                          {placement.room?.name ?? "按任课关系解析"}
+                        </TableCell>
+                        <TableCell data-label="周型">
+                          {weekPatternLabel(placement.week_pattern)}
+                        </TableCell>
+                        <TableCell data-label="状态">
                           <StatusBadge value={placement.status} />
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell data-label="操作" className="text-right">
                           <div className="flex items-center justify-end gap-0.5">
                             <TableActionButton
                               intent="edit"

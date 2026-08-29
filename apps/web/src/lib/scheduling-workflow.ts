@@ -7,6 +7,7 @@ const stepCheckKeys: Record<number, readonly string[]> = {
   2: ["confirmed_assignments", "assignment_resources", "theoretical_capacity"],
   3: ["fixed_placements", "active_constraints"],
   4: ["current_version"],
+  5: ["current_version"],
 }
 
 export function workflowStepState(

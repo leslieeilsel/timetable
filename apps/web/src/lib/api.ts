@@ -128,7 +128,34 @@ export function jsonBody(value: unknown) {
 export function apiMessage(error: unknown) {
   if (error instanceof ApiError) {
     if (error.status === 412) return "数据已被其他人更新，请刷新后重试。"
+    if (error.status === 422 && error.code === "VALIDATION_FAILED") {
+      const errors = error.details.errors
+      if (errors && typeof errors === "object" && !Array.isArray(errors)) {
+        const field = Object.keys(errors)[0]
+        if (field) return `请检查“${validationFieldLabel(field)}”，该字段缺失或格式不正确。`
+      }
+      return "请检查表单中标出的必填项和格式。"
+    }
     return error.message
   }
   return "操作失败，请稍后重试。"
+}
+
+function validationFieldLabel(field: string) {
+  const labels: Record<string, string> = {
+    reason: "原因或说明",
+    teacher_id: "教师",
+    starts_at: "开始时间",
+    ends_at: "结束时间",
+    original_entry_id: "原课程",
+    related_entry_id: "交换目标课程",
+    replacement_assignment_id: "补课任课关系",
+    replacement_teacher_id: "临时教师",
+    replacement_room_id: "临时教室",
+    replacement_date: "目标日期",
+    replacement_item_id: "目标课节",
+    title: "活动名称",
+    email: "邮箱",
+  }
+  return labels[field] ?? field
 }

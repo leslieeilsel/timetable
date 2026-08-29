@@ -1,0 +1,7 @@
+# The unauthenticated session probe is expected on the login route.
+# Keep the raw event visible in audit evidence while excluding it from hard-gate counts.
+console_allow:
+  - "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+
+network_allow:
+  - "GET /api/v1/me 401"

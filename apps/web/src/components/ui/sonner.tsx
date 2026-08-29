@@ -8,12 +8,13 @@ import {
   Loader2Icon,
 } from "lucide-react"
 
-const Toaster = ({ ...props }: ToasterProps) => {
+const Toaster = ({ toastOptions, ...props }: ToasterProps) => {
   const { theme = "system" } = useTheme()
 
   return (
     <Sonner
       theme={theme as ToasterProps["theme"]}
+      containerAriaLabel="通知"
       className="toaster group"
       icons={{
         success: <CircleCheckIcon className="size-4" />,
@@ -31,8 +32,11 @@ const Toaster = ({ ...props }: ToasterProps) => {
         } as React.CSSProperties
       }
       toastOptions={{
+        ...toastOptions,
+        closeButtonAriaLabel: toastOptions?.closeButtonAriaLabel ?? "关闭通知",
         classNames: {
           toast: "cn-toast",
+          ...toastOptions?.classNames,
         },
       }}
       {...props}
