@@ -10,6 +10,7 @@ import {
   CopyIcon,
   PencilIcon,
   PlusIcon,
+  MoveHorizontalIcon,
   UsersIcon,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -818,144 +819,158 @@ export function CourseAssignmentMatrixPage() {
                 />
               ) : (
                 <div className="grid min-h-[520px] xl:grid-cols-[minmax(0,1fr)_300px]">
-                  <div className="max-h-[calc(100vh-250px)] min-h-[520px] overflow-auto">
-                    <div className="relative inline-block min-w-full align-top">
-                      <table className="w-max min-w-full border-separate border-spacing-0 text-sm">
-                        <thead>
-                          <tr>
-                            <th className="sticky top-0 left-0 z-30 h-14 min-w-44 border-r border-b bg-background px-4 text-left font-semibold shadow-[2px_2px_5px_-5px_rgba(0,0,0,.4)]">
-                              班级
-                            </th>
-                            {activeCourses.map((course) => (
-                              <th
-                                key={course.id}
-                                className="sticky top-0 z-20 h-14 min-w-40 border-r border-b bg-background px-3 text-left font-semibold"
-                              >
-                                <span className="block">{course.name}</span>
-                                {course.short_name && (
-                                  <span className="text-xs font-normal text-muted-foreground">
-                                    课表简称：{course.short_name}
-                                  </span>
-                                )}
+                  <div className="min-w-0">
+                    <div
+                      aria-hidden="true"
+                      className="flex items-center justify-between border-b bg-muted/25 px-3 py-2 text-xs font-medium text-muted-foreground md:hidden"
+                    >
+                      <span>左右滑动查看完整矩阵</span>
+                      <MoveHorizontalIcon className="size-4" />
+                    </div>
+                    <div
+                      role="region"
+                      aria-label="可横向滚动的任课矩阵"
+                      tabIndex={0}
+                      className="max-h-[calc(100vh-250px)] min-h-[520px] overflow-auto focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/30"
+                    >
+                      <div className="relative inline-block min-w-full align-top">
+                        <table className="w-max min-w-full border-separate border-spacing-0 text-sm">
+                          <thead>
+                            <tr>
+                              <th className="sticky top-0 left-0 z-30 h-14 min-w-44 border-r border-b bg-background px-4 text-left font-semibold shadow-[2px_2px_5px_-5px_rgba(0,0,0,.4)]">
+                                班级
                               </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {matrixClasses.map((classSetting, row) => (
-                            <tr key={classSetting.school_class_id}>
-                              <th className="sticky left-0 z-10 h-24 border-r border-b bg-background px-4 text-left shadow-[2px_0_5px_-5px_rgba(0,0,0,.4)]">
-                                <span className="block font-semibold">
-                                  {classSetting.school_class.name}
-                                </span>
-                                <span className="mt-1 block text-xs font-normal text-muted-foreground">
-                                  {classSetting.fixed_room?.name ?? "未设固定教室"}
-                                </span>
-                              </th>
-                              {activeCourses.map((course, column) => {
-                                const key = `${classSetting.school_class_id}:${course.id}`
-                                const cell = cellMap.get(key)
-                                if (!cell) return null
-                                const assignment = cell.assignment
-                                const selected = selectedKeySet.has(key)
-                                const statusMuted =
-                                  statusFilter !== "all" && assignment?.status !== statusFilter
-                                const cellTone =
-                                  assignment?.status === "draft"
-                                    ? selected
-                                      ? "bg-amber-100 ring-1 ring-inset ring-amber-400/80 dark:bg-amber-950/55 dark:ring-amber-700"
-                                      : "bg-amber-100/80 ring-1 ring-inset ring-amber-400/80 hover:bg-amber-100 dark:bg-amber-950/45 dark:ring-amber-700 dark:hover:bg-amber-950/60"
-                                    : selected
-                                      ? "bg-primary/[0.055]"
-                                      : assignment
-                                        ? "bg-background hover:bg-muted/55"
-                                        : "bg-muted/[0.18] text-muted-foreground hover:bg-muted/55"
-                                return (
-                                  <td
-                                    key={key}
-                                    data-grid-selection-cell=""
-                                    data-grid-row={row}
-                                    data-grid-column={column}
-                                    data-grid-selected={selected ? "true" : undefined}
-                                    className={cn(
-                                      "relative z-0 h-24 border-r border-b p-0 transition-colors has-[button:focus-visible]:ring-2 has-[button:focus-visible]:ring-inset has-[button:focus-visible]:ring-ring/35",
-                                      cellTone,
-                                    )}
-                                  >
-                                    <button
-                                      id={`assignment-cell-${key}`}
-                                      type="button"
-                                      tabIndex={
-                                        focusedKey === key ||
-                                        (!focusedKey && row === 0 && column === 0)
-                                          ? 0
-                                          : -1
-                                      }
-                                      aria-label={`${classSetting.school_class.name}，${course.name}，${assignment ? `${assignment.teacher.name}，每周 ${assignment.weekly_items} 课时，${assignment.status === "draft" ? "待确认" : assignment.status === "confirmed" ? "已确认" : "已停用"}` : "未设置"}${selected ? "，已选中" : ""}`}
-                                      aria-pressed={selected}
-                                      className={cn(
-                                        "group relative z-10 flex size-full min-h-24 flex-col items-start bg-transparent px-3 py-2 text-left outline-none transition-opacity",
-                                        statusMuted && "opacity-35",
-                                      )}
-                                      onClick={(event) => selectCell(cell, event)}
-                                      onDoubleClick={() =>
-                                        setEditor({
-                                          assignment,
-                                          schoolClassId: classSetting.school_class_id,
-                                          courseId: course.id,
-                                        })
-                                      }
-                                      onFocus={() => setFocusedKey(key)}
-                                      onKeyDown={(event) => handleCellKey(event, cell)}
-                                    >
-                                      {assignment ? (
-                                        <>
-                                          <span className="flex w-full items-start gap-2">
-                                            <span className="line-clamp-1 font-semibold text-foreground">
-                                              {assignment.teacher.name}
-                                            </span>
-                                            {assignment.status === "draft" ? (
-                                              <span className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-md bg-amber-200/80 px-1.5 py-0.5 text-xs font-medium text-amber-950 ring-1 ring-inset ring-amber-300/80 dark:bg-amber-900/70 dark:text-amber-100 dark:ring-amber-700">
-                                                <CircleAlertIcon className="size-3" />
-                                                待确认
-                                              </span>
-                                            ) : assignment.status === "inactive" ? (
-                                              <span className="mt-1.5 ml-auto size-2 shrink-0 rounded-full bg-slate-400" />
-                                            ) : null}
-                                          </span>
-                                          <span className="mt-1 text-xs text-muted-foreground">
-                                            周 {assignment.weekly_items} 节
-                                            {assignment.items_per_session > 1
-                                              ? ` · ${assignment.items_per_session} 连排`
-                                              : ""}
-                                            {assignment.week_pattern !== "all"
-                                              ? ` · ${weekPatternLabel(assignment.week_pattern)}`
-                                              : ""}
-                                          </span>
-                                          <span className="mt-auto line-clamp-1 text-xs text-muted-foreground">
-                                            {assignment.collaborators.length
-                                              ? `协同：${assignment.collaborators.map((item) => item.name).join("、")}`
-                                              : roomLabel(assignment)}
-                                          </span>
-                                        </>
-                                      ) : (
-                                        <>
-                                          <PlusIcon className="mb-2 size-4 opacity-45 transition-opacity group-hover:opacity-90" />
-                                          <span className="text-xs">未设置</span>
-                                          <span className="mt-auto text-[11px] opacity-0 transition-opacity group-hover:opacity-100">
-                                            双击或按 Enter 新增
-                                          </span>
-                                        </>
-                                      )}
-                                    </button>
-                                  </td>
-                                )
-                              })}
+                              {activeCourses.map((course) => (
+                                <th
+                                  key={course.id}
+                                  className="sticky top-0 z-20 h-14 min-w-40 border-r border-b bg-background px-3 text-left font-semibold"
+                                >
+                                  <span className="block">{course.name}</span>
+                                  {course.short_name && (
+                                    <span className="text-xs font-normal text-muted-foreground">
+                                      课表简称：{course.short_name}
+                                    </span>
+                                  )}
+                                </th>
+                              ))}
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      <GridSelectionOverlay selectionKey={selectedKeys.join("|")} />
+                          </thead>
+                          <tbody>
+                            {matrixClasses.map((classSetting, row) => (
+                              <tr key={classSetting.school_class_id}>
+                                <th className="sticky left-0 z-10 h-24 border-r border-b bg-background px-4 text-left shadow-[2px_0_5px_-5px_rgba(0,0,0,.4)]">
+                                  <span className="block font-semibold">
+                                    {classSetting.school_class.name}
+                                  </span>
+                                  <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                                    {classSetting.fixed_room?.name ?? "未设固定教室"}
+                                  </span>
+                                </th>
+                                {activeCourses.map((course, column) => {
+                                  const key = `${classSetting.school_class_id}:${course.id}`
+                                  const cell = cellMap.get(key)
+                                  if (!cell) return null
+                                  const assignment = cell.assignment
+                                  const selected = selectedKeySet.has(key)
+                                  const statusMuted =
+                                    statusFilter !== "all" && assignment?.status !== statusFilter
+                                  const cellTone =
+                                    assignment?.status === "draft"
+                                      ? selected
+                                        ? "bg-amber-100 ring-1 ring-inset ring-amber-400/80 dark:bg-amber-950/55 dark:ring-amber-700"
+                                        : "bg-amber-100/80 ring-1 ring-inset ring-amber-400/80 hover:bg-amber-100 dark:bg-amber-950/45 dark:ring-amber-700 dark:hover:bg-amber-950/60"
+                                      : selected
+                                        ? "bg-primary/[0.055]"
+                                        : assignment
+                                          ? "bg-background hover:bg-muted/55"
+                                          : "bg-muted/[0.18] text-muted-foreground hover:bg-muted/55"
+                                  return (
+                                    <td
+                                      key={key}
+                                      data-grid-selection-cell=""
+                                      data-grid-row={row}
+                                      data-grid-column={column}
+                                      data-grid-selected={selected ? "true" : undefined}
+                                      className={cn(
+                                        "relative z-0 h-24 border-r border-b p-0 transition-colors has-[button:focus-visible]:ring-2 has-[button:focus-visible]:ring-inset has-[button:focus-visible]:ring-ring/35",
+                                        cellTone,
+                                      )}
+                                    >
+                                      <button
+                                        id={`assignment-cell-${key}`}
+                                        type="button"
+                                        tabIndex={
+                                          focusedKey === key ||
+                                          (!focusedKey && row === 0 && column === 0)
+                                            ? 0
+                                            : -1
+                                        }
+                                        aria-label={`${classSetting.school_class.name}，${course.name}，${assignment ? `${assignment.teacher.name}，每周 ${assignment.weekly_items} 课时，${assignment.status === "draft" ? "待确认" : assignment.status === "confirmed" ? "已确认" : "已停用"}` : "未设置"}${selected ? "，已选中" : ""}`}
+                                        aria-pressed={selected}
+                                        className={cn(
+                                          "group relative z-10 flex size-full min-h-24 flex-col items-start bg-transparent px-3 py-2 text-left outline-none transition-opacity",
+                                          statusMuted && "opacity-35",
+                                        )}
+                                        onClick={(event) => selectCell(cell, event)}
+                                        onDoubleClick={() =>
+                                          setEditor({
+                                            assignment,
+                                            schoolClassId: classSetting.school_class_id,
+                                            courseId: course.id,
+                                          })
+                                        }
+                                        onFocus={() => setFocusedKey(key)}
+                                        onKeyDown={(event) => handleCellKey(event, cell)}
+                                      >
+                                        {assignment ? (
+                                          <>
+                                            <span className="flex w-full items-start gap-2">
+                                              <span className="line-clamp-1 font-semibold text-foreground">
+                                                {assignment.teacher.name}
+                                              </span>
+                                              {assignment.status === "draft" ? (
+                                                <span className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-md bg-amber-200/80 px-1.5 py-0.5 text-xs font-medium text-amber-950 ring-1 ring-inset ring-amber-300/80 dark:bg-amber-900/70 dark:text-amber-100 dark:ring-amber-700">
+                                                  <CircleAlertIcon className="size-3" />
+                                                  待确认
+                                                </span>
+                                              ) : assignment.status === "inactive" ? (
+                                                <span className="mt-1.5 ml-auto size-2 shrink-0 rounded-full bg-slate-400" />
+                                              ) : null}
+                                            </span>
+                                            <span className="mt-1 text-xs text-muted-foreground">
+                                              周 {assignment.weekly_items} 节
+                                              {assignment.items_per_session > 1
+                                                ? ` · ${assignment.items_per_session} 连排`
+                                                : ""}
+                                              {assignment.week_pattern !== "all"
+                                                ? ` · ${weekPatternLabel(assignment.week_pattern)}`
+                                                : ""}
+                                            </span>
+                                            <span className="mt-auto line-clamp-1 text-xs text-muted-foreground">
+                                              {assignment.collaborators.length
+                                                ? `协同：${assignment.collaborators.map((item) => item.name).join("、")}`
+                                                : roomLabel(assignment)}
+                                            </span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <PlusIcon className="mb-2 size-4 opacity-45 transition-opacity group-hover:opacity-90" />
+                                            <span className="text-xs">未设置</span>
+                                            <span className="mt-auto text-[11px] opacity-0 transition-opacity group-hover:opacity-100">
+                                              双击或按 Enter 新增
+                                            </span>
+                                          </>
+                                        )}
+                                      </button>
+                                    </td>
+                                  )
+                                })}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        <GridSelectionOverlay selectionKey={selectedKeys.join("|")} />
+                      </div>
                     </div>
                   </div>
                   <MatrixDetailPanel

@@ -631,9 +631,22 @@ function ExceptionEditor({
   const selectedEntry = availableRows.find(
     (row) => row.original_entry_id === Number(form.original_entry_id),
   )
+  const previewReady = Boolean(
+    semesterId &&
+    form.effective_date &&
+    form.reason.trim().length >= 2 &&
+    (form.type === "makeup" || form.original_entry_id) &&
+    (form.type !== "swap" || form.related_entry_id) &&
+    (form.type !== "makeup" || form.replacement_assignment_id) &&
+    (form.type !== "teacher_change" || form.replacement_teacher_id) &&
+    (form.type !== "room_change" || form.replacement_room_id) &&
+    (form.type !== "activity" || form.title.trim()) &&
+    (!(form.type === "move" || form.type === "makeup") ||
+      (form.replacement_date && form.replacement_item_id)),
+  )
   const submitPreview = async (event?: FormEvent) => {
     event?.preventDefault()
-    if (!semesterId) return
+    if (!semesterId || !previewReady) return
     setBusy(true)
     try {
       const result = await api<CalendarExceptionPreview>(
@@ -856,10 +869,24 @@ function ExceptionEditor({
           <button type="submit" className="hidden" aria-hidden="true" />
         </form>
         <DialogFooter className="flex-row flex-wrap justify-end border-t bg-background/95 p-6">
+          {!previewReady && (
+            <p
+              id="exception-preview-help"
+              aria-live="polite"
+              className="mr-auto w-full self-center text-xs text-muted-foreground sm:w-auto"
+            >
+              请先完整填写必填项，再预览影响。
+            </p>
+          )}
           <Button variant="outline" onClick={onClose} disabled={busy}>
             取消
           </Button>
-          <Button variant="outline" disabled={busy} onClick={() => void submitPreview()}>
+          <Button
+            variant="outline"
+            disabled={busy || !previewReady}
+            aria-describedby={!previewReady ? "exception-preview-help" : undefined}
+            onClick={() => void submitPreview()}
+          >
             {busy ? <RefreshCwIcon className="animate-spin" /> : <SearchIcon />}
             {preview ? "重新检查" : "预览影响"}
           </Button>

@@ -24,7 +24,6 @@ export function SchedulingWorkflow() {
   const { pathname } = useLocation()
   const { semesterId } = useResolvedSemesterId()
   const activeDestination = semesterDestinationForPath(pathname)
-  const activeStepNumber = steps.find((step) => step.destination === activeDestination)?.number ?? 0
   const preparation = useQuery({
     queryKey: ["preparation-check", semesterId],
     queryFn: () => api<PreparationCheck>(`/api/v1/semesters/${semesterId}/preparation-check`),
@@ -41,8 +40,7 @@ export function SchedulingWorkflow() {
         {steps.map((step, index) => {
           const active = step.destination === activeDestination
           const to = semesterPathOrCurrent(semesterId, step.destination)
-          const actualState = workflowStepState(step.number, preparation.data?.data.checks)
-          const state = step.number < activeStepNumber ? actualState : "pending"
+          const state = workflowStepState(step.number, preparation.data?.data.checks)
           const completed = state === "complete" && !active
           const blocking = state === "blocking" && !active
           const warning = state === "warning" && !active
@@ -67,7 +65,7 @@ export function SchedulingWorkflow() {
                 aria-label={`${step.label}，${active ? "当前步骤" : stateLabel}`}
                 data-state={active ? "active" : state}
                 className={cn(
-                  "flex h-8 items-center gap-2 rounded-lg px-2.5 text-sm outline-none transition-[background-color,color] duration-150 focus-visible:ring-3 focus-visible:ring-ring/20",
+                  "flex h-8 touch-manipulation items-center gap-2 rounded-lg px-2.5 text-sm outline-none transition-[background-color,color] duration-150 focus-visible:ring-3 focus-visible:ring-ring/20 max-md:h-12",
                   active
                     ? "bg-primary/10 font-semibold text-primary"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground",

@@ -3,8 +3,41 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 
 function Table({ className, ...props }: React.ComponentProps<"table">) {
+  const containerRef = React.useRef<HTMLDivElement>(null)
+  const [canScroll, setCanScroll] = React.useState(false)
+  const [hasScrolled, setHasScrolled] = React.useState(false)
+
+  React.useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    const update = () => setCanScroll(container.scrollWidth > container.clientWidth + 1)
+    update()
+    if (typeof ResizeObserver === "undefined") return
+    const observer = new ResizeObserver(update)
+    observer.observe(container)
+    const table = container.querySelector("table")
+    if (table) observer.observe(table)
+    return () => observer.disconnect()
+  }, [])
+
   return (
-    <div data-slot="table-container" className="relative w-full overflow-x-auto">
+    <div
+      ref={containerRef}
+      data-slot="table-container"
+      role={canScroll ? "region" : undefined}
+      aria-label={canScroll ? "可横向滚动的数据表" : undefined}
+      tabIndex={canScroll ? 0 : undefined}
+      className="relative w-full overflow-x-auto focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
+      onScroll={() => setHasScrolled(true)}
+    >
+      {canScroll && !hasScrolled && (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute top-2 right-2 z-20 rounded-lg border bg-background/95 px-2 py-1 text-[11px] font-medium text-muted-foreground shadow-sm md:hidden"
+        >
+          左右滑动查看
+        </span>
+      )}
       <table
         data-slot="table"
         className={cn("w-full caption-bottom text-sm", className)}

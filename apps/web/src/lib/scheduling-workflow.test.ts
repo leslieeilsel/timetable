@@ -39,4 +39,9 @@ describe("workflowStepState", () => {
   it("treats a missing current timetable as pending instead of warning", () => {
     expect(workflowStepState(4, [check("current_version", "warning")])).toBe("pending")
   })
+
+  it("shows a stale or missing current timetable as a warning in the adjustment step", () => {
+    expect(workflowStepState(5, [check("current_version", "warning")])).toBe("warning")
+    expect(workflowStepState(5, [check("current_version", "passed")])).toBe("complete")
+  })
 })

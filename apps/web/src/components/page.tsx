@@ -1,6 +1,7 @@
 import type { ReactNode } from "react"
 import { AlertCircleIcon, LoaderCircleIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 
 export function PageHeader({ title, description }: { title: string; description?: string }) {
   return (
@@ -13,8 +14,12 @@ export function PageHeader({ title, description }: { title: string; description?
 
 export function LoadingState({ label = "正在加载…" }: { label?: string }) {
   return (
-    <div className="flex min-h-64 items-center justify-center gap-2 text-sm text-muted-foreground">
-      <LoaderCircleIcon className="size-4 animate-spin" />
+    <div
+      role="status"
+      aria-live="polite"
+      className="flex min-h-64 items-center justify-center gap-2 text-sm text-muted-foreground"
+    >
+      <LoaderCircleIcon className="size-4 animate-spin" aria-hidden="true" />
       {label}
     </div>
   )
@@ -65,10 +70,14 @@ export function Field({
   children: ReactNode
 }) {
   return (
-    <label className="grid content-start gap-2 text-sm">
+    <label className={cn("t-input-wrap grid content-start gap-2 text-sm", error && "is-error")}>
       <span className="font-medium">{label}</span>
-      {children}
-      {error && <span className="text-xs text-destructive">{error}</span>}
+      <div className={cn("t-input", error && "is-error is-shaking")}>{children}</div>
+      {error && (
+        <span role="alert" className="t-error-msg text-xs text-destructive">
+          {error}
+        </span>
+      )}
     </label>
   )
 }

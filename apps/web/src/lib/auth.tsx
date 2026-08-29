@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, type ReactNode } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { useLocation } from "react-router"
 import { api, ApiError, jsonBody } from "@/lib/api"
 import type { User } from "@/lib/types"
 
@@ -15,6 +16,7 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const client = useQueryClient()
+  const { pathname } = useLocation()
   const me = useQuery({
     queryKey: ["me"],
     queryFn: async () => {
@@ -25,6 +27,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw error
       }
     },
+    enabled: pathname !== "/login",
     retry: false,
     staleTime: 30_000,
   })

@@ -1,6 +1,7 @@
 import { defineConfig, devices } from "@playwright/test"
 
 const e2ePassword = process.env.E2E_ADMIN_PASSWORD ?? "E2eTemporary1234"
+const e2eWebPort = process.env.E2E_WEB_PORT ?? "5174"
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -9,7 +10,7 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? [["html", { open: "never" }], ["list"]] : "list",
   use: {
-    baseURL: "http://localhost:5174",
+    baseURL: `http://localhost:${e2eWebPort}`,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
@@ -24,8 +25,8 @@ export default defineConfig({
     },
     {
       command:
-        "VITE_API_TARGET=http://127.0.0.1:8001 vp run @timetable/web#dev -- --host=localhost --port=5174",
-      url: "http://localhost:5174/login",
+        `VITE_API_TARGET=http://127.0.0.1:8001 vp run @timetable/web#dev -- --host=localhost --port=${e2eWebPort}`,
+      url: `http://localhost:${e2eWebPort}/login`,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
     },

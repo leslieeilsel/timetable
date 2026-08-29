@@ -84,8 +84,9 @@ export function DatePicker({
             type="button"
             variant="outline"
             data-empty={!selected}
-            aria-label={label ? `${label}：${displayValue}` : undefined}
-            aria-required={required}
+            aria-label={
+              label ? `${label}${required ? "（必填）" : ""}：${displayValue}` : undefined
+            }
             aria-describedby={ariaDescribedBy}
             className={cn(
               "justify-start border-input bg-background text-left font-normal data-[empty=true]:text-muted-foreground dark:bg-background",
@@ -175,8 +176,9 @@ export function DateTimePicker({
             type="button"
             variant="outline"
             data-empty={!selected}
-            aria-label={label ? `${label}：${displayValue}` : undefined}
-            aria-required={required}
+            aria-label={
+              label ? `${label}${required ? "（必填）" : ""}：${displayValue}` : undefined
+            }
             aria-describedby={ariaDescribedBy}
             className={cn(
               "justify-start border-input bg-background text-left font-normal data-[empty=true]:text-muted-foreground dark:bg-background",

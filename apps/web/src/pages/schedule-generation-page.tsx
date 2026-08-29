@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react"
-import { Link } from "react-router"
+import { Link, useNavigate } from "react-router"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   AlertTriangleIcon,
@@ -18,6 +18,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { api, apiAllPages, apiMessage, jsonBody } from "@/lib/api"
+import { assessCandidateQuality } from "@/lib/candidate-quality"
 import { semesterPath, useResolvedSemesterId } from "@/lib/semester"
 import type {
   ClassSetting,
@@ -30,6 +31,7 @@ import type {
   ScheduleTemplate,
   TeachingAssignment,
   TimetableEntry,
+  TimetableVersion,
 } from "@/lib/types"
 import { EmptyList, ErrorState, Field, LoadingState, PageHeader } from "@/components/page"
 import {
@@ -85,6 +87,7 @@ const strategyOptions: Array<{ value: StrategyProfile; title: string; descriptio
 export function ScheduleGenerationPage() {
   const { semesterId, context } = useResolvedSemesterId()
   const client = useQueryClient()
+  const navigate = useNavigate()
   const [params, setParams] = useHashPreservingSearchParams()
   const runId = Number(params.get("run")) || null
   const [scopeType, setScopeType] = useState<ScopeType>("all")
@@ -579,12 +582,15 @@ export function ScheduleGenerationPage() {
         runId={activeRun.data?.data.id ?? 0}
         etag={activeRun.data?.etag ?? null}
         onClose={() => setAdopting(null)}
-        onSaved={async () => {
+        onSaved={async (version) => {
           await Promise.all([
             client.invalidateQueries({ queryKey: ["semester", semesterId] }),
             client.invalidateQueries({ queryKey: ["timetable", semesterId] }),
             client.invalidateQueries({ queryKey: ["timetable-versions", semesterId] }),
           ])
+          void navigate(
+            `${semesterPath(semesterId ?? 0, "timetable")}?version=${version.id}&created=${version.status === "active" ? "current" : "draft"}`,
+          )
         }}
       />
     </>
@@ -721,7 +727,7 @@ function RunWorkspace({
           <div className="mb-4">
             <h2 className="font-semibold">候选方案对比</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              硬冲突为 0 才可采用；展开分项可以看清方案差异。
+              硬冲突和未排课程均为 0 才可采用；达到综合质量与关键分项底线后才会标记为推荐。
             </p>
           </div>
           <div className="grid gap-4 lg:grid-cols-3">
@@ -753,12 +759,15 @@ function CandidateCard({
   onAdopt: (candidate: ScheduleCandidate, activate: boolean) => void
 }) {
   const score = Number(candidate.quality_score ?? 0)
+  const assessment = assessCandidateQuality(candidate)
+  const recommended = best && assessment.eligible
   return (
     <article
       className={cn(
         "rounded-2xl border bg-background p-4",
-        best &&
+        recommended &&
           "border-primary/40 shadow-[0_8px_30px_color-mix(in_oklch,var(--primary)_8%,transparent)]",
+        best && !recommended && "border-amber-300 bg-amber-50/25 dark:border-amber-700",
       )}
     >
       <div className="flex items-start justify-between gap-3">
@@ -766,8 +775,15 @@ function CandidateCard({
           <div className="flex items-center gap-2">
             <h3 className="font-semibold">{candidate.name}</h3>
             {best && (
-              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                推荐
+              <span
+                className={cn(
+                  "rounded-full px-2 py-0.5 text-xs font-medium",
+                  recommended
+                    ? "bg-primary/10 text-primary"
+                    : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
+                )}
+              >
+                {recommended ? "推荐" : "当前最高分 · 未达推荐线"}
               </span>
             )}
           </div>
@@ -788,6 +804,15 @@ function CandidateCard({
         <Score label="教室稳定" value={candidate.score_breakdown.room_stability} />
         <Score label="学校规则" value={candidate.score_breakdown.custom_rules} />
       </dl>
+      {!assessment.eligible && (
+        <div
+          role="note"
+          className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-800 dark:bg-amber-950/45 dark:text-amber-200"
+        >
+          <p className="font-medium">未达到推荐质量线</p>
+          <p>{assessment.reasons.join("；")}。建议调整生成策略或人工复核后再设为当前课表。</p>
+        </div>
+      )}
       <details className="mt-3 rounded-lg bg-muted/40 px-3 py-2 text-xs">
         <summary className="cursor-pointer font-medium">查看扣分明细</summary>
         <div className="mt-2 grid gap-1 text-muted-foreground">
@@ -1017,21 +1042,30 @@ function AdoptDialog({
   runId: number
   etag: string | null
   onClose: () => void
-  onSaved: () => Promise<void>
+  onSaved: (version: TimetableVersion) => Promise<void>
 }) {
   const [name, setName] = useState("")
   const [reason, setReason] = useState("")
+  const [qualityAcknowledged, setQualityAcknowledged] = useState(false)
   const [saving, setSaving] = useState(false)
   useEffect(() => {
     setName(value ? `${value.candidate.name}${value.activate ? " · 当前课表" : " · 调整草稿"}` : "")
     setReason("")
+    setQualityAcknowledged(false)
   }, [value])
+  const quality = value ? assessCandidateQuality(value.candidate) : null
   const save = async (event: FormEvent) => {
     event.preventDefault()
-    if (!value || !etag || (value.activate && reason.trim().length < 2)) return
+    if (
+      !value ||
+      !etag ||
+      (value.activate && reason.trim().length < 2) ||
+      (value.activate && quality && !quality.eligible && !qualityAcknowledged)
+    )
+      return
     setSaving(true)
     try {
-      await api(
+      const result = await api<TimetableVersion>(
         `/api/v1/semesters/${semesterId}/schedule-runs/${runId}/candidates/${value.candidate.id}/adopt`,
         {
           method: "POST",
@@ -1047,7 +1081,7 @@ function AdoptDialog({
         value.activate ? "已设为当前课表，原版本已保留在历史中" : "已创建可编辑课表草稿",
       )
       onClose()
-      await onSaved()
+      await onSaved(result.data)
     } catch (error) {
       toast.error(apiMessage(error))
     } finally {
@@ -1074,20 +1108,46 @@ function AdoptDialog({
             />
           </Field>
           {value?.activate && (
-            <Field label="切换原因">
+            <Field
+              label="切换原因（必填）"
+              error={
+                reason.length > 0 && reason.trim().length < 2 ? "请填写至少 2 个字" : undefined
+              }
+            >
               <Input
                 value={reason}
                 onChange={(event) => setReason(event.target.value)}
                 placeholder="例如：采用综合质量最高方案"
                 autoFocus
+                aria-invalid={reason.length > 0 && reason.trim().length < 2}
               />
             </Field>
+          )}
+          {value?.activate && quality && !quality.eligible && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/45 dark:text-amber-200">
+              <p className="font-medium">该方案未达到推荐质量线</p>
+              <p className="mt-1 text-xs leading-5">{quality.reasons.join("；")}。</p>
+              <label className="mt-3 flex items-start gap-2">
+                <Checkbox
+                  checked={qualityAcknowledged}
+                  onCheckedChange={(checked) => setQualityAcknowledged(checked === true)}
+                />
+                <span>我已了解上述质量风险，并会在切换后继续人工复核。</span>
+              </label>
+            </div>
           )}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
               取消
             </Button>
-            <Button type="submit" disabled={saving}>
+            <Button
+              type="submit"
+              disabled={
+                saving ||
+                Boolean(value?.activate && reason.trim().length < 2) ||
+                Boolean(value?.activate && quality && !quality.eligible && !qualityAcknowledged)
+              }
+            >
               {saving ? "处理中…" : value?.activate ? "确认设为当前课表" : "创建草稿"}
             </Button>
           </DialogFooter>

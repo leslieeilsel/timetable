@@ -1,5 +1,6 @@
-import { Link, Outlet, useLocation, useNavigate } from "react-router"
-import { ChevronDownIcon, LogOutIcon, MoonIcon, SunIcon } from "lucide-react"
+import { lazy, Suspense, useState } from "react"
+import { Link, Outlet, useLocation } from "react-router"
+import { ChevronDownIcon, MoonIcon, SunIcon } from "lucide-react"
 import { useTheme } from "next-themes"
 import { AppSidebar } from "@/components/app-sidebar"
 import { useAuth } from "@/lib/auth"
@@ -19,15 +20,12 @@ import {
 } from "@/components/ui/breadcrumb"
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+
+const WorkspaceUserMenu = lazy(() =>
+  import("@/components/workspace-user-menu").then((module) => ({
+    default: module.WorkspaceUserMenu,
+  })),
+)
 
 const labels: Record<string, string> = {
   resources: "基础资料",
@@ -53,8 +51,7 @@ const labels: Record<string, string> = {
 
 export function WorkspaceShell() {
   const { pathname } = useLocation()
-  const navigate = useNavigate()
-  const { user, logout } = useAuth()
+  const { user } = useAuth()
   const { resolvedTheme, setTheme } = useTheme()
   const isDark = resolvedTheme === "dark"
   const { semesterId } = useResolvedSemesterId()
@@ -77,8 +74,17 @@ export function WorkspaceShell() {
   const weekday = new Intl.DateTimeFormat("zh-CN", { weekday: "short" }).format(now)
   return (
     <SidebarProvider>
+      <a
+        href="#main-content"
+        onClick={() => {
+          requestAnimationFrame(() => document.getElementById("main-content")?.focus())
+        }}
+        className="fixed top-3 left-3 z-[100] -translate-y-20 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-lg transition-transform focus:translate-y-0 focus:outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
+      >
+        跳到主要内容
+      </a>
       <AppSidebar />
-      <SidebarInset>
+      <SidebarInset id="main-content" tabIndex={-1}>
         <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b border-border/50 bg-background/95 px-4 supports-[backdrop-filter]:bg-background/70 supports-[backdrop-filter]:backdrop-blur-2xl supports-[backdrop-filter]:backdrop-saturate-150 lg:px-5">
           <SidebarTrigger className="-ml-1 rounded-full border bg-background md:hidden" />
           <Breadcrumb className="min-w-0 flex-1 overflow-hidden">
@@ -142,42 +148,52 @@ export function WorkspaceShell() {
                 {today} {weekday}
               </time>
             </div>
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button variant="ghost" className="ml-1 gap-2 px-2.5" aria-label={user?.name} />
-                }
-              >
-                <span className="hidden sm:inline">{user?.name}</span>
-                <ChevronDownIcon className="size-3.5 text-muted-foreground" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64">
-                <DropdownMenuGroup>
-                  <DropdownMenuLabel>
-                    <span className="block">{user?.name}</span>
-                    <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
-                      {user?.email}
-                    </span>
-                  </DropdownMenuLabel>
-                </DropdownMenuGroup>
-                <DropdownMenuSeparator />
-                <DropdownMenuGroup>
-                  <DropdownMenuItem onClick={() => navigate("/change-password")}>
-                    修改密码
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => void logout()}>
-                    <LogOutIcon />
-                    退出登录
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <DeferredWorkspaceUserMenu userName={user?.name} />
           </div>
         </header>
-        <main className="min-w-0 flex-1 bg-background">
+        <div className="min-w-0 flex-1 bg-background">
           <Outlet />
-        </main>
+        </div>
       </SidebarInset>
     </SidebarProvider>
+  )
+}
+
+function DeferredWorkspaceUserMenu({ userName }: { userName?: string }) {
+  const [requested, setRequested] = useState(false)
+
+  if (!requested) {
+    return <UserMenuTrigger userName={userName} onClick={() => setRequested(true)} />
+  }
+
+  return (
+    <Suspense fallback={<UserMenuTrigger userName={userName} disabled />}>
+      <WorkspaceUserMenu openOnMount />
+    </Suspense>
+  )
+}
+
+function UserMenuTrigger({
+  userName,
+  disabled = false,
+  onClick,
+}: {
+  userName?: string
+  disabled?: boolean
+  onClick?: () => void
+}) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      className="ml-1 gap-2 px-2.5 max-md:min-w-12"
+      aria-label={userName}
+      aria-haspopup="menu"
+      disabled={disabled}
+      onClick={onClick}
+    >
+      <span className="hidden sm:inline">{userName}</span>
+      <ChevronDownIcon className="size-3.5 text-muted-foreground" />
+    </Button>
   )
 }

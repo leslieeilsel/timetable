@@ -1,21 +1,14 @@
 import { Link } from "react-router"
 import { useQuery } from "@tanstack/react-query"
 import { ArrowRightIcon, CalendarDaysIcon, CheckIcon, ClipboardCheckIcon } from "lucide-react"
-import { api, apiAllPages } from "@/lib/api"
+import { api } from "@/lib/api"
 import { useAuth } from "@/lib/auth"
-import type { ClassSetting, ScheduleTemplate, Semester, TeachingAssignment } from "@/lib/types"
+import type { DashboardSummary, Semester } from "@/lib/types"
 import { useSchoolContext } from "@/lib/queries"
 import { semesterPath } from "@/lib/semester"
 import { ErrorState, LoadingState, PageHeader } from "@/components/page"
 import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/status-badge"
-
-interface CompletenessItem {
-  required: number
-  scheduled: number
-  remaining: number
-  completed: boolean
-}
 
 export function DashboardPage() {
   const { user } = useAuth()
@@ -26,51 +19,33 @@ export function DashboardPage() {
     queryFn: () => api<Semester>(`/api/v1/semesters/${semesterId}`),
     enabled: semesterId !== null,
   })
-  const settings = useQuery({
-    queryKey: ["class-settings", semesterId],
-    queryFn: () => apiAllPages<ClassSetting>(`/api/v1/semesters/${semesterId}/class-settings`),
-    enabled: semesterId !== null,
-  })
-  const template = useQuery({
-    queryKey: ["schedule-template", semesterId],
-    queryFn: () =>
-      api<ScheduleTemplate | null>(`/api/v1/semesters/${semesterId}/schedule-template`),
-    enabled: semesterId !== null,
-  })
-  const assignments = useQuery({
-    queryKey: ["teaching-assignments", semesterId],
-    queryFn: () =>
-      apiAllPages<TeachingAssignment>(`/api/v1/semesters/${semesterId}/teaching-assignments`),
-    enabled: semesterId !== null,
-  })
-  const completeness = useQuery({
-    queryKey: ["completeness", semesterId],
-    queryFn: async () =>
-      (await api<CompletenessItem[]>(`/api/v1/semesters/${semesterId}/timetable/completeness`))
-        .data,
+  const summary = useQuery({
+    queryKey: ["dashboard-summary", semesterId],
+    queryFn: () => api<DashboardSummary>(`/api/v1/semesters/${semesterId}/dashboard-summary`),
     enabled: semesterId !== null,
   })
 
-  if (
-    context.isLoading ||
-    semester.isLoading ||
-    settings.isLoading ||
-    template.isLoading ||
-    assignments.isLoading ||
-    completeness.isLoading
-  )
-    return <LoadingState />
-  if (context.isError) return <ErrorState retry={() => void context.refetch()} />
+  if (context.isLoading || semester.isLoading || summary.isLoading) return <LoadingState />
+  if (context.isError || semester.isError || summary.isError)
+    return (
+      <ErrorState
+        retry={() => {
+          void context.refetch()
+          void semester.refetch()
+          void summary.refetch()
+        }}
+      />
+    )
 
   const current = semester.data?.data
-  const classCount = settings.data?.data.length ?? 0
-  const assignmentCount = assignments.data?.data.length ?? 0
-  const confirmedCount =
-    assignments.data?.data.filter((assignment) => assignment.status === "confirmed").length ?? 0
-  const scheduled = completeness.data?.reduce((sum, item) => sum + item.scheduled, 0) ?? 0
-  const required = completeness.data?.reduce((sum, item) => sum + item.required, 0) ?? 0
-  const remaining = completeness.data?.reduce((sum, item) => sum + item.remaining, 0) ?? 0
-  const templateReady = Boolean(template.data?.data)
+  const dashboard = summary.data?.data
+  const classCount = dashboard?.class_count ?? 0
+  const assignmentCount = dashboard?.assignment_count ?? 0
+  const confirmedCount = dashboard?.confirmed_count ?? 0
+  const scheduled = dashboard?.scheduled ?? 0
+  const required = dashboard?.required ?? 0
+  const remaining = dashboard?.remaining ?? 0
+  const templateReady = dashboard?.template_ready ?? false
   const blocked =
     !classCount || !templateReady || confirmedCount !== assignmentCount || remaining > 0
   const startDelta = current
@@ -108,17 +83,20 @@ export function DashboardPage() {
                 {startDelta !== null && startDelta >= 0 && (
                   <>
                     <span className="h-4 w-px bg-border" aria-hidden="true" />
-                    <span className="font-medium text-emerald-600">距开学 {startDelta} 天</span>
+                    <span className="font-medium text-emerald-700 dark:text-emerald-400">
+                      距开学 {startDelta} 天
+                    </span>
                   </>
                 )}
               </p>
             </div>
-            <div className="flex flex-wrap gap-3">
+            <div className="grid w-full grid-cols-2 gap-3 sm:flex sm:w-auto sm:flex-wrap">
               <Button
+                className="col-span-2 sm:col-span-1"
                 nativeButton={false}
                 render={<Link to={semesterPath(current.id, "timetable")} />}
               >
-                进入排课工作台
+                进入课表工作区
                 <ArrowRightIcon />
               </Button>
               {user?.role !== "viewer" && (
@@ -182,7 +160,7 @@ export function DashboardPage() {
                   </div>
                 ) : (
                   <div>
-                    <span className="mx-auto flex size-10 items-center justify-center rounded-full border border-emerald-500 text-emerald-600">
+                    <span className="mx-auto flex size-10 items-center justify-center rounded-full border border-emerald-600 text-emerald-700 dark:border-emerald-400 dark:text-emerald-400">
                       <CheckIcon className="size-5" />
                     </span>
                     <p className="mt-4 font-medium">暂无阻塞项</p>
@@ -248,19 +226,26 @@ function Workflow({
   return (
     <section className="surface-panel grid gap-5 p-5 sm:grid-cols-2 xl:grid-cols-5">
       {steps.map((step, index) => (
-        <div key={step.label} className="relative flex gap-3 xl:block">
-          <div className="flex items-center gap-3">
-            <span
-              className={`flex size-8 shrink-0 items-center justify-center rounded-full border text-sm font-semibold ${
-                step.done ? "border-emerald-500 text-emerald-600" : "border-primary text-primary"
+        <div
+          key={step.label}
+          className="relative grid min-w-0 grid-cols-[2rem_minmax(0,1fr)] gap-x-3 gap-y-1"
+        >
+          <span
+            className={`row-span-2 flex size-8 shrink-0 items-center justify-center rounded-full border text-sm font-semibold ${
+              step.done
+                ? "border-emerald-600 text-emerald-700 dark:border-emerald-400 dark:text-emerald-400"
+                : "border-primary text-primary"
+            }`}
+          >
+            {index + 1}
+          </span>
+          <p className="min-w-0 font-medium">{step.label}</p>
+          <div className="min-w-0">
+            <p
+              className={`text-sm leading-5 ${
+                step.done ? "text-emerald-700 dark:text-emerald-400" : "text-amber-700"
               }`}
             >
-              {index + 1}
-            </span>
-            <p className="font-medium">{step.label}</p>
-          </div>
-          <div className="ml-11 xl:mt-3 xl:ml-0">
-            <p className={`text-sm ${step.done ? "text-emerald-600" : "text-amber-700"}`}>
               {step.done ? "已完成" : "待处理"} · {step.note}
             </p>
           </div>

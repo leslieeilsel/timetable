@@ -6,7 +6,7 @@ import {
   CalendarCheck2Icon,
   CalendarCogIcon,
   CalendarDaysIcon,
-  ChevronRightIcon,
+  ChevronDownIcon,
   ClipboardListIcon,
   DatabaseIcon,
   GalleryVerticalEndIcon,
@@ -44,7 +44,6 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
 const primary = [{ title: "工作台", to: "/", icon: LayoutDashboardIcon }]
 const resourceItems = [
@@ -72,8 +71,6 @@ const dailyItems = [
   destination: SemesterDestination
   icon: typeof CalendarDaysIcon
 }>
-const SIDEBAR_TOOLTIP_DELAY = 150
-
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { pathname } = useLocation()
   const { user } = useAuth()
@@ -137,7 +134,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       >
         <DatabaseIcon />
         <span>基础资料</span>
-        <ChevronRightIcon className="ml-auto transition-transform group-data-open/collapsible:rotate-90 group-data-[collapsible=icon]:hidden" />
+        <ChevronDownIcon className="t-acc-chevron ml-auto group-data-[collapsible=icon]:hidden" />
       </CollapsibleTrigger>
       <CollapsibleContent>
         <SidebarMenuSub>
@@ -178,7 +175,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       >
         <CalendarCogIcon />
         <span>排课中心</span>
-        <ChevronRightIcon className="ml-auto transition-transform group-data-open/collapsible:rotate-90 group-data-[collapsible=icon]:hidden" />
+        <ChevronDownIcon className="t-acc-chevron ml-auto group-data-[collapsible=icon]:hidden" />
       </CollapsibleTrigger>
       <CollapsibleContent>
         <SidebarMenuSub>
@@ -217,7 +214,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <CollapsibleTrigger render={<SidebarMenuButton tooltip="日常运行" isActive={dailyActive} />}>
         <CalendarCheck2Icon />
         <span>日常运行</span>
-        <ChevronRightIcon className="ml-auto transition-transform group-data-open/collapsible:rotate-90 group-data-[collapsible=icon]:hidden" />
+        <ChevronDownIcon className="t-acc-chevron ml-auto group-data-[collapsible=icon]:hidden" />
       </CollapsibleTrigger>
       <CollapsibleContent>
         <SidebarMenuSub>
@@ -245,32 +242,22 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   )
   const sidebarHeader =
     !sidebar.isMobile && sidebar.state === "collapsed" ? (
-      <Tooltip>
-        <TooltipTrigger
-          delay={SIDEBAR_TOOLTIP_DELAY}
-          render={
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              aria-label="展开侧边栏"
-              className="group/sidebar-logo relative size-8 rounded-xl p-0 hover:bg-sidebar-accent focus-visible:bg-sidebar-accent"
-              onClick={() => sidebar.setOpen(true)}
-            />
-          }
-        >
-          <LogoMark className="size-8 transition-opacity duration-150 group-hover/sidebar-logo:opacity-0 group-focus-visible/sidebar-logo:opacity-0" />
-          <PanelLeftIcon className="absolute size-4 opacity-0 transition-opacity duration-150 group-hover/sidebar-logo:opacity-100 group-focus-visible/sidebar-logo:opacity-100" />
-        </TooltipTrigger>
-        <TooltipContent side="right" sideOffset={8}>
-          展开侧边栏
-        </TooltipContent>
-      </Tooltip>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        aria-label="展开侧边栏"
+        title="展开侧边栏"
+        className="group/sidebar-logo relative size-8 rounded-xl p-0 hover:bg-sidebar-accent focus-visible:bg-sidebar-accent"
+        onClick={() => sidebar.setOpen(true)}
+      >
+        <LogoMark className="size-8 transition-opacity duration-150 group-hover/sidebar-logo:opacity-0 group-focus-visible/sidebar-logo:opacity-0" />
+        <PanelLeftIcon className="absolute size-4 opacity-0 transition-opacity duration-150 group-hover/sidebar-logo:opacity-100 group-focus-visible/sidebar-logo:opacity-100" />
+      </Button>
     ) : (
       <div className="flex h-8 min-w-0 items-center gap-2">
         <Link
           to="/"
-          aria-label={SYSTEM_NAME}
           className="flex min-w-0 flex-1 items-center gap-3 rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-sidebar-ring/50"
           onClick={() => {
             if (sidebar.isMobile) sidebar.setOpenMobile(false)
@@ -282,36 +269,27 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <span className="truncate text-xs text-muted-foreground">{SYSTEM_TAGLINE}</span>
           </div>
         </Link>
-        <Tooltip>
-          <TooltipTrigger
-            delay={SIDEBAR_TOOLTIP_DELAY}
-            render={
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                aria-label={sidebar.isMobile ? "关闭侧边栏" : "收起侧边栏"}
-                className="size-8 rounded-xl text-muted-foreground hover:text-foreground"
-                onClick={() => {
-                  if (sidebar.isMobile) {
-                    sidebar.setOpenMobile(false)
-                  } else {
-                    sidebar.setOpen(false)
-                  }
-                }}
-              />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label={sidebar.isMobile ? "关闭侧边栏" : "收起侧边栏"}
+          title={sidebar.isMobile ? "关闭侧边栏" : "收起侧边栏"}
+          className="size-8 rounded-xl text-muted-foreground hover:text-foreground"
+          onClick={() => {
+            if (sidebar.isMobile) {
+              sidebar.setOpenMobile(false)
+            } else {
+              sidebar.setOpen(false)
             }
-          >
-            <PanelLeftIcon />
-          </TooltipTrigger>
-          <TooltipContent side="right" sideOffset={8} hidden={sidebar.isMobile}>
-            收起侧边栏
-          </TooltipContent>
-        </Tooltip>
+          }}
+        >
+          <PanelLeftIcon />
+        </Button>
       </div>
     )
   return (
-    <Sidebar collapsible="icon" {...props}>
+    <Sidebar collapsible="icon" role="navigation" aria-label="主导航" {...props}>
       <SidebarHeader className="px-2 pt-3 pb-2">{sidebarHeader}</SidebarHeader>
       <SidebarContent>
         {group("日常工作", primary)}

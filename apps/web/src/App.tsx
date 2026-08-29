@@ -4,14 +4,21 @@ import { useAuth } from "@/lib/auth"
 import { pageTitleForPath, SYSTEM_NAME } from "@/lib/brand"
 import { useSchoolContext } from "@/lib/queries"
 import { semesterPath, type SemesterDestination } from "@/lib/semester"
-import { WorkspaceShell } from "@/components/workspace-shell"
 import { LoadingState } from "@/components/page"
+import { WorkspaceLoadingState } from "@/components/workspace-loading-state"
 
 const LoginPage = lazy(() =>
   import("@/pages/auth-pages").then((module) => ({ default: module.LoginPage })),
 )
 const ChangePasswordPage = lazy(() =>
-  import("@/pages/auth-pages").then((module) => ({ default: module.ChangePasswordPage })),
+  import("@/pages/change-password-page").then((module) => ({
+    default: module.ChangePasswordPage,
+  })),
+)
+const ProtectedWorkspace = lazy(() =>
+  import("@/components/protected-workspace").then((module) => ({
+    default: module.ProtectedWorkspace,
+  })),
 )
 const DashboardPage = lazy(() =>
   import("@/pages/dashboard-page").then((module) => ({ default: module.DashboardPage })),
@@ -79,14 +86,6 @@ const SettingsPage = lazy(() =>
   import("@/pages/system-pages").then((module) => ({ default: module.SettingsPage })),
 )
 
-function ProtectedWorkspace() {
-  const { user, loading } = useAuth()
-  if (loading) return <LoadingState label="正在恢复会话…" />
-  if (!user) return <Navigate to="/login" replace />
-  if (user.must_change_password) return <Navigate to="/change-password" replace />
-  return <WorkspaceShell />
-}
-
 function RequireRole({
   roles,
   children,
@@ -119,7 +118,7 @@ export default function App() {
   return (
     <>
       <DocumentTitle />
-      <Suspense fallback={<LoadingState />}>
+      <Suspense fallback={<AppLoadingFallback />}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/change-password" element={<ChangePasswordPage />} />
@@ -324,5 +323,14 @@ export default function App() {
         </Routes>
       </Suspense>
     </>
+  )
+}
+
+function AppLoadingFallback() {
+  const { pathname } = useLocation()
+  return pathname === "/login" || pathname === "/change-password" ? (
+    <LoadingState />
+  ) : (
+    <WorkspaceLoadingState />
   )
 }
