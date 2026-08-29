@@ -6,7 +6,7 @@ import {
   CalendarCheck2Icon,
   CalendarCogIcon,
   CalendarDaysIcon,
-  ChevronRightIcon,
+  ChevronDownIcon,
   ClipboardListIcon,
   DatabaseIcon,
   GalleryVerticalEndIcon,
@@ -150,7 +150,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       >
         <DatabaseIcon />
         <span>基础资料</span>
-        <ChevronRightIcon className="ml-auto transition-transform group-data-open/collapsible:rotate-90 group-data-[collapsible=icon]:hidden" />
+        <ChevronDownIcon className="t-acc-chevron ml-auto group-data-[collapsible=icon]:hidden" />
       </CollapsibleTrigger>
       <CollapsibleContent>
         <SidebarMenuSub>
@@ -191,7 +191,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       >
         <CalendarCogIcon />
         <span>排课中心</span>
-        <ChevronRightIcon className="ml-auto transition-transform group-data-open/collapsible:rotate-90 group-data-[collapsible=icon]:hidden" />
+        <ChevronDownIcon className="t-acc-chevron ml-auto group-data-[collapsible=icon]:hidden" />
       </CollapsibleTrigger>
       <CollapsibleContent>
         <SidebarMenuSub>
@@ -230,7 +230,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <CollapsibleTrigger render={<SidebarMenuButton tooltip="日常运行" isActive={dailyActive} />}>
         <CalendarCheck2Icon />
         <span>日常运行</span>
-        <ChevronRightIcon className="ml-auto transition-transform group-data-open/collapsible:rotate-90 group-data-[collapsible=icon]:hidden" />
+        <ChevronDownIcon className="t-acc-chevron ml-auto group-data-[collapsible=icon]:hidden" />
       </CollapsibleTrigger>
       <CollapsibleContent>
         <SidebarMenuSub>
@@ -305,7 +305,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </div>
     )
   return (
-    <Sidebar collapsible="icon" {...props}>
+    <Sidebar collapsible="icon" role="navigation" aria-label="主导航" {...props}>
       <SidebarHeader className="px-2 pt-3 pb-2">{sidebarHeader}</SidebarHeader>
       <SidebarContent>
         {group("日常工作", primary)}

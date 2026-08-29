@@ -5,6 +5,7 @@ import { pageTitleForPath, SYSTEM_NAME } from "@/lib/brand"
 import { useSchoolContext } from "@/lib/queries"
 import { semesterPath, type SemesterDestination } from "@/lib/semester"
 import { LoadingState } from "@/components/page"
+import { WorkspaceLoadingState } from "@/components/workspace-loading-state"
 
 const LoginPage = lazy(() =>
   import("@/pages/auth-pages").then((module) => ({ default: module.LoginPage })),
@@ -117,7 +118,7 @@ export default function App() {
   return (
     <>
       <DocumentTitle />
-      <Suspense fallback={<LoadingState />}>
+      <Suspense fallback={<AppLoadingFallback />}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/change-password" element={<ChangePasswordPage />} />
@@ -322,5 +323,14 @@ export default function App() {
         </Routes>
       </Suspense>
     </>
+  )
+}
+
+function AppLoadingFallback() {
+  const { pathname } = useLocation()
+  return pathname === "/login" || pathname === "/change-password" ? (
+    <LoadingState />
+  ) : (
+    <WorkspaceLoadingState />
   )
 }

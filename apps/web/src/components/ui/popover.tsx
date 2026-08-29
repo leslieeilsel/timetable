@@ -3,6 +3,12 @@ import { Popover as PopoverPrimitive } from "@base-ui/react/popover"
 
 import { cn } from "@/lib/utils"
 
+function popoverOrigin(side: string, align: string) {
+  const vertical = side === "top" ? "bottom" : "top"
+  const horizontal = align === "end" ? "right" : align === "center" ? "center" : "left"
+  return `${vertical}-${horizontal}`
+}
+
 function Popover({ ...props }: PopoverPrimitive.Root.Props) {
   return <PopoverPrimitive.Root data-slot="popover" {...props} />
 }
@@ -31,10 +37,15 @@ function PopoverContent({
       >
         <PopoverPrimitive.Popup
           data-slot="popover-content"
-          className={cn(
-            "z-50 flex w-72 origin-(--transform-origin) flex-col gap-4 rounded-3xl bg-popover p-4 text-sm text-popover-foreground shadow-lg ring-1 ring-foreground/5 outline-hidden duration-100 data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 dark:ring-foreground/10 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
-            className,
-          )}
+          data-origin={popoverOrigin(side, align)}
+          className={(state) =>
+            cn(
+              "t-dropdown z-50 flex w-72 flex-col gap-4 rounded-3xl bg-popover p-4 text-sm text-popover-foreground shadow-lg ring-1 ring-foreground/5 outline-hidden dark:ring-foreground/10",
+              state.open && "is-open",
+              state.transitionStatus === "ending" && "is-closing",
+              typeof className === "function" ? className(state) : className,
+            )
+          }
           {...props}
         />
       </PopoverPrimitive.Positioner>

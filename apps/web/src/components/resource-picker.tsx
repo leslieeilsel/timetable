@@ -349,7 +349,7 @@ export function ResourcePicker({
                 aria-label={searchPlaceholder}
                 aria-busy={pinyinLoading || undefined}
                 placeholder={searchPlaceholder}
-                className="h-11 bg-background pr-10 pl-9 text-base sm:pr-24"
+                className="h-12 bg-background pr-10 pl-9 text-base sm:h-11 sm:pr-24"
                 onChange={(event) => setDraftQuery(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.nativeEvent.isComposing) {

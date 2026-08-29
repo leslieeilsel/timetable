@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useNavigate } from "react-router"
 import { ChevronDownIcon, LogOutIcon } from "lucide-react"
 import { useAuth } from "@/lib/auth"
@@ -13,15 +13,27 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
-export function WorkspaceUserMenu() {
+export function WorkspaceUserMenu({ openOnMount = false }: { openOnMount?: boolean }) {
   const navigate = useNavigate()
   const { user, logout } = useAuth()
-  const [open, setOpen] = useState(true)
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    if (!openOnMount) return
+    const frame = requestAnimationFrame(() => setOpen(true))
+    return () => cancelAnimationFrame(frame)
+  }, [openOnMount])
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger
-        render={<Button variant="ghost" className="ml-1 gap-2 px-2.5" aria-label={user?.name} />}
+        render={
+          <Button
+            variant="ghost"
+            className="ml-1 gap-2 px-2.5 max-md:min-w-12"
+            aria-label={user?.name}
+          />
+        }
       >
         <span className="hidden sm:inline">{user?.name}</span>
         <ChevronDownIcon className="size-3.5 text-muted-foreground" />

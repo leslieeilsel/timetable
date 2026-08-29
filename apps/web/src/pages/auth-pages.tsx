@@ -47,7 +47,10 @@ export function LoginPage() {
 
   return (
     <div className="grid min-h-svh bg-background lg:grid-cols-[55.5%_44.5%]">
-      <section className="relative hidden overflow-hidden border-r bg-sidebar lg:block">
+      <aside
+        aria-label="系统介绍"
+        className="relative hidden overflow-hidden border-r bg-sidebar lg:block"
+      >
         <div className="absolute top-[14.5%] left-[11%] z-10">
           <Brand large />
         </div>
@@ -81,7 +84,7 @@ export function LoginPage() {
         <p className="absolute bottom-[5%] left-[11%] z-10 text-sm text-muted-foreground">
           校内系统 · 请使用已分配账号登录
         </p>
-      </section>
+      </aside>
       <main className="flex items-center justify-center px-6 py-12 lg:px-[10%]">
         <form onSubmit={submit} noValidate className="w-full max-w-lg">
           <div className="mb-8 lg:mb-14">
@@ -113,7 +116,7 @@ export function LoginPage() {
                 />
                 <button
                   type="button"
-                  className="absolute top-1/2 right-3 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                  className="absolute top-1/2 right-1.5 flex size-12 -translate-y-1/2 items-center justify-center rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground md:right-3 md:size-8 md:rounded-md"
                   aria-label={showPassword ? "隐藏密码" : "显示密码"}
                   onClick={() => setShowPassword((value) => !value)}
                 >

@@ -76,7 +76,10 @@ export function WorkspaceShell() {
     <SidebarProvider>
       <a
         href="#main-content"
-        className="sr-only fixed top-2 left-2 z-[100] rounded-lg bg-background px-3 py-2 text-sm font-medium shadow-lg ring-2 ring-ring focus:not-sr-only"
+        onClick={() => {
+          requestAnimationFrame(() => document.getElementById("main-content")?.focus())
+        }}
+        className="fixed top-3 left-3 z-[100] -translate-y-20 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-lg transition-transform focus:translate-y-0 focus:outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
       >
         跳到主要内容
       </a>
@@ -165,7 +168,7 @@ function DeferredWorkspaceUserMenu({ userName }: { userName?: string }) {
 
   return (
     <Suspense fallback={<UserMenuTrigger userName={userName} disabled />}>
-      <WorkspaceUserMenu />
+      <WorkspaceUserMenu openOnMount />
     </Suspense>
   )
 }
@@ -183,7 +186,7 @@ function UserMenuTrigger({
     <Button
       type="button"
       variant="ghost"
-      className="ml-1 gap-2 px-2.5"
+      className="ml-1 gap-2 px-2.5 max-md:min-w-12"
       aria-label={userName}
       aria-haspopup="menu"
       disabled={disabled}

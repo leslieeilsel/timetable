@@ -105,12 +105,13 @@ export function DashboardPage() {
                 )}
               </p>
             </div>
-            <div className="flex flex-wrap gap-3">
+            <div className="grid w-full grid-cols-2 gap-3 sm:flex sm:w-auto sm:flex-wrap">
               <Button
+                className="col-span-2 sm:col-span-1"
                 nativeButton={false}
                 render={<Link to={semesterPath(current.id, "timetable")} />}
               >
-                进入排课工作台
+                进入课表工作区
                 <ArrowRightIcon />
               </Button>
               {user?.role !== "viewer" && (
@@ -313,22 +314,23 @@ function Workflow({
   return (
     <section className="surface-panel grid gap-5 p-5 sm:grid-cols-2 xl:grid-cols-5">
       {steps.map((step, index) => (
-        <div key={step.label} className="relative flex gap-3 xl:block">
-          <div className="flex items-center gap-3">
-            <span
-              className={`flex size-8 shrink-0 items-center justify-center rounded-full border text-sm font-semibold ${
-                step.done
-                  ? "border-emerald-600 text-emerald-700 dark:border-emerald-400 dark:text-emerald-400"
-                  : "border-primary text-primary"
-              }`}
-            >
-              {index + 1}
-            </span>
-            <p className="font-medium">{step.label}</p>
-          </div>
-          <div className="ml-11 xl:mt-3 xl:ml-0">
+        <div
+          key={step.label}
+          className="relative grid min-w-0 grid-cols-[2rem_minmax(0,1fr)] gap-x-3 gap-y-1"
+        >
+          <span
+            className={`row-span-2 flex size-8 shrink-0 items-center justify-center rounded-full border text-sm font-semibold ${
+              step.done
+                ? "border-emerald-600 text-emerald-700 dark:border-emerald-400 dark:text-emerald-400"
+                : "border-primary text-primary"
+            }`}
+          >
+            {index + 1}
+          </span>
+          <p className="min-w-0 font-medium">{step.label}</p>
+          <div className="min-w-0">
             <p
-              className={`text-sm ${
+              className={`text-sm leading-5 ${
                 step.done ? "text-emerald-700 dark:text-emerald-400" : "text-amber-700"
               }`}
             >

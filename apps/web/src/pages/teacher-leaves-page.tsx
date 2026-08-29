@@ -365,6 +365,9 @@ function LeaveEditor({
     reason: form.reason.trim() || null,
     includes_non_course_items: false,
   })
+  const previewReady = Boolean(
+    semesterId && form.teacher_id && form.starts_at && form.ends_at > form.starts_at,
+  )
   const runPreview = async (event?: FormEvent) => {
     event?.preventDefault()
     if (!semesterId) return
@@ -374,6 +377,7 @@ function LeaveEditor({
       toast.error("请先补齐标出的必填项")
       return
     }
+    if (!previewReady) return
     setBusy(true)
     try {
       const result = await api<TeacherLeavePreview>(
@@ -485,10 +489,24 @@ function LeaveEditor({
           <button type="submit" className="hidden" aria-hidden="true" />
         </form>
         <DialogFooter className="flex-row flex-wrap justify-end border-t bg-background/95 p-6">
+          {!previewReady && (
+            <p
+              id="leave-preview-help"
+              aria-live="polite"
+              className="mr-auto w-full self-center text-xs text-muted-foreground sm:w-auto"
+            >
+              请选择教师，并确认结束时间晚于开始时间。
+            </p>
+          )}
           <Button variant="outline" onClick={onClose} disabled={busy}>
             取消
           </Button>
-          <Button variant="outline" onClick={() => void runPreview()} disabled={busy}>
+          <Button
+            variant="outline"
+            onClick={() => void runPreview()}
+            disabled={busy || !previewReady}
+            aria-describedby={!previewReady ? "leave-preview-help" : undefined}
+          >
             {busy ? <LoaderCircleIcon className="animate-spin" /> : <RefreshCwIcon />}
             {preview ? "重新预览" : "预览受影响课程"}
           </Button>

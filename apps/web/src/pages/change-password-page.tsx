@@ -65,7 +65,6 @@ export function ChangePasswordPage() {
     }
     void navigate(-1)
   }
-
   const submit = form.handleSubmit(async (values) => {
     try {
       await api<User>("/api/v1/auth/change-password", { method: "POST", body: jsonBody(values) })
@@ -79,11 +78,11 @@ export function ChangePasswordPage() {
 
   return (
     <div className="min-h-svh bg-background">
-      <header className="flex h-24 items-center border-b px-6 lg:px-8">
+      <header className="flex h-16 items-center border-b px-4 sm:px-6 lg:h-24 lg:px-8">
         <Brand />
       </header>
-      <main className="mx-auto max-w-7xl px-6 py-10 lg:px-8">
-        <Button variant="ghost" className="mb-8 -ml-3" onClick={() => void leave()}>
+      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-10">
+        <Button variant="ghost" className="mb-4 -ml-3 lg:mb-8" onClick={() => void leave()}>
           {user.must_change_password ? <LogOutIcon /> : <ArrowLeftIcon />}
           {user.must_change_password ? "退出登录" : "返回工作台"}
         </Button>
@@ -91,10 +90,10 @@ export function ChangePasswordPage() {
           onSubmit={submit}
           className="surface-panel grid overflow-hidden lg:grid-cols-[40%_60%]"
         >
-          <section className="border-b p-8 lg:min-h-[680px] lg:border-r lg:border-b-0 lg:p-12">
-            <h1 className="text-3xl font-semibold tracking-tight">修改密码</h1>
+          <section className="border-b p-6 lg:min-h-[680px] lg:border-r lg:border-b-0 lg:p-12">
+            <h1 className="text-2xl font-semibold tracking-tight lg:text-3xl">修改密码</h1>
             <p className="mt-4 text-muted-foreground">为了保护账号安全，请设置一个新的登录密码。</p>
-            <div className="mt-14 max-w-sm">
+            <div className="mt-14 hidden max-w-sm lg:block">
               <p className="border-b pb-4 font-medium">密码要求</p>
               <div className="mt-5 grid gap-5">
                 {requirements.map((requirement) => (
@@ -103,8 +102,8 @@ export function ChangePasswordPage() {
               </div>
             </div>
           </section>
-          <section className="p-8 lg:p-12">
-            <div className="grid gap-7">
+          <section className="p-6 sm:p-8 lg:p-12">
+            <div className="grid gap-5 lg:gap-7">
               <Field
                 label="当前密码"
                 error={form.formState.errors.current_password?.message}
@@ -183,10 +182,10 @@ function PasswordInput(props: React.ComponentProps<typeof Input>) {
 
   return (
     <div className="relative">
-      <Input {...props} type={visible ? "text" : "password"} className="pr-10" />
+      <Input {...props} type={visible ? "text" : "password"} className="pr-14 md:pr-10" />
       <button
         type="button"
-        className="absolute top-1/2 right-3 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+        className="absolute top-1/2 right-1.5 flex size-12 -translate-y-1/2 items-center justify-center rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground md:right-3 md:size-8 md:rounded-md"
         aria-label={visible ? "隐藏密码" : "显示密码"}
         onClick={() => setVisible((value) => !value)}
       >

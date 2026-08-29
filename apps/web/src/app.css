@@ -40,7 +40,19 @@
     position: absolute;
     inset: 0 auto auto 0;
     width: 100%;
+    background: #fff !important;
     color: #111827;
+  }
+
+  [data-print-area] * {
+    border-color: #d1d5db !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  [data-print-area] :where(th, td, [data-print-heading]) {
+    background: #fff !important;
+    color: #111827 !important;
   }
 
   [data-print-heading] {

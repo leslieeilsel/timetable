@@ -64,7 +64,7 @@ export function SchedulingWorkflow() {
                 aria-current={active ? "step" : undefined}
                 data-state={active ? "active" : state}
                 className={cn(
-                  "flex h-8 items-center gap-2 rounded-lg px-2.5 text-sm outline-none transition-[background-color,color] duration-150 focus-visible:ring-3 focus-visible:ring-ring/20",
+                  "flex h-8 touch-manipulation items-center gap-2 rounded-lg px-2.5 text-sm outline-none transition-[background-color,color] duration-150 focus-visible:ring-3 focus-visible:ring-ring/20 max-md:h-12",
                   active
                     ? "bg-primary/10 font-semibold text-primary"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground",
