@@ -731,7 +731,7 @@ export function CourseAssignmentMatrixPage() {
           </ListToolbar>
 
           {isDraftReview && (
-            <div className="flex flex-wrap items-center gap-2 border-b bg-muted/25 px-4 py-2.5 text-sm">
+            <div className="flex flex-wrap items-center gap-2 border-b bg-muted/30 px-4 py-2.5 text-sm">
               <Button size="sm" variant="ghost" onClick={closeDraftReview}>
                 <ArrowLeftIcon />
                 返回矩阵
@@ -822,7 +822,7 @@ export function CourseAssignmentMatrixPage() {
                   <div className="min-w-0">
                     <div
                       aria-hidden="true"
-                      className="flex items-center justify-between border-b bg-muted/25 px-3 py-2 text-xs font-medium text-muted-foreground md:hidden"
+                      className="flex items-center justify-between border-b bg-muted px-3 py-2 text-xs font-medium text-muted-foreground md:hidden"
                     >
                       <span>左右滑动查看完整矩阵</span>
                       <MoveHorizontalIcon className="size-4" />
@@ -839,7 +839,7 @@ export function CourseAssignmentMatrixPage() {
                             <tr>
                               <th
                                 scope="col"
-                                className="sticky top-0 left-0 z-30 h-14 min-w-44 border-r border-b bg-background px-4 text-left font-semibold shadow-[2px_2px_5px_-5px_rgba(0,0,0,.4)]"
+                                className="sticky top-0 left-0 z-30 h-14 min-w-44 border-r border-b bg-muted px-4 text-left font-semibold shadow-[2px_2px_5px_-5px_rgba(0,0,0,.4)]"
                               >
                                 班级
                               </th>
@@ -847,7 +847,7 @@ export function CourseAssignmentMatrixPage() {
                                 <th
                                   key={course.id}
                                   scope="col"
-                                  className="sticky top-0 z-20 h-14 min-w-40 border-r border-b bg-background px-3 text-left font-semibold"
+                                  className="sticky top-0 z-20 h-14 min-w-40 border-r border-b bg-muted px-3 text-left font-semibold"
                                 >
                                   <span className="block">{course.name}</span>
                                   {course.short_name && (
@@ -889,8 +889,8 @@ export function CourseAssignmentMatrixPage() {
                                       : selected
                                         ? "bg-primary/[0.055]"
                                         : assignment
-                                          ? "bg-background hover:bg-muted/55"
-                                          : "bg-muted/[0.18] text-muted-foreground hover:bg-muted/55"
+                                          ? "bg-background hover:bg-muted/50"
+                                          : "bg-muted/30 text-muted-foreground hover:bg-muted/50"
                                   return (
                                     <td
                                       key={key}
@@ -1128,7 +1128,7 @@ function MatrixDetailPanel({
 }) {
   if (!cells.length)
     return (
-      <aside className="hidden border-l bg-muted/[0.12] p-5 xl:block">
+      <aside className="hidden border-l bg-muted/30 p-5 xl:block">
         <p className="text-sm text-muted-foreground">选择单元格查看详情</p>
       </aside>
     )
@@ -1138,7 +1138,7 @@ function MatrixDetailPanel({
     .map((assignment) => assignment.id)
   if (cells.length > 1)
     return (
-      <aside className="hidden border-l bg-muted/[0.12] p-5 xl:block">
+      <aside className="hidden border-l bg-muted/30 p-5 xl:block">
         <p className="font-semibold">已选择 {cells.length} 个单元格</p>
         <div className="mt-3 grid grid-cols-2 gap-2 rounded-lg border bg-background p-3 text-sm">
           <span className="text-muted-foreground">已有设置</span>
@@ -1170,7 +1170,7 @@ function MatrixDetailPanel({
   const cell = cells[0]
   const assignment = cell.assignment
   return (
-    <aside className="hidden border-l bg-muted/[0.12] p-5 xl:block">
+    <aside className="hidden border-l bg-muted/30 p-5 xl:block">
       <h2 className="text-base font-semibold">
         {cell.classSetting.school_class.name} · {cell.course.name}
       </h2>

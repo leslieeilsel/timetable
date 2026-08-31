@@ -379,7 +379,7 @@ export function ScheduleGenerationPage() {
                           "rounded-xl border p-4 text-left focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/20",
                           mode === "rebuild"
                             ? "border-primary bg-primary/[0.05]"
-                            : "hover:bg-muted/40",
+                            : "hover:bg-muted/50",
                         )}
                         onClick={() => setMode("rebuild")}
                       >
@@ -395,7 +395,7 @@ export function ScheduleGenerationPage() {
                           "rounded-xl border p-4 text-left focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/20",
                           mode === "fill"
                             ? "border-primary bg-primary/[0.05]"
-                            : "hover:bg-muted/40",
+                            : "hover:bg-muted/50",
                         )}
                         onClick={() => setMode("fill")}
                       >
@@ -405,7 +405,7 @@ export function ScheduleGenerationPage() {
                         </span>
                       </button>
                     </div>
-                    <label className="flex items-start gap-3 rounded-xl border bg-muted/20 p-3 text-sm">
+                    <label className="flex items-start gap-3 rounded-xl border bg-muted/30 p-3 text-sm">
                       <Checkbox
                         checked={keepLocked}
                         onCheckedChange={(checked) => setKeepLocked(Boolean(checked))}
@@ -431,7 +431,7 @@ export function ScheduleGenerationPage() {
                               "rounded-xl border px-3 py-3 text-left focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/20",
                               profile === option.value
                                 ? "border-primary bg-primary/[0.05]"
-                                : "hover:bg-muted/40",
+                                : "hover:bg-muted/50",
                             )}
                             onClick={() => setProfile(option.value)}
                           >
@@ -464,7 +464,7 @@ export function ScheduleGenerationPage() {
                     </section>
                   </div>
                 </div>
-                <div className="flex flex-col gap-3 border-t bg-muted/20 p-4 sm:flex-row sm:items-center">
+                <div className="flex flex-col gap-3 border-t bg-muted/30 p-4 sm:flex-row sm:items-center">
                   <Button variant="ghost" onClick={resetRecommended}>
                     <RotateCcwIcon />
                     恢复推荐配置
@@ -490,7 +490,7 @@ export function ScheduleGenerationPage() {
         <section className="surface-panel overflow-hidden">
           <button
             type="button"
-            className="flex min-h-16 w-full items-center gap-3 px-4 text-left hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/20"
+            className="flex min-h-16 w-full items-center gap-3 px-4 text-left hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/20"
             aria-expanded={historyOpen}
             onClick={() => setHistoryOpen((value) => !value)}
           >
@@ -831,7 +831,7 @@ function CandidateCard({
           <p>{assessment.reasons.join("；")}。建议调整生成策略或人工复核后再设为当前课表。</p>
         </div>
       )}
-      <details className="mt-3 rounded-lg bg-muted/40 px-3 py-2 text-xs">
+      <details className="mt-3 rounded-lg bg-muted/30 px-3 py-2 text-xs">
         <summary className="cursor-pointer font-medium">查看扣分明细</summary>
         <div className="mt-2 grid gap-1 text-muted-foreground">
           <span>教师空堂 {candidate.score_breakdown.teacher_gaps}</span>
@@ -1281,7 +1281,7 @@ function GenerationFact({ label, value }: { label: string; value: string }) {
 }
 function Score({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg bg-muted/50 p-2">
+    <div className="rounded-lg bg-muted/30 p-2">
       <dt className="text-xs text-muted-foreground">{label}</dt>
       <dd className="mt-0.5 font-semibold tabular-nums">{Number(value).toFixed(1)}</dd>
     </div>

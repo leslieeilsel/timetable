@@ -534,7 +534,7 @@ function LeavePreviewPanel({ preview }: { preview: TeacherLeavePreview }) {
   const grouped = groupAffectedRows(preview.affected)
   return (
     <div className="overflow-hidden rounded-xl border">
-      <div className="flex items-center gap-3 border-b bg-muted/25 px-4 py-3">
+      <div className="flex items-center gap-3 border-b bg-muted/30 px-4 py-3">
         <CalendarDaysIcon className="size-5 text-primary" />
         <div>
           <p className="font-medium">
@@ -732,7 +732,7 @@ function LeaveDetailDialog({
             <ErrorState retry={() => void detail.refetch()} />
           ) : (
             <div className="grid gap-5 p-6">
-              <div className="rounded-xl border bg-muted/20 p-4">
+              <div className="rounded-xl border bg-muted/30 p-4">
                 <div className="flex flex-wrap items-start gap-3">
                   <span className="flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary">
                     <CircleUserRoundIcon className="size-5" />
@@ -846,7 +846,7 @@ function LeaveDetailDialog({
                                     }
                                   />
                                   {selected && (
-                                    <div className="rounded-lg bg-muted/35 px-3 py-2.5 text-sm">
+                                    <div className="rounded-lg bg-muted/30 px-3 py-2.5 text-sm">
                                       <p className="font-medium">
                                         为什么推荐 {selected.teacher.name}
                                       </p>

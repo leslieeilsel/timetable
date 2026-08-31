@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: 单校区教务排课系统 API
+  title: 教务排课系统 API
   version: 1.0.0
   license:
     name: Proprietary

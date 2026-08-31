@@ -27,7 +27,7 @@ async function ensureResourcesOpen(page: Page) {
 
 test("管理员首次改密、会话恢复、维护资料并安全退出", async ({ page }) => {
   await page.goto("/login")
-  await page.getByLabel("邮箱").fill("e2e-admin@example.test")
+  await page.getByLabel("账号").fill("e2e-admin@example.test")
   let loginResponse = await submitLogin(page, temporaryPassword)
   if (loginResponse.status() === 422) {
     loginResponse = await submitLogin(page, permanentPassword)
@@ -58,6 +58,18 @@ test("管理员首次改密、会话恢复、维护资料并安全退出", async
   await page.getByRole("link", { name: "课程", exact: true }).click()
   await expect(page).toHaveURL(/resources\/courses/)
   await expect(page.getByRole("heading", { name: "课程" })).toBeVisible()
+
+  await page.getByRole("button", { name: "切换基础资料页面" }).click()
+  const breadcrumbMenu = page.locator('[data-slot="dropdown-menu-content"]:visible')
+  await expect(breadcrumbMenu).toBeVisible()
+  await expect(breadcrumbMenu.getByRole("menuitem")).toHaveCount(4)
+  await expect(breadcrumbMenu.getByRole("menuitem", { name: "课程", exact: true })).toHaveAttribute(
+    "aria-current",
+    "page",
+  )
+  await breadcrumbMenu.getByRole("menuitem", { name: "教室", exact: true }).click()
+  await expect(page).toHaveURL(/resources\/rooms/)
+  await expect(page.getByRole("heading", { name: "教室" })).toBeVisible()
 
   const sidebarHeader = page.locator('[data-sidebar="header"]').first()
   const sidebarLogo = sidebarHeader.locator("img")
@@ -209,7 +221,7 @@ test("管理员首次改密、会话恢复、维护资料并安全退出", async
   await expect(page).toHaveURL(/login/)
 
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.getByLabel("邮箱").fill("e2e-admin@example.test")
+  await page.getByLabel("账号").fill("e2e-admin@example.test")
   expect((await submitLogin(page, permanentPassword)).ok()).toBe(true)
   await expect(page.getByRole("heading", { name: "工作台" })).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(

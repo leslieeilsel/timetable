@@ -2596,7 +2596,6 @@ interface TimetableSolver
 - 跨学年班级继承；
 - 学籍和学生分班；
 - 单双周课表；
-- 多校区；
 - 多租户；第一阶段已经确认一套部署只服务一所学校；
 - Nx/Turborepo，因为第一阶段由 Vite Task 提供 Monorepo 编排；
 - 独立 ESLint/Prettier 工具链，除非 Vite+ 的 Oxlint/Oxfmt 出现明确兼容缺口；

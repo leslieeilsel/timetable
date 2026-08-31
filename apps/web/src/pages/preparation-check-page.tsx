@@ -228,7 +228,7 @@ function PreparationContent({
               <CheckRow key={item.key} item={item} semesterId={semesterId} checking={checking} />
             ))}
           </div>
-          <aside className="border-t bg-muted/20 p-4 lg:border-t-0 lg:border-l">
+          <aside className="border-t bg-muted/30 p-4 lg:border-t-0 lg:border-l">
             <p className="text-xs font-semibold tracking-wide text-muted-foreground">
               本次排课规模
             </p>
@@ -261,7 +261,7 @@ function PreparationContent({
               <Link
                 key={run.id}
                 to={`${generationPath}?run=${run.id}`}
-                className="flex min-h-12 items-center gap-3 px-4 text-sm transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/20"
+                className="flex min-h-12 items-center gap-3 px-4 text-sm transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/20"
               >
                 <span className="font-medium">任务 #{run.id}</span>
                 <span className="text-muted-foreground">{runStatus(run.status)}</span>

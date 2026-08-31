@@ -330,7 +330,7 @@ export function DailyAdjustmentsPage() {
             <ErrorState retry={() => void daily.refetch()} />
           ) : (
             <>
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b bg-muted/20 px-4 py-3 text-sm">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b bg-muted/30 px-4 py-3 text-sm">
                 <span className="font-medium">
                   {dateLabel(daily.data.data.date)} · 第 {daily.data.data.week_number} 周 ·{" "}
                   {weekdayNames[daily.data.data.weekday]}
@@ -718,7 +718,7 @@ function ExceptionEditor({
           className="grid min-h-0 flex-1 gap-5 overflow-y-auto p-6"
           onSubmit={(event) => void submitPreview(event)}
         >
-          <div className="rounded-xl border bg-muted/25 p-3 text-sm text-muted-foreground">
+          <div className="rounded-xl border bg-muted/30 p-3 text-sm text-muted-foreground">
             <p className="flex items-center gap-2 font-medium text-foreground">
               <CalendarClockIcon className="size-4 text-primary" />
               日期例外，不修改周课表
@@ -992,7 +992,7 @@ function ExceptionPreviewPanel({ preview }: { preview: CalendarExceptionPreview 
         </div>
       )}
       {preview.notifications.length > 0 && (
-        <div className="flex gap-2 border-t bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
+        <div className="flex gap-2 border-t bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
           <BellRingIcon className="mt-0.5 size-4 shrink-0" />
           <p>建议通知：{preview.notifications.join("、")}</p>
         </div>

@@ -56,6 +56,7 @@ export function SimpleSelect({
   onValueChange,
   children,
   className,
+  contentClassName,
   disabled,
   required,
   name,
@@ -68,6 +69,7 @@ export function SimpleSelect({
   onValueChange: (value: string) => void
   children: ReactNode
   className?: string
+  contentClassName?: string
   disabled?: boolean
   required?: boolean
   name?: string
@@ -95,7 +97,7 @@ export function SimpleSelect({
       >
         <SelectValue />
       </SelectTrigger>
-      <SelectContent>{renderItems(children)}</SelectContent>
+      <SelectContent className={contentClassName}>{renderItems(children)}</SelectContent>
     </Select>
   )
 }

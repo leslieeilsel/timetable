@@ -53,6 +53,22 @@ export function DashboardPage() {
     workingDraftId !== null && dashboard?.working_draft_is_stale === false
   const shouldContinueWorkingDraft =
     hasFreshWorkingDraft && (!currentVersionId || currentVersionIsStale)
+  const timetablePath = current ? semesterPath(current.id, "timetable") : "/"
+  const nextActionPath = shouldContinueWorkingDraft
+    ? `${timetablePath}?version=${workingDraftId}`
+    : current
+      ? semesterPath(
+          current.id,
+          !currentVersionId || currentVersionIsStale ? "generate" : "timetable",
+        )
+      : "/"
+  const nextActionLabel = shouldContinueWorkingDraft
+    ? "继续编辑最新草稿"
+    : !currentVersionId || currentVersionIsStale
+      ? "前往方案生成"
+      : remaining
+        ? "继续完成排课"
+        : "查看当前课表"
   const hardConflictCount = dashboard?.current_version_hard_conflict_count ?? 0
   const softWarningCount = dashboard?.current_version_soft_warning_count ?? 0
   const blocked =
@@ -109,9 +125,9 @@ export function DashboardPage() {
               <Button
                 className="col-span-2 sm:col-span-1"
                 nativeButton={false}
-                render={<Link to={semesterPath(current.id, "timetable")} />}
+                render={<Link to={nextActionPath} />}
               >
-                进入课表工作区
+                {nextActionLabel}
                 <ArrowRightIcon />
               </Button>
               {user?.role !== "viewer" && (
@@ -145,12 +161,13 @@ export function DashboardPage() {
             hasCurrentVersion={currentVersionId !== null}
             currentVersionIsStale={currentVersionIsStale}
             hasFreshWorkingDraft={hasFreshWorkingDraft}
+            actionPath={nextActionPath}
           />
 
           <div className="grid gap-6 xl:grid-cols-[1.5fr_0.75fr]">
             <section className="surface-panel p-5">
               <h3 className="text-lg font-semibold">下一步工作</h3>
-              <div className="mt-4 flex flex-col gap-4 rounded-xl border p-5 sm:flex-row sm:items-center">
+              <div className="mt-4 flex flex-col gap-4 rounded-xl border bg-muted/30 p-5 sm:flex-row sm:items-center">
                 <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
                   <ClipboardCheckIcon className="size-5" />
                 </div>
@@ -179,23 +196,12 @@ export function DashboardPage() {
                   </p>
                 </div>
                 <Button
-                  variant="outline"
+                  className="w-full sm:w-auto"
                   nativeButton={false}
-                  render={
-                    <Link
-                      to={
-                        shouldContinueWorkingDraft
-                          ? `${semesterPath(current.id, "timetable")}?version=${workingDraftId}`
-                          : semesterPath(
-                              current.id,
-                              !currentVersionId || currentVersionIsStale ? "generate" : "timetable",
-                            )
-                      }
-                    />
-                  }
+                  render={<Link to={nextActionPath} />}
                 >
                   {shouldContinueWorkingDraft
-                    ? "继续编辑草稿"
+                    ? "进入草稿并继续编辑"
                     : !currentVersionId || currentVersionIsStale
                       ? "前往方案生成"
                       : "查看课表"}
@@ -276,6 +282,7 @@ function Workflow({
   hasCurrentVersion,
   currentVersionIsStale,
   hasFreshWorkingDraft,
+  actionPath,
 }: {
   classCount: number
   templateReady: boolean
@@ -286,6 +293,7 @@ function Workflow({
   hasCurrentVersion: boolean
   currentVersionIsStale: boolean
   hasFreshWorkingDraft: boolean
+  actionPath: string
 }) {
   const steps = [
     { label: "基础资料", note: "年级、教师、课程、教室", done: true },
@@ -304,41 +312,69 @@ function Workflow({
       label: "排课",
       note:
         currentVersionIsStale && hasFreshWorkingDraft
-          ? "最新草稿待确认"
+          ? "继续编辑最新草稿"
           : currentVersionIsStale
-            ? "当前课表数据已变化"
-            : `${scheduled}/${required} 节`,
+            ? "前往重新生成"
+            : !hasCurrentVersion
+              ? "尚未确认当前课表"
+              : `${scheduled}/${required} 节`,
       done: hasCurrentVersion && !currentVersionIsStale && required > 0 && scheduled === required,
+      href: actionPath,
     },
   ]
   return (
     <section className="surface-panel grid gap-5 p-5 sm:grid-cols-2 xl:grid-cols-5">
-      {steps.map((step, index) => (
-        <div
-          key={step.label}
-          className="relative grid min-w-0 grid-cols-[2rem_minmax(0,1fr)] gap-x-3 gap-y-1"
-        >
-          <span
-            className={`row-span-2 flex size-8 shrink-0 items-center justify-center rounded-full border text-sm font-semibold ${
-              step.done
-                ? "border-emerald-600 text-emerald-700 dark:border-emerald-400 dark:text-emerald-400"
-                : "border-primary text-primary"
-            }`}
-          >
-            {index + 1}
-          </span>
-          <p className="min-w-0 font-medium">{step.label}</p>
-          <div className="min-w-0">
-            <p
-              className={`text-sm leading-5 ${
-                step.done ? "text-emerald-700 dark:text-emerald-400" : "text-amber-700"
+      {steps.map((step, index) => {
+        const content = (
+          <>
+            <span
+              className={`row-span-2 flex size-8 shrink-0 items-center justify-center rounded-full border text-sm font-semibold ${
+                step.done
+                  ? "border-emerald-600 text-emerald-700 dark:border-emerald-400 dark:text-emerald-400"
+                  : "border-primary text-primary"
               }`}
             >
-              {step.done ? "已完成" : "待处理"} · {step.note}
-            </p>
+              {index + 1}
+            </span>
+            <p className="min-w-0 font-medium">{step.label}</p>
+            <div className="min-w-0">
+              <p
+                className={`flex items-center gap-1 text-sm leading-5 ${
+                  step.done ? "text-emerald-700 dark:text-emerald-400" : "text-amber-700"
+                }`}
+              >
+                <span>
+                  {step.done ? "已完成" : index === 4 && hasFreshWorkingDraft ? "待确认" : "待处理"}
+                  {" · "}
+                  {step.note}
+                </span>
+                {step.href && (
+                  <ArrowRightIcon
+                    className="size-3.5 shrink-0 transition-transform group-hover/step:translate-x-0.5"
+                    aria-hidden="true"
+                  />
+                )}
+              </p>
+            </div>
+          </>
+        )
+        const className = "relative grid min-w-0 grid-cols-[2rem_minmax(0,1fr)] gap-x-3 gap-y-1"
+
+        return step.href ? (
+          <Link
+            key={step.label}
+            to={step.href}
+            className={`${className} group/step -m-3 cursor-pointer rounded-xl p-3 outline-none transition-colors hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/30`}
+            aria-label={`${step.label}：${step.note}`}
+          >
+            {content}
+          </Link>
+        ) : (
+          <div key={step.label} className={className}>
+            {content}
           </div>
-        </div>
-      ))}
+        )
+      })}
     </section>
   )
 }

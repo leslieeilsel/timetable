@@ -32,6 +32,7 @@ import {
   pendingItemsForResource,
 } from "@/lib/timetable-state"
 import { mergeSearchParams, useHashPreservingSearchParams } from "@/lib/url-state"
+import { cn } from "@/lib/utils"
 import type {
   ClassSetting,
   ScheduleDay,
@@ -62,7 +63,6 @@ import {
 } from "@/components/timetable-grid"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
   DialogContent,
@@ -72,6 +72,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Switch } from "@/components/ui/switch"
 import { TablePagination } from "@/components/table-pagination"
 import {
   DropdownMenu,
@@ -614,150 +615,189 @@ export function TimetablePage() {
             </span>
           </div>
         )}
-        <div className="mb-5 flex flex-col gap-3 border-b pb-5 2xl:flex-row 2xl:items-center 2xl:justify-between">
-          <div className="flex flex-wrap items-center gap-3">
-            <Tabs value={view} onValueChange={(value) => setView(value as View)}>
-              <TabsList>
-                <TabsTrigger value="class">班级</TabsTrigger>
-                <TabsTrigger value="teacher">教师</TabsTrigger>
-                <TabsTrigger value="room">教室</TabsTrigger>
-              </TabsList>
-            </Tabs>
-            <SimpleSelect
-              className="min-w-52"
-              value={selectedVersionId}
-              label="选择课表版本"
-              surface="filter"
-              onValueChange={selectVersion}
-            >
-              {user?.role === "viewer" && !selectedVersionId && (
-                <option value="">暂无已发布的当前课表</option>
-              )}
-              {user?.role !== "viewer" && selectableVersions.length === 0 && (
-                <option value="">尚未创建课表版本</option>
-              )}
-              {selectableVersions.map((version) => (
-                <option key={version.id} value={version.id}>
-                  v{version.version_no} · {version.name} · {versionStatusName(version.status)}
-                  {isTimetableVersionStale(current, version) ? " · 数据已变化" : ""}
-                </option>
-              ))}
-            </SimpleSelect>
-            {canMutate && (!selectedVersion || selectedVersion.status !== "draft") && (
-              <Button variant="outline" onClick={() => void createDraft()}>
-                <FilePlus2Icon />
-                创建调整草稿
-              </Button>
-            )}
-            <Button
-              variant="outline"
-              disabled={!selectedVersion || selectableVersions.length < 2}
-              onClick={() => setCompareOpen(true)}
-            >
-              <ArrowRightLeftIcon />
-              比较版本
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label="上一个资源"
-              disabled={resourceIndex <= 0}
-              onClick={() => moveResource(-1)}
-            >
-              <ChevronLeftIcon />
-            </Button>
-            {view === "class" ? (
-              <ClassPicker
-                className="min-w-64"
-                classes={(settings.data?.data ?? []).map((item) => item.school_class)}
-                value={resourceId}
-                onValueChange={setResourceId}
-              />
-            ) : view === "teacher" ? (
-              <TeacherPicker
-                className="min-w-64"
-                teachers={teachersWithAssignmentCourses(assignments.data?.data ?? [])}
-                value={resourceId}
-                onValueChange={setResourceId}
-              />
-            ) : (
-              <RoomPicker
-                className="min-w-64"
-                rooms={rooms.data?.data ?? []}
-                value={resourceId}
-                onValueChange={setResourceId}
-              />
-            )}
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label="下一个资源"
-              disabled={resourceIndex < 0 || resourceIndex >= resources.length - 1}
-              onClick={() => moveResource(1)}
-            >
-              <ChevronRightIcon />
-            </Button>
-            <label className="flex items-center gap-2 text-sm">
-              <Checkbox checked={full} onCheckedChange={(checked) => setFull(Boolean(checked))} />
-              完整作息
-            </label>
-          </div>
-          <div className="flex flex-wrap items-center gap-3 text-sm">
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button variant="outline" disabled={!resourceId || !versionSelectionReady} />
-                }
+        <section
+          aria-label="课表查看与操作"
+          className="mb-5 overflow-hidden rounded-2xl border bg-background"
+        >
+          <div className="flex flex-col gap-3 p-3 lg:p-4 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <Tabs value={view} onValueChange={(value) => setView(value as View)}>
+                <TabsList>
+                  <TabsTrigger value="class">班级</TabsTrigger>
+                  <TabsTrigger value="teacher">教师</TabsTrigger>
+                  <TabsTrigger value="room">教室</TabsTrigger>
+                </TabsList>
+              </Tabs>
+              <span className="hidden h-5 w-px bg-border sm:block" aria-hidden="true" />
+              <SimpleSelect
+                className="min-w-52 max-w-[min(36rem,calc(100vw-2rem))]"
+                contentClassName="w-max min-w-(--anchor-width) max-w-[calc(100vw-2rem)]"
+                value={selectedVersionId}
+                label="选择课表版本"
+                surface="filter"
+                onValueChange={selectVersion}
               >
-                <DownloadIcon />
-                导出
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => window.location.assign(csvExportUrl)}>
-                  CSV（通用数据）
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => window.location.assign(xlsxExportUrl)}>
-                  Excel XLSX（保留格式）
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <Button
-              variant="outline"
-              disabled={!resourceId || !versionSelectionReady}
-              onClick={() => window.print()}
+                {user?.role === "viewer" && !selectedVersionId && (
+                  <option value="">暂无已发布的当前课表</option>
+                )}
+                {user?.role !== "viewer" && selectableVersions.length === 0 && (
+                  <option value="">尚未创建课表版本</option>
+                )}
+                {selectableVersions.map((version) => (
+                  <option key={version.id} value={version.id}>
+                    v{version.version_no} · {version.name} · {versionStatusName(version.status)}
+                    {isTimetableVersionStale(current, version) ? " · 数据已变化" : ""}
+                  </option>
+                ))}
+              </SimpleSelect>
+              {selectedVersion && selectedVersion.status !== "draft" && (
+                <Badge variant="outline">只读版本</Badge>
+              )}
+            </div>
+            <div
+              className="flex flex-wrap items-center gap-2 xl:justify-end"
+              role="group"
+              aria-label="版本操作"
             >
-              <PrinterIcon />
-              打印 / PDF
-            </Button>
-            <span className="h-4 w-px bg-border" aria-hidden="true" />
-            <span className="font-medium text-emerald-700 dark:text-emerald-400">
-              已排 {scheduled}/{required}
-            </span>
-            <span className="h-4 w-px bg-border" aria-hidden="true" />
-            <span className="text-muted-foreground">未排 {remaining}</span>
-            <span className="h-4 w-px bg-border" aria-hidden="true" />
-            <span
-              className={
-                hardConflictCount > 0
-                  ? "font-medium text-destructive"
-                  : "font-medium text-emerald-700 dark:text-emerald-400"
-              }
-            >
-              冲突 {hardConflictCount}
-            </span>
-            {softWarningCount > 0 && (
-              <>
-                <span className="h-4 w-px bg-border" aria-hidden="true" />
-                <span className="font-medium text-amber-700 dark:text-amber-300">
-                  提醒 {softWarningCount}
-                </span>
-              </>
-            )}
-            {selectedVersion && selectedVersion.status !== "draft" && (
-              <Badge variant="outline">只读版本</Badge>
-            )}
+              {canMutate && (!selectedVersion || selectedVersion.status !== "draft") && (
+                <Button onClick={() => void createDraft()}>
+                  <FilePlus2Icon />
+                  创建调整草稿
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                disabled={!selectedVersion || selectableVersions.length < 2}
+                onClick={() => setCompareOpen(true)}
+              >
+                <ArrowRightLeftIcon />
+                比较版本
+              </Button>
+            </div>
           </div>
-        </div>
+
+          <div className="flex flex-col gap-3 border-t bg-muted/30 p-3 lg:p-4 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <div
+                className="flex min-w-0 items-center gap-1"
+                role="group"
+                aria-label={`切换${view === "class" ? "班级" : view === "teacher" ? "教师" : "教室"}`}
+              >
+                <Button
+                  variant="outline"
+                  size="icon"
+                  aria-label="上一个资源"
+                  disabled={resourceIndex <= 0}
+                  onClick={() => moveResource(-1)}
+                >
+                  <ChevronLeftIcon />
+                </Button>
+                {view === "class" ? (
+                  <ClassPicker
+                    className="min-w-0 flex-1 sm:min-w-64 sm:flex-none"
+                    classes={(settings.data?.data ?? []).map((item) => item.school_class)}
+                    value={resourceId}
+                    onValueChange={setResourceId}
+                  />
+                ) : view === "teacher" ? (
+                  <TeacherPicker
+                    className="min-w-0 flex-1 sm:min-w-64 sm:flex-none"
+                    teachers={teachersWithAssignmentCourses(assignments.data?.data ?? [])}
+                    value={resourceId}
+                    onValueChange={setResourceId}
+                  />
+                ) : (
+                  <RoomPicker
+                    className="min-w-0 flex-1 sm:min-w-64 sm:flex-none"
+                    rooms={rooms.data?.data ?? []}
+                    value={resourceId}
+                    onValueChange={setResourceId}
+                  />
+                )}
+                <Button
+                  variant="outline"
+                  size="icon"
+                  aria-label="下一个资源"
+                  disabled={resourceIndex < 0 || resourceIndex >= resources.length - 1}
+                  onClick={() => moveResource(1)}
+                >
+                  <ChevronRightIcon />
+                </Button>
+              </div>
+              <label className="flex h-8 cursor-pointer items-center gap-2 rounded-xl px-2 text-sm transition-colors hover:bg-muted/50">
+                <Switch checked={full} onCheckedChange={(checked) => setFull(Boolean(checked))} />
+                完整作息
+              </label>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+              <dl className="flex min-h-8 items-center divide-x divide-border rounded-xl border bg-background px-1 text-xs whitespace-nowrap">
+                <div className="flex items-baseline gap-1 px-2">
+                  <dt className="text-muted-foreground">已排</dt>
+                  <dd className="font-semibold text-emerald-700 tabular-nums dark:text-emerald-400">
+                    {scheduled}/{required}
+                  </dd>
+                </div>
+                <div className="flex items-baseline gap-1 px-2">
+                  <dt className="text-muted-foreground">未排</dt>
+                  <dd className="font-semibold tabular-nums">{remaining}</dd>
+                </div>
+                <div className="flex items-baseline gap-1 px-2">
+                  <dt className="text-muted-foreground">冲突</dt>
+                  <dd
+                    className={cn(
+                      "font-semibold tabular-nums",
+                      hardConflictCount > 0
+                        ? "text-destructive"
+                        : "text-emerald-700 dark:text-emerald-400",
+                    )}
+                  >
+                    {hardConflictCount}
+                  </dd>
+                </div>
+                <div className="flex items-baseline gap-1 px-2">
+                  <dt className="text-muted-foreground">提醒</dt>
+                  <dd
+                    className={cn(
+                      "font-semibold tabular-nums",
+                      softWarningCount > 0
+                        ? "text-amber-700 dark:text-amber-300"
+                        : "text-muted-foreground",
+                    )}
+                  >
+                    {softWarningCount}
+                  </dd>
+                </div>
+              </dl>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button variant="outline" disabled={!resourceId || !versionSelectionReady} />
+                  }
+                >
+                  <DownloadIcon />
+                  导出
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => window.location.assign(csvExportUrl)}>
+                    CSV（通用数据）
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => window.location.assign(xlsxExportUrl)}>
+                    Excel XLSX（保留格式）
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button
+                variant="outline"
+                disabled={!resourceId || !versionSelectionReady}
+                onClick={() => window.print()}
+              >
+                <PrinterIcon />
+                打印 / PDF
+              </Button>
+            </div>
+          </div>
+        </section>
         {canEdit && (
           <div className="mb-3 flex min-h-11 flex-wrap items-center gap-2 border-b pb-3">
             <Button
@@ -1045,7 +1085,7 @@ function VersionComparisonDialog({
               </SimpleSelect>
             </Field>
             <Field label="目标版本">
-              <div className="flex h-10 items-center rounded-lg border bg-muted/30 px-3 text-sm">
+              <div className="flex h-10 items-center rounded-lg border bg-muted px-3 text-sm">
                 {selectedVersion
                   ? `v${selectedVersion.version_no} · ${selectedVersion.name}`
                   : "未选择版本"}
@@ -1069,7 +1109,7 @@ function VersionComparisonDialog({
                   />
                   <ComparisonMetric label="保持不变" value={data.summary.unchanged} />
                 </div>
-                <div className="flex flex-wrap items-center gap-2 bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
+                <div className="flex flex-wrap items-center gap-2 bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
                   <span>教师变化 {data.summary.teacher_changed}</span>
                   <span>·</span>
                   <span>教室变化 {data.summary.room_changed}</span>
@@ -1451,7 +1491,7 @@ function SlotDialog({
         </DialogHeader>
         <div className="grid min-h-0 flex-1 gap-6 overflow-y-auto p-6">
           {entry ? (
-            <div className="rounded-2xl bg-muted/50 p-4">
+            <div className="rounded-2xl bg-muted/30 p-4">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="font-medium">
                   {entryTargetName(entry)} · {entry.course.name}
@@ -1735,7 +1775,7 @@ function SwapDiagnosisPanel({
 }) {
   if (loading)
     return (
-      <div className="flex items-center gap-2 rounded-xl bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+      <div className="flex items-center gap-2 rounded-xl bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
         <LoaderCircleIcon className="size-4 animate-spin" />
         正在同时检查两节课程交换后的安排…
       </div>

@@ -377,7 +377,7 @@ export function ResourcePicker({
                     <XIcon />
                   </Button>
                 )}
-                <span className="hidden rounded-md border bg-muted/50 px-2 py-1 text-xs text-muted-foreground sm:inline-flex">
+                <span className="hidden rounded-md border bg-muted px-2 py-1 text-xs text-muted-foreground sm:inline-flex">
                   {pinyinLoading ? "正在准备拼音搜索…" : "Enter 搜索"}
                 </span>
               </div>
@@ -507,7 +507,7 @@ export function ResourcePicker({
                         data-state={checked ? "selected" : undefined}
                         className={cn(
                           "cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-                          highlighted && "bg-muted/55",
+                          highlighted && "bg-muted/50",
                           checked && "bg-primary/[0.06] shadow-[inset_3px_0_0_0_var(--primary)]",
                           item.disabled && "cursor-not-allowed text-muted-foreground",
                         )}

@@ -1,23 +1,22 @@
 import { useEffect, useState } from "react"
 import { Link, useLocation } from "react-router"
 import {
-  BookOpenCheckIcon,
   BookOpenTextIcon,
   CalendarCheck2Icon,
   CalendarCogIcon,
-  CalendarDaysIcon,
   ChevronDownIcon,
   ChevronsUpDownIcon,
-  ClipboardListIcon,
   DatabaseIcon,
-  GalleryVerticalEndIcon,
   LayoutDashboardIcon,
-  MapPinIcon,
   PanelLeftIcon,
   SettingsIcon,
-  UserRoundIcon,
   UsersIcon,
 } from "lucide-react"
+import {
+  dailyNavigationItems,
+  resourceNavigationItems,
+  schedulingNavigationItems,
+} from "@/components/app-navigation"
 import { useAuth } from "@/lib/auth"
 import { SYSTEM_NAME, SYSTEM_TAGLINE } from "@/lib/brand"
 import type { Role } from "@/lib/types"
@@ -26,7 +25,6 @@ import {
   isSchedulingSemesterPath,
   semesterPathOrCurrent,
   useResolvedSemesterId,
-  type SemesterDestination,
 } from "@/lib/semester"
 import { WorkspaceUserMenu } from "@/components/workspace-user-menu"
 import { LogoMark } from "@/components/brand"
@@ -60,31 +58,6 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 
 const primary = [{ title: "工作台", to: "/", icon: LayoutDashboardIcon }]
-const resourceItems = [
-  { title: "教师", to: "/resources/teachers", icon: UserRoundIcon },
-  { title: "课程", to: "/resources/courses", icon: BookOpenTextIcon },
-  { title: "教室", to: "/resources/rooms", icon: MapPinIcon },
-  { title: "年级与班级", to: "/years", icon: CalendarDaysIcon },
-]
-const schedulingItems = [
-  { title: "① 准备检查", destination: "preparation", icon: BookOpenCheckIcon },
-  { title: "② 课程与任课矩阵", destination: "assignments", icon: ClipboardListIcon },
-  { title: "③ 规则与约束", destination: "constraints", icon: SettingsIcon },
-  { title: "④ 方案生成", destination: "generate", icon: GalleryVerticalEndIcon },
-  { title: "⑤ 课表调整与诊断", destination: "timetable", icon: BookOpenTextIcon },
-] satisfies Array<{
-  title: string
-  destination: SemesterDestination
-  icon: typeof BookOpenCheckIcon
-}>
-const dailyItems = [
-  { title: "临时调课", destination: "adjustments", icon: CalendarDaysIcon },
-  { title: "请假与代课", destination: "leaves", icon: CalendarCheck2Icon },
-] satisfies Array<{
-  title: string
-  destination: SemesterDestination
-  icon: typeof CalendarDaysIcon
-}>
 
 const roleLabels: Record<Role, string> = {
   admin: "系统管理员",
@@ -100,11 +73,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const resourcesActive = pathname.startsWith("/resources") || pathname.startsWith("/years")
   const schedulingActive = isSchedulingSemesterPath(pathname)
   const dailyActive = isDailySemesterPath(pathname)
-  const schedulingMenuItems = schedulingItems.map((item) => ({
+  const schedulingMenuItems = schedulingNavigationItems.map((item) => ({
     ...item,
     to: semesterPathOrCurrent(semesterId, item.destination),
   }))
-  const dailyMenuItems = dailyItems.map((item) => ({
+  const dailyMenuItems = dailyNavigationItems.map((item) => ({
     ...item,
     to: semesterPathOrCurrent(semesterId, item.destination),
   }))
@@ -168,7 +141,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </CollapsibleTrigger>
       <CollapsibleContent>
         <SidebarMenuSub>
-          {resourceItems.map((item) => (
+          {resourceNavigationItems.map((item) => (
             <SidebarMenuSubItem key={item.to}>
               <SidebarMenuSubButton
                 isActive={pathname === item.to}
@@ -376,7 +349,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               <CollapsedModuleMenu
                 title="基础资料"
                 icon={DatabaseIcon}
-                items={resourceItems}
+                items={resourceNavigationItems}
                 isActive={resourcesActive}
               />
             </>,

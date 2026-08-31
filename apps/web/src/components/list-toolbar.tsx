@@ -92,7 +92,7 @@ export function ListToolbar({
             title="按 Enter 搜索"
             className="pl-9 pr-11"
           />
-          <kbd className="pointer-events-none absolute top-1/2 right-2.5 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded-lg border bg-muted/60 text-muted-foreground">
+          <kbd className="pointer-events-none absolute top-1/2 right-2.5 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded-lg border bg-muted text-muted-foreground">
             <CornerDownLeftIcon className="size-3.5" aria-hidden="true" />
           </kbd>
         </label>

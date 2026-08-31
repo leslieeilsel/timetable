@@ -93,7 +93,7 @@ export function DatePicker({
             aria-invalid={invalid || undefined}
             className={cn(
               "justify-start border-input bg-background text-left font-normal data-[empty=true]:text-muted-foreground dark:bg-background",
-              surface === "filter" && "border-transparent bg-input/50 dark:bg-input/50",
+              surface === "filter" && "border-transparent bg-muted",
               className,
             )}
           />
@@ -187,7 +187,7 @@ export function DateTimePicker({
             aria-invalid={invalid || undefined}
             className={cn(
               "justify-start border-input bg-background text-left font-normal data-[empty=true]:text-muted-foreground dark:bg-background",
-              surface === "filter" && "border-transparent bg-input/50 dark:bg-input/50",
+              surface === "filter" && "border-transparent bg-muted",
               className,
             )}
           />

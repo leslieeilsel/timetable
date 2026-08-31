@@ -34,7 +34,7 @@ export function SchedulingWorkflow() {
     <nav
       aria-label="排课流程"
       aria-busy={preparation.isLoading || undefined}
-      className="overflow-x-auto border-b bg-muted/20 px-4 md:px-7"
+      className="overflow-x-auto border-b bg-muted/30 px-4 md:px-7"
     >
       <ol className="flex min-w-max items-center py-2.5">
         {steps.map((step, index) => {

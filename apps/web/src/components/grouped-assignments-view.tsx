@@ -300,7 +300,7 @@ export function GroupedAssignmentsTable({
                     <th
                       scope="rowgroup"
                       rowSpan={group.entries.length}
-                      className="w-56 border-r border-b bg-muted/[0.18] p-4 text-left align-top font-normal whitespace-normal"
+                      className="w-56 border-r border-b bg-muted/30 p-4 text-left align-top font-normal whitespace-normal"
                     >
                       <p className="font-semibold text-foreground [overflow-wrap:anywhere]">
                         {group.name}

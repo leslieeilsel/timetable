@@ -1179,7 +1179,7 @@ function CsvImportDialog({
               accept=".csv,text/csv"
               onChange={(event) => setFile(event.target.files?.[0] ?? null)}
             />
-            <div className="rounded-2xl bg-muted/50 p-3 font-mono text-xs">
+            <div className="rounded-2xl bg-muted/30 p-3 font-mono text-xs">
               grade_name,class_name,class_code
               <br />
               一年级,一年级 1 班,G1C1
@@ -1187,7 +1187,7 @@ function CsvImportDialog({
           </div>
         ) : (
           <div className="overflow-hidden rounded-2xl border">
-            <div className="flex flex-wrap items-center gap-2 border-b bg-muted/20 px-4 py-2 text-sm">
+            <div className="flex flex-wrap items-center gap-2 border-b bg-muted/30 px-4 py-2 text-sm">
               <span>共 {summary.total} 行</span>
               <span className="text-emerald-700">{summary.valid} 行可导入</span>
               {summary.invalid > 0 && (

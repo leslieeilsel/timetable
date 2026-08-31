@@ -48,7 +48,7 @@ function SelectTrigger({
       data-size={size}
       className={cn(
         "flex w-fit touch-manipulation items-center justify-between gap-1.5 rounded-2xl border px-3 py-2 text-sm whitespace-nowrap transition-[color,box-shadow] duration-200 outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 data-placeholder:text-muted-foreground data-[size=default]:h-8 data-[size=sm]:h-7 max-md:min-h-12 *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-1.5 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
-        surface === "filter" ? "border-transparent bg-input/50" : "border-input bg-background",
+        surface === "filter" ? "border-transparent bg-muted" : "border-input bg-background",
         className,
       )}
       {...props}

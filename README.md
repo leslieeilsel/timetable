@@ -1,6 +1,6 @@
-# 单校区教务排课系统
+# 教务排课系统
 
-面向小学与初中的单校区排课工作台。前端采用 React 19、Vite+、shadcn 与 Base UI；后端采用 Laravel 13、Sanctum 与强 ETag 并发控制；生产数据库基线为 MySQL 8.4 LTS。
+面向小学与初中的教务排课工作台。前端采用 React 19、Vite+、shadcn 与 Base UI；后端采用 Laravel 13、Sanctum 与强 ETag 并发控制；生产数据库基线为 MySQL 8.4 LTS。
 
 ## 功能范围
 

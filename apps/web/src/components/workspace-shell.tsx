@@ -1,8 +1,13 @@
 import { useEffect, type ReactNode } from "react"
 import { Link, Outlet, useLocation } from "react-router"
-import { ChevronDownIcon, MoonIcon, SunIcon } from "lucide-react"
+import { ChevronDownIcon, MoonIcon, SunIcon, type LucideIcon } from "lucide-react"
 import { useTheme } from "next-themes"
 import { AppSidebar } from "@/components/app-sidebar"
+import {
+  dailyNavigationItems,
+  resourceNavigationItems,
+  schedulingNavigationItems,
+} from "@/components/app-navigation"
 import { WorkspaceUserMenu } from "@/components/workspace-user-menu"
 import { useAuth } from "@/lib/auth"
 import { cn } from "@/lib/utils"
@@ -23,6 +28,12 @@ import {
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { TooltipProvider } from "@/components/ui/tooltip"
 
 const labels: Record<string, string> = {
@@ -59,8 +70,16 @@ export function WorkspaceShell({ children }: { children?: ReactNode }) {
   const isResourcePage = pathname.startsWith("/resources/")
   const isSemesterPage = isSchedulingSemesterPath(pathname)
   const isDailyPage = isDailySemesterPath(pathname)
-  const schedulingRoot = semesterPathOrCurrent(semesterId, "preparation")
-  const dailyRoot = semesterPathOrCurrent(semesterId, "adjustments")
+  const schedulingMenuItems = schedulingNavigationItems
+    .filter((item) => user?.role !== "viewer" || item.destination === "timetable")
+    .map((item) => ({
+      ...item,
+      to: semesterPathOrCurrent(semesterId, item.destination),
+    }))
+  const dailyMenuItems = dailyNavigationItems.map((item) => ({
+    ...item,
+    to: semesterPathOrCurrent(semesterId, item.destination),
+  }))
   const isYearDetail = parts[0] === "years" && parts.length > 1
   const now = new Date()
   const today = new Intl.DateTimeFormat("zh-CN", {
@@ -97,9 +116,11 @@ export function WorkspaceShell({ children }: { children?: ReactNode }) {
                 {isResourcePage && (
                   <>
                     <BreadcrumbItem>
-                      <BreadcrumbLink render={<Link to="/resources/grades" />}>
-                        基础资料
-                      </BreadcrumbLink>
+                      <BreadcrumbMenu
+                        label="基础资料"
+                        items={resourceNavigationItems}
+                        pathname={pathname}
+                      />
                     </BreadcrumbItem>
                     <BreadcrumbSeparator />
                   </>
@@ -107,9 +128,11 @@ export function WorkspaceShell({ children }: { children?: ReactNode }) {
                 {isSemesterPage && (
                   <>
                     <BreadcrumbItem>
-                      <BreadcrumbLink render={<Link to={schedulingRoot} />}>
-                        排课中心
-                      </BreadcrumbLink>
+                      <BreadcrumbMenu
+                        label="排课中心"
+                        items={schedulingMenuItems}
+                        pathname={pathname}
+                      />
                     </BreadcrumbItem>
                     <BreadcrumbSeparator />
                   </>
@@ -117,7 +140,7 @@ export function WorkspaceShell({ children }: { children?: ReactNode }) {
                 {isDailyPage && (
                   <>
                     <BreadcrumbItem>
-                      <BreadcrumbLink render={<Link to={dailyRoot} />}>日常运行</BreadcrumbLink>
+                      <BreadcrumbMenu label="日常运行" items={dailyMenuItems} pathname={pathname} />
                     </BreadcrumbItem>
                     <BreadcrumbSeparator />
                   </>
@@ -164,6 +187,59 @@ export function WorkspaceShell({ children }: { children?: ReactNode }) {
         </SidebarInset>
       </SidebarProvider>
     </TooltipProvider>
+  )
+}
+
+function BreadcrumbMenu({
+  label,
+  items,
+  pathname,
+}: {
+  label: string
+  items: Array<{ title: string; to: string; icon: LucideIcon }>
+  pathname: string
+}) {
+  if (items.length <= 1) {
+    return <BreadcrumbLink render={<Link to={items[0]?.to ?? "/"} />}>{label}</BreadcrumbLink>
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <button
+            type="button"
+            className="inline-flex shrink-0 cursor-pointer items-center whitespace-nowrap text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:rounded-md focus-visible:ring-3 focus-visible:ring-ring/30 data-popup-open:text-foreground max-md:min-h-12"
+            aria-label={`切换${label}页面`}
+          />
+        }
+      >
+        {label}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="start"
+        sideOffset={6}
+        className="w-56 rounded-2xl p-1 shadow-xl ring-foreground/10"
+      >
+        {items.map((item) => {
+          const active = pathname === item.to
+          return (
+            <DropdownMenuItem
+              key={item.to}
+              className={cn(
+                "h-8 cursor-pointer px-2.5",
+                active &&
+                  "bg-accent font-medium text-accent-foreground [&_svg]:text-accent-foreground",
+              )}
+              render={<Link to={item.to} aria-current={active ? "page" : undefined} />}
+            >
+              <item.icon className="text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate">{item.title}</span>
+            </DropdownMenuItem>
+          )
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 

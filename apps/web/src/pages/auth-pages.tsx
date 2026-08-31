@@ -1,18 +1,24 @@
 import { useState, type FormEvent } from "react"
 import { Navigate, useNavigate } from "react-router"
-import { EyeIcon, EyeOffIcon, LoaderCircleIcon } from "lucide-react"
+import { LoaderCircleIcon } from "lucide-react"
 import { useAuth } from "@/lib/auth"
 import { apiMessage } from "@/lib/api"
 import { SYSTEM_NAME } from "@/lib/brand"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Field } from "@/components/page"
 import { LogoMark } from "@/components/brand"
+
+const fieldLabelClassName = "mb-2 block text-[13px] font-medium tracking-[0.01em] text-foreground"
+
+const authInputClassName =
+  "h-12 rounded-md border-input bg-background px-4 py-0 text-[15px] text-foreground shadow-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-0 focus-visible:shadow-[0_0_0_2px_var(--background),0_0_0_4px_var(--ring)] md:text-[15px]"
+
+const authButtonClassName =
+  "h-12 w-full rounded-md bg-primary text-[15px] font-medium text-primary-foreground shadow-none hover:bg-primary/85 focus-visible:ring-0 focus-visible:shadow-[0_0_0_2px_var(--background),0_0_0_4px_var(--ring)] active:translate-y-0"
 
 export function LoginPage() {
   const { user, login } = useAuth()
   const navigate = useNavigate()
-  const [showPassword, setShowPassword] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({})
   const [submitError, setSubmitError] = useState<string>()
@@ -27,7 +33,7 @@ export function LoginPage() {
     const email = typeof emailValue === "string" ? emailValue.trim() : ""
     const password = typeof passwordValue === "string" ? passwordValue : ""
     const nextErrors = {
-      email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? undefined : "请输入有效邮箱",
+      email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? undefined : "请输入有效的邮箱账号",
       password: password ? undefined : "请输入密码",
     }
 
@@ -47,79 +53,87 @@ export function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-svh items-center justify-center bg-background px-6 py-12 selection:bg-primary selection:text-primary-foreground sm:px-10">
-      <form onSubmit={submit} noValidate className="w-full max-w-[26rem]">
-        <div className="mb-14 flex items-center gap-3">
-          <LogoMark className="size-10" />
-          <p className="text-base font-semibold tracking-tight">{SYSTEM_NAME}</p>
+    <div className="flex min-h-svh flex-col overflow-x-hidden bg-background selection:bg-primary selection:text-primary-foreground">
+      <header className="shrink-0">
+        <div className="flex h-20 w-full items-center px-6 sm:px-8">
+          <div className="flex items-center gap-2">
+            <span className="flex size-11 shrink-0 items-center justify-center">
+              <LogoMark className="size-8" aria-hidden="true" />
+            </span>
+            <span className="text-base font-semibold tracking-tight">{SYSTEM_NAME}</span>
+          </div>
         </div>
+      </header>
 
-        <div className="mb-10">
-          <h1 className="text-[2.5rem] leading-[1.1] font-semibold tracking-[-0.04em] text-balance">
-            登录工作台
+      <main className="flex flex-1 items-center justify-center px-6 sm:px-8">
+        <form
+          onSubmit={submit}
+          noValidate
+          className="relative w-full max-w-[400px] sm:-translate-y-8 md:-translate-y-10"
+        >
+          <h1 className="text-[42px] font-semibold tracking-[-0.05em] text-foreground sm:text-[48px]">
+            登录
           </h1>
-          <p className="mt-3 max-w-sm text-base leading-7 text-muted-foreground">
-            使用学校分配的账号登录。首次登录需修改临时密码。
-          </p>
-        </div>
+          <p className="mt-2 text-[15px] text-muted-foreground">欢迎回来 👋</p>
 
-        <div className="grid gap-6">
-          <Field label="邮箱" error={errors.email} errorId="login-email-error">
-            <Input
-              name="email"
-              type="email"
-              autoComplete="username"
-              placeholder="name@school.edu"
-              autoFocus
-              className="h-14 rounded-xl px-4 text-base caret-foreground md:text-base"
-              aria-invalid={Boolean(errors.email) || undefined}
-              aria-describedby={errors.email ? "login-email-error" : undefined}
-            />
-          </Field>
-          <Field label="密码" error={errors.password} errorId="login-password-error">
-            <div className="relative">
+          <div className="mt-10 space-y-6">
+            <div>
+              <label htmlFor="login-account" className={fieldLabelClassName}>
+                账号
+              </label>
               <Input
+                id="login-account"
+                name="email"
+                type="email"
+                autoComplete="username"
+                placeholder="请输入邮箱账号"
+                className={authInputClassName}
+                aria-invalid={Boolean(errors.email) || undefined}
+                aria-describedby={errors.email ? "login-email-error" : undefined}
+              />
+              {errors.email && (
+                <p id="login-email-error" role="alert" className="mt-2 text-xs text-destructive">
+                  {errors.email}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label htmlFor="login-password" className={fieldLabelClassName}>
+                密码
+              </label>
+              <Input
+                id="login-password"
                 name="password"
-                type={showPassword ? "text" : "password"}
+                type="password"
                 autoComplete="current-password"
-                placeholder="请输入密码"
-                className="h-14 rounded-xl px-4 pr-14 text-base caret-foreground md:text-base"
+                placeholder="请输入登录密码"
+                className={authInputClassName}
                 aria-invalid={Boolean(errors.password) || undefined}
                 aria-describedby={errors.password ? "login-password-error" : undefined}
               />
-              <button
-                type="button"
-                className="absolute top-1/2 right-1 flex size-12 -translate-y-1/2 touch-manipulation items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/30 focus-visible:outline-none"
-                aria-label={showPassword ? "隐藏密码" : "显示密码"}
-                aria-pressed={showPassword}
-                onClick={() => setShowPassword((value) => !value)}
-              >
-                {showPassword ? (
-                  <EyeOffIcon className="size-5" aria-hidden="true" />
-                ) : (
-                  <EyeIcon className="size-5" aria-hidden="true" />
-                )}
-              </button>
+              {errors.password && (
+                <p id="login-password-error" role="alert" className="mt-2 text-xs text-destructive">
+                  {errors.password}
+                </p>
+              )}
             </div>
-          </Field>
-          {submitError && (
-            <p
-              role="alert"
-              className="rounded-xl border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm leading-6 text-destructive"
-            >
-              {submitError}
-            </p>
-          )}
-          <Button
-            type="submit"
-            className="mt-2 h-14 w-full rounded-xl px-5 text-base font-semibold"
-            disabled={submitting}
-          >
-            {submitting && <LoaderCircleIcon className="size-5 animate-spin" aria-hidden="true" />}
-            {submitting ? "正在登录…" : "登录"}
-          </Button>
-        </div>
-      </form>
-    </main>
+
+            {submitError && (
+              <p role="alert" className="text-sm leading-6 text-destructive">
+                {submitError}
+              </p>
+            )}
+
+            <Button type="submit" className={authButtonClassName} disabled={submitting}>
+              {submitting && (
+                <LoaderCircleIcon className="size-4 animate-spin" aria-hidden="true" />
+              )}
+              {submitting ? "正在登录…" : "登录"}
+            </Button>
+          </div>
+        </form>
+      </main>
+    </div>
   )
 }

@@ -204,10 +204,6 @@
   --pulse-min: 0.5;
   --tabs-dur: 250ms;
   --tabs-ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --tabs-text-muted: rgba(15, 15, 15, 0.8);
-  --tabs-text-active: #0f0f0f;
-  --tabs-bar-bg: #f1f1f1;
-  --tabs-pill-bg: #ffffff;
 }
 
 /* Dropdowns and anchored popovers grow from their trigger. */

@@ -28,7 +28,7 @@ export function TimetableGrid({
     <div className="overflow-hidden rounded-xl border bg-background">
       <div
         aria-hidden="true"
-        className="flex items-center justify-between border-b bg-muted/25 px-3 py-2 text-xs font-medium text-muted-foreground md:hidden print:hidden"
+        className="flex items-center justify-between border-b bg-muted px-3 py-2 text-xs font-medium text-muted-foreground md:hidden print:hidden"
       >
         <span>左右滑动查看完整课表</span>
         <MoveHorizontalIcon className="size-4" />
@@ -41,10 +41,10 @@ export function TimetableGrid({
       >
         <table className="w-full min-w-[920px] border-collapse text-sm">
           <thead>
-            <tr className="bg-muted/50">
+            <tr className="bg-muted">
               <th
                 scope="col"
-                className="sticky left-0 z-10 w-32 border-r border-b bg-muted/80 p-3 text-center font-medium"
+                className="sticky left-0 z-10 w-32 border-r border-b bg-muted p-3 text-center font-medium"
               >
                 课节
               </th>
