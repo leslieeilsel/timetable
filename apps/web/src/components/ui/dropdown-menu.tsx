@@ -5,6 +5,12 @@ import { cn } from "@/lib/utils"
 import { ChevronRightIcon, CheckIcon } from "lucide-react"
 
 function dropdownOrigin(side: string, align: string) {
+  if (side === "right" || side === "left") {
+    const vertical = align === "end" ? "bottom" : align === "center" ? "center" : "top"
+    const horizontal = side === "right" ? "left" : "right"
+    return `${vertical}-${horizontal}`
+  }
+
   const vertical = side === "top" ? "bottom" : "top"
   const horizontal = align === "end" ? "right" : align === "center" ? "center" : "left"
   return `${vertical}-${horizontal}`

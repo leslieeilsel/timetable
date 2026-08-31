@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react"
+import { useState, type ReactElement } from "react"
 import { useNavigate } from "react-router"
-import { ChevronDownIcon, LogOutIcon } from "lucide-react"
+import { ChevronRightIcon, KeyRoundIcon, LogOutIcon } from "lucide-react"
 import { useAuth } from "@/lib/auth"
-import { Button } from "@/components/ui/button"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,44 +13,58 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
-export function WorkspaceUserMenu({ openOnMount = false }: { openOnMount?: boolean }) {
+export function WorkspaceUserMenu({
+  placement = "header",
+  trigger,
+}: {
+  placement?: "header" | "sidebar"
+  trigger: ReactElement
+}) {
   const navigate = useNavigate()
   const { user, logout } = useAuth()
   const [open, setOpen] = useState(false)
 
-  useEffect(() => {
-    if (!openOnMount) return
-    const frame = requestAnimationFrame(() => setOpen(true))
-    return () => cancelAnimationFrame(frame)
-  }, [openOnMount])
-
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
-      <DropdownMenuTrigger
-        render={
-          <Button
-            variant="ghost"
-            className="ml-1 gap-2 px-2.5 max-md:min-w-12"
-            aria-label={user?.name}
-          />
-        }
+      <DropdownMenuTrigger render={trigger} />
+      <DropdownMenuContent
+        align="end"
+        side={placement === "sidebar" ? "right" : "bottom"}
+        sideOffset={8}
+        className="w-[17rem] rounded-2xl p-1.5 shadow-xl ring-foreground/10"
       >
-        <span className="hidden sm:inline">{user?.name}</span>
-        <ChevronDownIcon className="size-3.5 text-muted-foreground" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-64">
         <DropdownMenuGroup>
-          <DropdownMenuLabel>
-            <span className="block">{user?.name}</span>
-            <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
-              {user?.email}
+          <DropdownMenuLabel className="flex items-center gap-3 px-2.5 py-2.5 font-normal">
+            <Avatar size="lg" className="size-9">
+              <AvatarFallback className="bg-foreground text-sm font-semibold text-background">
+                {userInitial(user?.name)}
+              </AvatarFallback>
+            </Avatar>
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-semibold text-foreground">
+                {user?.name}
+              </span>
+              <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                {user?.email}
+              </span>
             </span>
           </DropdownMenuLabel>
         </DropdownMenuGroup>
-        <DropdownMenuSeparator />
+        <DropdownMenuSeparator className="my-1.5" />
         <DropdownMenuGroup>
-          <DropdownMenuItem onClick={() => navigate("/change-password")}>修改密码</DropdownMenuItem>
-          <DropdownMenuItem onClick={() => void logout()}>
+          <DropdownMenuItem className="h-10 px-2.5" onClick={() => navigate("/change-password")}>
+            <KeyRoundIcon className="text-muted-foreground" />
+            <span>修改密码</span>
+            <ChevronRightIcon className="ml-auto size-3.5 text-muted-foreground" />
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator className="my-1.5" />
+        <DropdownMenuGroup>
+          <DropdownMenuItem
+            variant="destructive"
+            className="h-10 px-2.5"
+            onClick={() => void logout()}
+          >
             <LogOutIcon />
             退出登录
           </DropdownMenuItem>
@@ -58,4 +72,8 @@ export function WorkspaceUserMenu({ openOnMount = false }: { openOnMount?: boole
       </DropdownMenuContent>
     </DropdownMenu>
   )
+}
+
+function userInitial(name?: string) {
+  return Array.from(name?.trim() || "用")[0]
 }

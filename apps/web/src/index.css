@@ -208,10 +208,6 @@
   --tabs-text-active: #0f0f0f;
   --tabs-bar-bg: #f1f1f1;
   --tabs-pill-bg: #ffffff;
-  --acc-expand: 250ms;
-  --acc-collapse: 250ms;
-  --acc-chevron: 250ms;
-  --acc-ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* Dropdowns and anchored popovers grow from their trigger. */
@@ -223,7 +219,6 @@
   transition:
     transform var(--dropdown-open-dur) var(--dropdown-ease),
     opacity var(--dropdown-open-dur) var(--dropdown-ease);
-  will-change: transform, opacity;
 }
 .t-dropdown[data-origin="top-right"] {
   transform-origin: top right;
@@ -240,8 +235,14 @@
 .t-dropdown[data-origin="bottom-right"] {
   transform-origin: bottom right;
 }
+.t-dropdown[data-origin="center-left"] {
+  transform-origin: center left;
+}
+.t-dropdown[data-origin="center-right"] {
+  transform-origin: center right;
+}
 .t-dropdown.is-open {
-  transform: scale(1);
+  transform: none;
   opacity: 1;
   pointer-events: auto;
 }
@@ -257,6 +258,15 @@
   transform: scale(var(--dropdown-pre-scale));
   opacity: 0;
   pointer-events: none;
+}
+
+/* Sidebar hover menus must not leave a promoted layer under visual zoom. */
+.t-dropdown[data-sidebar-module-menu="true"],
+.t-dropdown[data-sidebar-module-menu="true"].is-open,
+.t-dropdown[data-sidebar-module-menu="true"].is-closing,
+.t-dropdown[data-sidebar-module-menu="true"].is-open[data-starting-style] {
+  transform: none;
+  transition: none;
 }
 
 /* Centered dialogs use a quieter open/close scale than anchored menus. */
@@ -399,47 +409,6 @@
   box-shadow: 0 1px 2px color-mix(in oklch, var(--foreground) 8%, transparent);
 }
 
-/* Sidebar disclosure panels expand without measuring content in application code. */
-.t-acc-panel {
-  display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows var(--acc-collapse) var(--acc-ease);
-}
-.t-acc[data-open="true"] .t-acc-panel,
-.t-acc[data-open] .t-acc-panel {
-  grid-template-rows: 1fr;
-  transition: grid-template-rows var(--acc-expand) var(--acc-ease);
-}
-.t-acc-panel-inner {
-  overflow: hidden;
-  opacity: 0;
-  filter: blur(2px);
-  transition:
-    opacity var(--acc-collapse) var(--acc-ease),
-    filter var(--acc-collapse) var(--acc-ease);
-}
-.t-acc[data-open="true"] .t-acc-panel-inner,
-.t-acc[data-open] .t-acc-panel-inner {
-  opacity: 1;
-  filter: blur(0);
-  transition:
-    opacity var(--acc-expand) var(--acc-ease),
-    filter var(--acc-expand) var(--acc-ease);
-}
-.t-acc-chevron {
-  display: inline-flex;
-  transform: scaleY(1);
-  transform-origin: center;
-  transition: transform var(--acc-chevron) var(--acc-ease);
-}
-.t-acc-chevron path {
-  vector-effect: non-scaling-stroke;
-}
-.t-acc[data-open="true"] .t-acc-chevron,
-.t-acc[data-open] .t-acc-chevron {
-  transform: scaleY(-1);
-}
-
 .preparation-progress-indicator {
   animation: preparation-progress 900ms linear infinite;
   will-change: transform;
@@ -457,10 +426,7 @@
   .t-dropdown,
   .t-modal,
   .t-tabs-pill,
-  .t-tab,
-  .t-acc-panel,
-  .t-acc-panel-inner,
-  .t-acc-chevron {
+  .t-tab {
     transition: none !important;
   }
 

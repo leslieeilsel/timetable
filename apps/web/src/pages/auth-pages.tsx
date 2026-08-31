@@ -1,12 +1,13 @@
 import { useState, type FormEvent } from "react"
 import { Navigate, useNavigate } from "react-router"
-import { EyeIcon, EyeOffIcon } from "lucide-react"
+import { EyeIcon, EyeOffIcon, LoaderCircleIcon } from "lucide-react"
 import { useAuth } from "@/lib/auth"
 import { apiMessage } from "@/lib/api"
+import { SYSTEM_NAME } from "@/lib/brand"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Field } from "@/components/page"
-import { Brand } from "@/components/brand"
+import { LogoMark } from "@/components/brand"
 
 export function LoginPage() {
   const { user, login } = useAuth()
@@ -46,99 +47,79 @@ export function LoginPage() {
   }
 
   return (
-    <div className="grid min-h-svh bg-background lg:grid-cols-[55.5%_44.5%]">
-      <aside
-        aria-label="系统介绍"
-        className="relative hidden overflow-hidden border-r bg-sidebar lg:block"
-      >
-        <div className="absolute top-[14.5%] left-[11%] z-10">
-          <Brand large />
+    <main className="flex min-h-svh items-center justify-center bg-background px-6 py-12 selection:bg-primary selection:text-primary-foreground sm:px-10">
+      <form onSubmit={submit} noValidate className="w-full max-w-[26rem]">
+        <div className="mb-14 flex items-center gap-3">
+          <LogoMark className="size-10" />
+          <p className="text-base font-semibold tracking-tight">{SYSTEM_NAME}</p>
         </div>
-        <div className="absolute top-[31.5%] left-[11%] z-10 max-w-xl">
-          <p className="text-[clamp(2.25rem,3vw,3.5rem)] leading-[1.32] font-semibold tracking-tight">
-            把复杂的排课准备，
-            <br />
-            变成清晰的工作流程。
-          </p>
-          <p className="mt-6 text-lg text-muted-foreground">
-            基础资料、学期配置、任课关系与课表统一管理。
+
+        <div className="mb-10">
+          <h1 className="text-[2.5rem] leading-[1.1] font-semibold tracking-[-0.04em] text-balance">
+            登录工作台
+          </h1>
+          <p className="mt-3 max-w-sm text-base leading-7 text-muted-foreground">
+            使用学校分配的账号登录。首次登录需修改临时密码。
           </p>
         </div>
-        <picture>
-          <source
-            type="image/webp"
-            srcSet="/assets/login-workflow-grid-640.webp 640w, /assets/login-workflow-grid.webp 800w"
-            sizes="55.5vw"
-          />
-          <img
-            src="/assets/login-workflow-grid.png"
-            width={800}
-            height={418}
-            fetchPriority="high"
-            decoding="async"
-            alt=""
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-x-0 bottom-[9%] w-full select-none"
-          />
-        </picture>
-        <p className="absolute bottom-[5%] left-[11%] z-10 text-sm text-muted-foreground">
-          校内系统 · 请使用已分配账号登录
-        </p>
-      </aside>
-      <main className="flex items-center justify-center px-6 py-12 lg:px-[10%]">
-        <form onSubmit={submit} noValidate className="w-full max-w-lg">
-          <div className="mb-8 lg:mb-14">
-            <div className="mb-10 lg:hidden">
-              <Brand />
-            </div>
-            <h1 className="text-3xl font-semibold tracking-tight">登录工作台</h1>
-            <p className="mt-3 text-base text-muted-foreground">首次登录需修改临时密码。</p>
-          </div>
-          <div className="grid gap-6 lg:gap-7">
-            <Field label="邮箱" error={errors.email}>
+
+        <div className="grid gap-6">
+          <Field label="邮箱" error={errors.email} errorId="login-email-error">
+            <Input
+              name="email"
+              type="email"
+              autoComplete="username"
+              placeholder="name@school.edu"
+              autoFocus
+              className="h-14 rounded-xl px-4 text-base caret-foreground md:text-base"
+              aria-invalid={Boolean(errors.email) || undefined}
+              aria-describedby={errors.email ? "login-email-error" : undefined}
+            />
+          </Field>
+          <Field label="密码" error={errors.password} errorId="login-password-error">
+            <div className="relative">
               <Input
-                name="email"
-                type="email"
-                autoComplete="username"
-                placeholder="name@school.edu"
-                aria-invalid={Boolean(errors.email)}
+                name="password"
+                type={showPassword ? "text" : "password"}
+                autoComplete="current-password"
+                placeholder="请输入密码"
+                className="h-14 rounded-xl px-4 pr-14 text-base caret-foreground md:text-base"
+                aria-invalid={Boolean(errors.password) || undefined}
+                aria-describedby={errors.password ? "login-password-error" : undefined}
               />
-            </Field>
-            <Field label="密码" error={errors.password}>
-              <div className="relative">
-                <Input
-                  name="password"
-                  type={showPassword ? "text" : "password"}
-                  autoComplete="current-password"
-                  placeholder="请输入密码"
-                  className="pr-10"
-                  aria-invalid={Boolean(errors.password)}
-                />
-                <button
-                  type="button"
-                  className="absolute top-1/2 right-1.5 flex size-12 -translate-y-1/2 items-center justify-center rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground md:right-3 md:size-8 md:rounded-md"
-                  aria-label={showPassword ? "隐藏密码" : "显示密码"}
-                  onClick={() => setShowPassword((value) => !value)}
-                >
-                  {showPassword ? (
-                    <EyeOffIcon className="size-4" />
-                  ) : (
-                    <EyeIcon className="size-4" />
-                  )}
-                </button>
-              </div>
-            </Field>
-            {submitError && (
-              <p role="alert" className="text-sm text-destructive">
-                {submitError}
-              </p>
-            )}
-            <Button type="submit" className="mt-2 w-full lg:mt-4" disabled={submitting}>
-              {submitting ? "正在登录…" : "登录"}
-            </Button>
-          </div>
-        </form>
-      </main>
-    </div>
+              <button
+                type="button"
+                className="absolute top-1/2 right-1 flex size-12 -translate-y-1/2 touch-manipulation items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/30 focus-visible:outline-none"
+                aria-label={showPassword ? "隐藏密码" : "显示密码"}
+                aria-pressed={showPassword}
+                onClick={() => setShowPassword((value) => !value)}
+              >
+                {showPassword ? (
+                  <EyeOffIcon className="size-5" aria-hidden="true" />
+                ) : (
+                  <EyeIcon className="size-5" aria-hidden="true" />
+                )}
+              </button>
+            </div>
+          </Field>
+          {submitError && (
+            <p
+              role="alert"
+              className="rounded-xl border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm leading-6 text-destructive"
+            >
+              {submitError}
+            </p>
+          )}
+          <Button
+            type="submit"
+            className="mt-2 h-14 w-full rounded-xl px-5 text-base font-semibold"
+            disabled={submitting}
+          >
+            {submitting && <LoaderCircleIcon className="size-5 animate-spin" aria-hidden="true" />}
+            {submitting ? "正在登录…" : "登录"}
+          </Button>
+        </div>
+      </form>
+    </main>
   )
 }

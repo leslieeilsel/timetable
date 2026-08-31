@@ -7,6 +7,7 @@ import {
   CalendarCogIcon,
   CalendarDaysIcon,
   ChevronDownIcon,
+  ChevronsUpDownIcon,
   ClipboardListIcon,
   DatabaseIcon,
   GalleryVerticalEndIcon,
@@ -19,6 +20,7 @@ import {
 } from "lucide-react"
 import { useAuth } from "@/lib/auth"
 import { SYSTEM_NAME, SYSTEM_TAGLINE } from "@/lib/brand"
+import type { Role } from "@/lib/types"
 import {
   isDailySemesterPath,
   isSchedulingSemesterPath,
@@ -26,11 +28,23 @@ import {
   useResolvedSemesterId,
   type SemesterDestination,
 } from "@/lib/semester"
+import { WorkspaceUserMenu } from "@/components/workspace-user-menu"
 import { LogoMark } from "@/components/brand"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupLabel,
   SidebarHeader,
@@ -71,6 +85,13 @@ const dailyItems = [
   destination: SemesterDestination
   icon: typeof CalendarDaysIcon
 }>
+
+const roleLabels: Record<Role, string> = {
+  admin: "系统管理员",
+  scheduler: "排课员",
+  viewer: "查看者",
+}
+
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { pathname } = useLocation()
   const { user } = useAuth()
@@ -103,38 +124,31 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     <SidebarGroup>
       <SidebarGroupLabel>{label}</SidebarGroupLabel>
       <SidebarMenu>
-        {items.map((item) => (
-          <SidebarMenuItem key={item.to}>
-            <SidebarMenuButton
-              tooltip={item.title}
-              isActive={item.to === "/" ? pathname === "/" : pathname.startsWith(item.to)}
-              render={<Link to={item.to} />}
-            >
-              <item.icon />
-              <span>{item.title}</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        ))}
+        {items.map((item) => {
+          const isActive = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to)
+          return (
+            <SidebarMenuItem key={item.to}>
+              <SidebarMenuButton
+                tooltip={item.title}
+                isActive={isActive}
+                render={
+                  <Link
+                    to={item.to}
+                    aria-current={isActive ? "page" : undefined}
+                    onClick={() => sidebar.setOpenMobile(false)}
+                  />
+                }
+              >
+                <item.icon />
+                <span>{item.title}</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          )
+        })}
         {tail}
       </SidebarMenu>
     </SidebarGroup>
   )
-  const collapsedMenu = (items: Array<{ title: string; to: string; icon: typeof DatabaseIcon }>) =>
-    items.map((item) => (
-      <SidebarMenuItem
-        key={`collapsed-${item.to}`}
-        className="hidden group-data-[collapsible=icon]:block"
-      >
-        <SidebarMenuButton
-          tooltip={item.title}
-          isActive={pathname === item.to}
-          render={<Link to={item.to} />}
-        >
-          <item.icon />
-          <span>{item.title}</span>
-        </SidebarMenuButton>
-      </SidebarMenuItem>
-    ))
   const resourcesMenu = (
     <Collapsible
       open={resourcesOpen}
@@ -150,7 +164,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       >
         <DatabaseIcon />
         <span>基础资料</span>
-        <ChevronDownIcon className="t-acc-chevron ml-auto group-data-[collapsible=icon]:hidden" />
+        <ChevronDownIcon className="ml-auto transition-transform duration-200 group-data-[open]/collapsible:rotate-180 group-data-[collapsible=icon]:hidden motion-reduce:transition-none" />
       </CollapsibleTrigger>
       <CollapsibleContent>
         <SidebarMenuSub>
@@ -161,9 +175,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 render={
                   <Link
                     to={item.to}
-                    onClick={() => {
-                      if (sidebar.isMobile) sidebar.setOpenMobile(false)
-                    }}
+                    aria-current={pathname === item.to ? "page" : undefined}
+                    onClick={() => sidebar.setOpenMobile(false)}
                   />
                 }
               >
@@ -191,7 +204,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       >
         <CalendarCogIcon />
         <span>排课中心</span>
-        <ChevronDownIcon className="t-acc-chevron ml-auto group-data-[collapsible=icon]:hidden" />
+        <ChevronDownIcon className="ml-auto transition-transform duration-200 group-data-[open]/collapsible:rotate-180 group-data-[collapsible=icon]:hidden motion-reduce:transition-none" />
       </CollapsibleTrigger>
       <CollapsibleContent>
         <SidebarMenuSub>
@@ -202,9 +215,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 render={
                   <Link
                     to={item.to}
-                    onClick={() => {
-                      if (sidebar.isMobile) sidebar.setOpenMobile(false)
-                    }}
+                    aria-current={pathname === item.to ? "page" : undefined}
+                    onClick={() => sidebar.setOpenMobile(false)}
                   />
                 }
               >
@@ -230,7 +242,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <CollapsibleTrigger render={<SidebarMenuButton tooltip="日常运行" isActive={dailyActive} />}>
         <CalendarCheck2Icon />
         <span>日常运行</span>
-        <ChevronDownIcon className="t-acc-chevron ml-auto group-data-[collapsible=icon]:hidden" />
+        <ChevronDownIcon className="ml-auto transition-transform duration-200 group-data-[open]/collapsible:rotate-180 group-data-[collapsible=icon]:hidden motion-reduce:transition-none" />
       </CollapsibleTrigger>
       <CollapsibleContent>
         <SidebarMenuSub>
@@ -241,9 +253,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 render={
                   <Link
                     to={item.to}
-                    onClick={() => {
-                      if (sidebar.isMobile) sidebar.setOpenMobile(false)
-                    }}
+                    aria-current={pathname === item.to ? "page" : undefined}
+                    onClick={() => sidebar.setOpenMobile(false)}
                   />
                 }
               >
@@ -256,6 +267,33 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </CollapsibleContent>
     </Collapsible>
   )
+  const accountMenu = user ? (
+    <WorkspaceUserMenu
+      placement="sidebar"
+      trigger={
+        <SidebarMenuButton
+          type="button"
+          size="lg"
+          aria-label={`打开${user.name}的账户菜单`}
+          className="cursor-pointer pl-0 pr-2 hover:bg-transparent hover:text-sidebar-foreground active:bg-transparent active:text-sidebar-foreground data-popup-open:bg-transparent data-popup-open:text-sidebar-foreground group-data-[collapsible=icon]:h-12! group-data-[collapsible=icon]:w-8! group-data-[collapsible=icon]:p-0!"
+        >
+          <Avatar className="size-8 shrink-0 rounded-xl">
+            <AvatarFallback className="rounded-xl bg-sidebar-primary text-xs font-semibold text-sidebar-primary-foreground">
+              {userInitial(user.name)}
+            </AvatarFallback>
+          </Avatar>
+          <span className="grid min-w-0 flex-1 text-left leading-tight group-data-[collapsible=icon]:hidden">
+            <span className="truncate text-sm font-medium">{user.name}</span>
+            <span className="mt-0.5 truncate text-xs text-sidebar-foreground/60">
+              {roleLabels[user.role]}
+            </span>
+          </span>
+          <ChevronsUpDownIcon className="ml-auto size-3.5 text-sidebar-foreground/50 group-data-[collapsible=icon]:hidden" />
+        </SidebarMenuButton>
+      }
+    />
+  ) : null
+
   const sidebarHeader =
     !sidebar.isMobile && sidebar.state === "collapsed" ? (
       <Button
@@ -263,35 +301,33 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         variant="ghost"
         size="icon"
         aria-label="展开侧边栏"
-        title="展开侧边栏"
-        className="group/sidebar-logo relative size-8 rounded-xl p-0 hover:bg-sidebar-accent focus-visible:bg-sidebar-accent"
+        className="group/sidebar-logo size-8 cursor-pointer rounded-xl p-0 hover:bg-sidebar-accent focus-visible:bg-sidebar-accent"
         onClick={() => sidebar.setOpen(true)}
       >
-        <LogoMark className="size-8 transition-opacity duration-150 group-hover/sidebar-logo:opacity-0 group-focus-visible/sidebar-logo:opacity-0" />
-        <PanelLeftIcon className="absolute size-4 opacity-0 transition-opacity duration-150 group-hover/sidebar-logo:opacity-100 group-focus-visible/sidebar-logo:opacity-100" />
+        <LogoMark className="size-8 max-w-none group-hover/sidebar-logo:hidden group-focus-visible/sidebar-logo:hidden" />
+        <PanelLeftIcon className="hidden size-4 group-hover/sidebar-logo:block group-focus-visible/sidebar-logo:block" />
       </Button>
     ) : (
       <div className="flex h-8 min-w-0 items-center gap-2">
         <Link
           to="/"
           className="flex min-w-0 flex-1 items-center gap-3 rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-sidebar-ring/50"
-          onClick={() => {
-            if (sidebar.isMobile) sidebar.setOpenMobile(false)
-          }}
+          onClick={() => sidebar.setOpenMobile(false)}
         >
           <LogoMark className="size-8" />
-          <div className="grid min-w-0 flex-1 text-left text-sm leading-tight">
-            <span className="truncate font-semibold">{SYSTEM_NAME}</span>
-            <span className="truncate text-xs text-muted-foreground">{SYSTEM_TAGLINE}</span>
-          </div>
+          <span className="grid min-w-0 flex-1 text-left leading-tight">
+            <span className="truncate text-sm font-semibold">{SYSTEM_NAME}</span>
+            <span className="mt-0.5 truncate text-xs text-sidebar-foreground/60">
+              {SYSTEM_TAGLINE}
+            </span>
+          </span>
         </Link>
         <Button
           type="button"
           variant="ghost"
           size="icon"
           aria-label={sidebar.isMobile ? "关闭侧边栏" : "收起侧边栏"}
-          title={sidebar.isMobile ? "关闭侧边栏" : "收起侧边栏"}
-          className="size-8 rounded-xl text-muted-foreground hover:text-foreground"
+          className="size-8 cursor-pointer rounded-xl text-muted-foreground hover:text-foreground"
           onClick={() => {
             if (sidebar.isMobile) {
               sidebar.setOpenMobile(false)
@@ -304,28 +340,31 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </Button>
       </div>
     )
+
   return (
-    <Sidebar collapsible="icon" role="navigation" aria-label="主导航" {...props}>
-      <SidebarHeader className="px-2 pt-3 pb-2">{sidebarHeader}</SidebarHeader>
-      <SidebarContent>
+    <Sidebar collapsible="icon" {...props}>
+      <SidebarHeader className="shrink-0 px-2 pt-3 pb-2">{sidebarHeader}</SidebarHeader>
+      <SidebarContent role="navigation" aria-label="主导航">
         {group("日常工作", primary)}
-        {group(
-          "当前学期",
-          [],
-          user?.role === "viewer" ? undefined : (
-            <>
-              {schedulingMenu}
-              {collapsedMenu(schedulingMenuItems)}
-            </>
-          ),
-        )}
         {user?.role !== "viewer" &&
           group(
-            "日常运行",
+            "当前学期",
             [],
             <>
+              {schedulingMenu}
+              <CollapsedModuleMenu
+                title="排课中心"
+                icon={CalendarCogIcon}
+                items={schedulingMenuItems}
+                isActive={schedulingActive}
+              />
               {dailyMenu}
-              {collapsedMenu(dailyMenuItems)}
+              <CollapsedModuleMenu
+                title="日常运行"
+                icon={CalendarCheck2Icon}
+                items={dailyMenuItems}
+                isActive={dailyActive}
+              />
             </>,
           )}
         {user?.role !== "viewer" &&
@@ -334,7 +373,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             [],
             <>
               {resourcesMenu}
-              {collapsedMenu(resourceItems)}
+              <CollapsedModuleMenu
+                title="基础资料"
+                icon={DatabaseIcon}
+                items={resourceItems}
+                isActive={resourcesActive}
+              />
             </>,
           )}
         {user?.role === "viewer" &&
@@ -351,7 +395,116 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             { title: "系统设置", to: "/settings", icon: SettingsIcon },
           ])}
       </SidebarContent>
+      {accountMenu && (
+        <SidebarFooter className="hidden shrink-0 gap-0 p-2 md:flex">
+          <SidebarMenu>
+            <SidebarMenuItem>{accountMenu}</SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarFooter>
+      )}
       <SidebarRail />
     </Sidebar>
   )
+}
+
+const COLLAPSED_MENU_OPEN_EVENT = "timetable:sidebar-module-open"
+
+function CollapsedModuleMenu({
+  title,
+  icon: Icon,
+  items,
+  isActive,
+}: {
+  title: string
+  icon: typeof DatabaseIcon
+  items: Array<{ title: string; to: string; icon: typeof DatabaseIcon }>
+  isActive: boolean
+}) {
+  const { pathname } = useLocation()
+  const sidebar = useSidebar()
+  const isMobileSurface = sidebar.isMobile
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    if (isMobileSurface || sidebar.state === "expanded") setOpen(false)
+  }, [isMobileSurface, sidebar.state])
+
+  useEffect(() => {
+    const closeWhenAnotherMenuOpens = (event: Event) => {
+      if ((event as CustomEvent<string>).detail !== title) setOpen(false)
+    }
+
+    window.addEventListener(COLLAPSED_MENU_OPEN_EVENT, closeWhenAnotherMenuOpens)
+    return () => window.removeEventListener(COLLAPSED_MENU_OPEN_EVENT, closeWhenAnotherMenuOpens)
+  }, [title])
+
+  return (
+    <SidebarMenuItem className="hidden group-data-[collapsible=icon]:block">
+      <DropdownMenu
+        open={open}
+        onOpenChange={(nextOpen) => {
+          if (nextOpen && (isMobileSurface || sidebar.state === "expanded")) {
+            return
+          }
+          if (nextOpen) {
+            window.dispatchEvent(
+              new CustomEvent<string>(COLLAPSED_MENU_OPEN_EVENT, { detail: title }),
+            )
+          }
+          setOpen(nextOpen)
+        }}
+      >
+        <DropdownMenuTrigger
+          openOnHover
+          delay={0}
+          closeDelay={120}
+          render={<SidebarMenuButton isActive={isActive} aria-label={`打开${title}菜单`} />}
+        >
+          <Icon />
+          <span>{title}</span>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          data-sidebar-module-menu="true"
+          side="right"
+          align="start"
+          sideOffset={8}
+          className="w-56 rounded-2xl p-1.5 shadow-xl ring-foreground/10"
+        >
+          <DropdownMenuGroup>
+            <DropdownMenuLabel className="px-2.5 py-2 text-xs font-medium text-foreground">
+              {title}
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator className="my-1" />
+            {items.map((item) => {
+              const itemActive = pathname === item.to
+              return (
+                <DropdownMenuItem
+                  key={item.to}
+                  className={`h-9 cursor-pointer px-2.5 ${
+                    itemActive
+                      ? "bg-accent font-medium text-accent-foreground [&_svg]:text-accent-foreground"
+                      : ""
+                  }`}
+                  render={
+                    <Link
+                      to={item.to}
+                      aria-current={itemActive ? "page" : undefined}
+                      onClick={() => setOpen(false)}
+                    />
+                  }
+                >
+                  <item.icon className="text-muted-foreground" />
+                  <span>{item.title}</span>
+                </DropdownMenuItem>
+              )
+            })}
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </SidebarMenuItem>
+  )
+}
+
+function userInitial(name?: string) {
+  return Array.from(name?.trim() || "用")[0]
 }

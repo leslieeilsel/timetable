@@ -5,6 +5,7 @@
 /playwright-report/
 /artifacts/
 /output/
+/.impeccable/
 /apps/api/storage/e2e.sqlite
 /apps/web/dist/
 /apps/web/node_modules/
