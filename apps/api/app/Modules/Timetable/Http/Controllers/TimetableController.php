@@ -34,6 +34,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
+use ZipArchive;
 
 class TimetableController
 {
@@ -646,9 +648,7 @@ class TimetableController
     public function exportXlsx(Request $request, Semester $semester): BinaryFileResponse
     {
         $payload = $this->exportPayload($request, $semester);
-        $rows = [...$payload['metadata'], [], $payload['headers'], ...$payload['rows']];
-        $headerRow = count($payload['metadata']) + 2;
-        $path = $this->xlsx->write($rows, '课表', $headerRow);
+        $path = $this->xlsx->writeTimetable($payload['xlsx']);
 
         return response()->download($path, $payload['filename_base'].'.xlsx', [
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -656,8 +656,159 @@ class TimetableController
         ])->deleteFileAfterSend(true);
     }
 
+    public function exportZip(Request $request, Semester $semester): BinaryFileResponse
+    {
+        $data = $request->validate([
+            'class_ids' => ['sometimes', 'array', 'max:200'],
+            'class_ids.*' => ['required', 'integer', 'distinct'],
+            'teacher_ids' => ['sometimes', 'array', 'max:200'],
+            'teacher_ids.*' => ['required', 'integer', 'distinct'],
+            'mode' => ['sometimes', Rule::in(['official', 'full'])],
+            'version_id' => ['sometimes', 'integer'],
+        ]);
+        $classIds = array_map('intval', $data['class_ids'] ?? []);
+        $teacherIds = array_map('intval', $data['teacher_ids'] ?? []);
+        $exportCount = count($classIds) + count($teacherIds);
+        if ($exportCount === 0) {
+            throw new ApiProblemException('BULK_EXPORT_EMPTY', '请至少选择一个班级或教师', 422);
+        }
+        if ($exportCount > 200) {
+            throw new ApiProblemException('BULK_EXPORT_TOO_LARGE', '单次最多导出 200 份课表', 422);
+        }
+
+        $mode = (string) ($data['mode'] ?? 'official');
+        $version = $this->versions->resolveForRead(
+            $semester,
+            isset($data['version_id']) ? (int) $data['version_id'] : null,
+            $request->user()->role->canEdit(),
+        );
+        $classes = SchoolClass::query()
+            ->where('academic_year_id', $semester->academic_year_id)
+            ->whereIn('id', $classIds)
+            ->with('grade:id,name,sort_order')
+            ->get();
+        $teachers = Teacher::query()
+            ->where('is_active', true)
+            ->whereIn('id', $teacherIds)
+            ->get();
+        if ($classes->count() !== count($classIds) || $teachers->count() !== count($teacherIds)) {
+            throw new ApiProblemException('TIMETABLE_RESOURCE_NOT_FOUND', '部分导出对象不存在、已停用或不属于该学期', 422);
+        }
+
+        $classes = $classes->sort(
+            fn (SchoolClass $left, SchoolClass $right): int => [
+                $left->grade->sort_order,
+                $left->name,
+            ] <=> [
+                $right->grade->sort_order,
+                $right->name,
+            ],
+        )->values();
+        $teachers = $teachers->sortBy('name')->values();
+
+        $zipPath = tempnam(sys_get_temp_dir(), 'timetable-export-');
+        if ($zipPath === false) {
+            throw new \RuntimeException('Unable to create timetable ZIP file.');
+        }
+        $zip = new ZipArchive;
+        if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+            unlink($zipPath);
+            throw new \RuntimeException('Unable to open timetable ZIP file.');
+        }
+
+        $temporaryXlsxFiles = [];
+        $usedEntryNames = [];
+        $zipIsOpen = true;
+        try {
+            foreach ($classes as $class) {
+                $payload = $this->exportPayloadForResource(
+                    $semester,
+                    'class',
+                    $class->id,
+                    $mode,
+                    $version,
+                );
+                $xlsxPath = $this->xlsx->writeTimetable($payload['xlsx']);
+                $temporaryXlsxFiles[] = $xlsxPath;
+                $entryName = $this->archiveEntryName('班级课表', $class->name, $class->id, $usedEntryNames);
+                if (! $zip->addFile($xlsxPath, $entryName)) {
+                    throw new \RuntimeException('Unable to add a class timetable to the ZIP file.');
+                }
+            }
+            foreach ($teachers as $teacher) {
+                $payload = $this->exportPayloadForResource(
+                    $semester,
+                    'teacher',
+                    $teacher->id,
+                    $mode,
+                    $version,
+                );
+                $xlsxPath = $this->xlsx->writeTimetable($payload['xlsx']);
+                $temporaryXlsxFiles[] = $xlsxPath;
+                $entryName = $this->archiveEntryName('教师课表', $teacher->name, $teacher->id, $usedEntryNames);
+                if (! $zip->addFile($xlsxPath, $entryName)) {
+                    throw new \RuntimeException('Unable to add a teacher timetable to the ZIP file.');
+                }
+            }
+            $zipClosed = $zip->close();
+            $zipIsOpen = false;
+            if (! $zipClosed) {
+                throw new \RuntimeException('Unable to finish timetable ZIP file.');
+            }
+        } catch (Throwable $exception) {
+            if ($zipIsOpen) {
+                $zip->close();
+            }
+            if (is_file($zipPath)) {
+                unlink($zipPath);
+            }
+            throw $exception;
+        } finally {
+            foreach ($temporaryXlsxFiles as $temporaryXlsxFile) {
+                if (is_file($temporaryXlsxFile)) {
+                    unlink($temporaryXlsxFile);
+                }
+            }
+        }
+
+        $versionNo = $version === null ? 0 : $version->version_no;
+        $semester->loadMissing('academicYear');
+        $archiveName = sprintf(
+            '%s-%s-v%d-课表.zip',
+            $semester->academicYear->name,
+            $semester->name,
+            $versionNo,
+        );
+        $archiveName = preg_replace('/[\x00-\x1F<>:"\/\\\\|?*]+/u', '-', $archiveName)
+            ?? "timetables-semester-{$semester->id}-v{$versionNo}.zip";
+
+        return response()->download(
+            $zipPath,
+            $archiveName,
+            ['Content-Type' => 'application/zip', 'Cache-Control' => 'private, no-store'],
+        )->setContentDisposition(
+            'attachment',
+            $archiveName,
+            "timetables-semester-{$semester->id}-v{$versionNo}.zip",
+        )->deleteFileAfterSend(true);
+    }
+
     /**
-     * @return array{filename_base: string, metadata: list<list<string>>, headers: list<string>, rows: list<list<string>>}
+     * @return array{
+     *     filename_base: string,
+     *     metadata: list<list<string>>,
+     *     headers: list<string>,
+     *     rows: list<list<string>>,
+     *     xlsx: array{
+     *         title: string,
+     *         headers: list<string>,
+     *         rows: list<array{
+     *             label: string,
+     *             time: string,
+     *             cells: list<list<array{title: string, detail: string}>>
+     *         }>
+     *     }
+     * }
      */
     private function exportPayload(Request $request, Semester $semester): array
     {
@@ -667,34 +818,85 @@ class TimetableController
             'mode' => ['sometimes', Rule::in(['official', 'full'])],
             'version_id' => ['sometimes', 'integer'],
         ]);
-        $resource = match ($data['view']) {
-            'class' => SchoolClass::query()->where('academic_year_id', $semester->academic_year_id)->whereKey($data['resource_id'])->first(),
-            'teacher' => Teacher::query()->whereKey($data['resource_id'])->first(),
-            'room' => Room::query()->whereKey($data['resource_id'])->first(),
-            default => throw new \LogicException('Validated timetable view is invalid.'),
-        };
-        if ($resource === null) {
-            throw new ApiProblemException('TIMETABLE_RESOURCE_NOT_FOUND', '导出资源不存在或不属于该学期', 422);
-        }
         $mode = (string) ($data['mode'] ?? 'official');
         $version = $this->versions->resolveForRead(
             $semester,
             isset($data['version_id']) ? (int) $data['version_id'] : null,
             $request->user()->role->canEdit(),
         );
+
+        return $this->exportPayloadForResource(
+            $semester,
+            (string) $data['view'],
+            (int) $data['resource_id'],
+            $mode,
+            $version,
+        );
+    }
+
+    /**
+     * @return array{
+     *     filename_base: string,
+     *     metadata: list<list<string>>,
+     *     headers: list<string>,
+     *     rows: list<list<string>>,
+     *     xlsx: array{
+     *         title: string,
+     *         headers: list<string>,
+     *         rows: list<array{
+     *             label: string,
+     *             time: string,
+     *             cells: list<list<array{title: string, detail: string}>>
+     *         }>
+     *     }
+     * }
+     */
+    private function exportPayloadForResource(
+        Semester $semester,
+        string $view,
+        int $resourceId,
+        string $mode,
+        ?TimetableVersion $version,
+    ): array {
+        $resource = match ($view) {
+            'class' => SchoolClass::query()->where('academic_year_id', $semester->academic_year_id)->whereKey($resourceId)->first(),
+            'teacher' => Teacher::query()->whereKey($resourceId)->first(),
+            'room' => Room::query()->whereKey($resourceId)->first(),
+            default => throw new \LogicException('Timetable view is invalid.'),
+        };
+        if ($resource === null) {
+            throw new ApiProblemException('TIMETABLE_RESOURCE_NOT_FOUND', '导出资源不存在或不属于该学期', 422);
+        }
         $versionId = $version === null ? 0 : $version->id;
         $versionNo = $version === null ? 0 : $version->version_no;
         $versionName = $version === null ? '未创建' : $version->name;
-        $entries = $this->scopeResource(
+        $template = $semester->scheduleTemplate()->with(['days', 'items'])->first();
+        $days = $template?->days
+            ->filter(fn (ScheduleTemplateDay $day): bool => $day->is_enabled)
+            ->sortBy('weekday')
+            ->values() ?? collect();
+        $items = $template?->items
+            ->filter(fn (Item $item): bool => $item->is_active && ($mode === 'full' ? $item->show_in_full : $item->show_in_official))
+            ->sortBy('sort_order')
+            ->values() ?? collect();
+        $entryQuery = $this->scopeResource(
             TimetableEntry::query()->where('semester_id', $semester->id)->where('timetable_version_id', $versionId),
-            $data['view'],
-            (int) $data['resource_id'],
-        )->with([
+            $view,
+            $resourceId,
+        );
+        if ($days->isEmpty() || $items->isEmpty()) {
+            $entryQuery->whereRaw('1 = 0');
+        } else {
+            $entryQuery
+                ->whereIn('weekday', $days->pluck('weekday'))
+                ->whereIn('item_id', $items->pluck('id'));
+        }
+        $entries = $entryQuery->with([
             'schoolClass:id,name', 'teachingGroup:id,name', 'schoolClasses:id,name', 'teacher:id,name',
             'teachers:id,name', 'course:id,name', 'actualRoom:id,name', 'item:id,name,start_time,end_time,sort_order',
-        ])->orderBy('weekday')->orderBy('item_id')->get();
+        ])->orderBy('weekday')->orderBy('item_id')->orderBy('id')->get();
         $semester->loadMissing('academicYear');
-        $viewLabel = ['class' => '班级', 'teacher' => '教师', 'room' => '教室'][$data['view']];
+        $viewLabel = ['class' => '班级', 'teacher' => '教师', 'room' => '教室'][$view];
         $modeLabel = $mode === 'full' ? '完整作息' : '正式课程';
         $weekdayNames = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
         $rows = $entries->map(function (TimetableEntry $entry) use ($weekdayNames): array {
@@ -712,9 +914,28 @@ class TimetableController
                 $entry->actualRoom->name,
             ];
         })->values()->all();
+        $entriesBySlot = $entries->groupBy(
+            fn (TimetableEntry $entry): string => $entry->weekday.':'.$entry->item_id,
+        );
+        $xlsxRows = $items->map(function (Item $item) use ($view, $days, $entriesBySlot): array {
+            $cells = $days->map(function (ScheduleTemplateDay $day) use ($view, $entriesBySlot, $item): array {
+                return $entriesBySlot->get($day->weekday.':'.$item->id, collect())
+                    ->map(fn (TimetableEntry $entry): array => [
+                        'title' => $entry->course->name.$this->exportWeekPatternLabel($entry),
+                        'detail' => $this->exportEntryDetail($entry, $view),
+                    ])->values()->all();
+            })->values()->all();
+
+            return [
+                'label' => $item->name,
+                'time' => substr($item->start_time, 0, 5).'–'.substr($item->end_time, 0, 5),
+                'cells' => $cells,
+            ];
+        })->values()->all();
+        $generatedAt = now();
 
         return [
-            'filename_base' => sprintf('timetable-semester-%d-v%d-%s-%d', $semester->id, $versionNo, $data['view'], $data['resource_id']),
+            'filename_base' => sprintf('timetable-semester-%d-v%d-%s-%d', $semester->id, $versionNo, $view, $resourceId),
             'metadata' => [
                 ['学年', $semester->academicYear->name],
                 ['学期', $semester->name],
@@ -723,11 +944,82 @@ class TimetableController
                 ['筛选对象', $resource->name],
                 ['显示模式', $modeLabel],
                 ['周型', '按任课关系周型'],
-                ['生成时间', now()->toDateTimeString()],
+                ['生成时间', $generatedAt->toDateTimeString()],
             ],
             'headers' => ['星期', '课节', '时间', '班级/教学组', '课程', '教师', '教室'],
             'rows' => $rows,
+            'xlsx' => [
+                'title' => $resource->name.'课表',
+                'headers' => ['课节 / 时间', ...$days->map(
+                    fn (ScheduleTemplateDay $day): string => $weekdayNames[$day->weekday],
+                )->values()->all()],
+                'rows' => $xlsxRows,
+            ],
         ];
+    }
+
+    /**
+     * @param  array<string, true>  $usedEntryNames
+     */
+    private function archiveEntryName(
+        string $folder,
+        string $resourceName,
+        int $resourceId,
+        array &$usedEntryNames,
+    ): string {
+        $safeName = preg_replace('/[\x00-\x1F<>:"\/\\\\|?*]+/u', '-', $resourceName) ?? '';
+        $safeName = trim($safeName, " .\t\n\r\0\x0B");
+        if ($safeName === '') {
+            $safeName = (string) $resourceId;
+        }
+        $entryName = $folder.'/'.$safeName.'.xlsx';
+        if (isset($usedEntryNames[$entryName])) {
+            $entryName = $folder.'/'.$safeName.'-'.$resourceId.'.xlsx';
+        }
+        $usedEntryNames[$entryName] = true;
+
+        return $entryName;
+    }
+
+    private function exportWeekPatternLabel(TimetableEntry $entry): string
+    {
+        return match ($entry->week_pattern) {
+            WeekPattern::All => '',
+            WeekPattern::A => '（单周）',
+            WeekPattern::B => '（双周）',
+            WeekPattern::Specified => $this->specifiedWeeksLabel($entry->active_weeks),
+        };
+    }
+
+    /** @param list<int>|null $activeWeeks */
+    private function specifiedWeeksLabel(?array $activeWeeks): string
+    {
+        $weeks = $this->normalizedWeeks($activeWeeks);
+        if ($weeks === []) {
+            return '（指定周）';
+        }
+        if (count($weeks) <= 4) {
+            return '（第'.implode('/', $weeks).'周）';
+        }
+
+        return '（第'.implode('/', array_slice($weeks, 0, 3)).'等'.count($weeks).'周）';
+    }
+
+    private function exportEntryDetail(TimetableEntry $entry, string $view): string
+    {
+        if ($view === 'class') {
+            return '';
+        }
+        $targetName = $entry->schoolClass !== null
+            ? $entry->schoolClass->name
+            : ($entry->teachingGroup !== null ? $entry->teachingGroup->name : '未设置授课对象');
+        $teacherNames = $entry->teachers->pluck('name')->join('、') ?: $entry->teacher->name;
+
+        return match ($view) {
+            'teacher' => $targetName.' · '.$entry->actualRoom->name,
+            'room' => $targetName.' · '.$teacherNames,
+            default => '',
+        };
     }
 
     private function assertPlaceable(TeachingAssignment $assignment, int $weekday, int $itemId): void

@@ -195,10 +195,49 @@ it('builds a semester and rejects a teacher conflict in the same slot', function
         ->and($export->streamedContent())->toContain('2026-2027 学年')
         ->and($export->streamedContent())->toContain('一年级 1 班');
 
-    $this->get("/api/v1/semesters/{$semesterA['id']}/timetable/export.xlsx?view=class&resource_id={$classA['id']}&mode=official")
+    $xlsxExport = $this->get("/api/v1/semesters/{$semesterA['id']}/timetable/export.xlsx?view=class&resource_id={$classA['id']}&mode=official")
         ->assertOk()
         ->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         ->assertDownload("timetable-semester-{$semesterA['id']}-v1-class-{$classA['id']}.xlsx");
+    $xlsxPath = $xlsxExport->baseResponse->getFile()->getPathname();
+    $xlsxArchive = new ZipArchive;
+    expect($xlsxArchive->open($xlsxPath))->toBeTrue();
+    $xlsxSheet = $xlsxArchive->getFromName('xl/worksheets/sheet1.xml');
+    expect($xlsxSheet)->toContain('一年级 1 班课表')
+        ->and($xlsxSheet)->toContain('周一')
+        ->and($xlsxSheet)->toContain('语文')
+        ->and($xlsxSheet)->toContain('paperSize="9" orientation="portrait"')
+        ->and($xlsxSheet)->toContain('fitToWidth="1" fitToHeight="1"')
+        ->and($xlsxSheet)->not->toContain('陈老师')
+        ->and($xlsxSheet)->not->toContain('101 教室');
+    $xlsxArchive->close();
+    unlink($xlsxPath);
+
+    $this->postJson("/api/v1/semesters/{$semesterA['id']}/timetable/export.zip", [
+        'class_ids' => [],
+        'teacher_ids' => [],
+    ])->assertUnprocessable()
+        ->assertJsonPath('code', 'BULK_EXPORT_EMPTY');
+
+    $bulkExport = $this->post("/api/v1/semesters/{$semesterA['id']}/timetable/export.zip", [
+        'class_ids' => [$classA['id'], $classB['id']],
+        'teacher_ids' => [$teacher['id']],
+        'mode' => 'official',
+    ])->assertOk()
+        ->assertHeader('content-type', 'application/zip')
+        ->assertDownload("timetables-semester-{$semesterA['id']}-v1.zip");
+    expect($bulkExport->headers->get('content-disposition'))
+        ->toContain("filename*=utf-8''")
+        ->toContain('%E8%AF%BE%E8%A1%A8.zip');
+    $bulkPath = $bulkExport->baseResponse->getFile()->getPathname();
+    $bulkArchive = new ZipArchive;
+    expect($bulkArchive->open($bulkPath))->toBeTrue()
+        ->and($bulkArchive->numFiles)->toBe(3)
+        ->and($bulkArchive->getFromName('班级课表/一年级 1 班.xlsx'))->toStartWith('PK')
+        ->and($bulkArchive->getFromName('班级课表/一年级 2 班.xlsx'))->toStartWith('PK')
+        ->and($bulkArchive->getFromName('教师课表/陈老师.xlsx'))->toStartWith('PK');
+    $bulkArchive->close();
+    unlink($bulkPath);
 
     $this->putJson('/api/v1/context/current-semester', ['semester_id' => $semesterA['id']])
         ->assertOk()

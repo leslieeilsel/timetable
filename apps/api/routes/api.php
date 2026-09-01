@@ -169,6 +169,7 @@ Route::prefix('v1')->group(function (): void {
         Route::get('/semesters/{semester}/timetable/completeness', [TimetableController::class, 'completeness']);
         Route::get('/semesters/{semester}/timetable/export.csv', [TimetableController::class, 'export']);
         Route::get('/semesters/{semester}/timetable/export.xlsx', [TimetableController::class, 'exportXlsx']);
+        Route::post('/semesters/{semester}/timetable/export.zip', [TimetableController::class, 'exportZip']);
 
         Route::get('/semesters/{semester}/daily-timetable', [CalendarExceptionController::class, 'timetable']);
         Route::get('/semesters/{semester}/calendar-exceptions', [CalendarExceptionController::class, 'index']);

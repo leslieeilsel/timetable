@@ -2142,7 +2142,7 @@ paths:
     get:
       operationId: getSemestersSemesterTimetableExportXlsx
       tags: [课表]
-      summary: 导出带元数据和格式的 Excel 课表
+      summary: 导出 A4 竖向打印版 Excel 课表
       parameters:
         - name: semester
           in: path
@@ -2164,13 +2164,39 @@ paths:
           schema: { type: integer, minimum: 1 }
       responses:
         "200":
-          description: Office Open XML 工作簿
+          description: 按课节与星期排版、适配 A4 竖向单页打印的 Office Open XML 工作簿
           content:
             application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
               schema: { type: string, format: binary }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/timetable/export.zip:
+    post:
+      operationId: postSemestersSemesterTimetableExportZip
+      tags: [课表]
+      summary: 批量导出班级与教师课表
+      parameters:
+        - name: semester
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkTimetableExportPayload"
+      responses:
+        "200":
+          description: 按班级课表、教师课表目录整理的 ZIP 压缩包，每项为 A4 竖向 Excel 课表
+          content:
+            application/zip:
+              schema: { type: string, format: binary }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
   /api/v1/semesters/{semester}/timetable/validation:
     get:
@@ -2923,6 +2949,25 @@ components:
       properties:
         entry_id: { type: integer, minimum: 1 }
         target_entry_id: { type: integer, minimum: 1 }
+        version_id: { type: integer, minimum: 1 }
+    BulkTimetableExportPayload:
+      type: object
+      additionalProperties: false
+      anyOf:
+        - required: [class_ids]
+        - required: [teacher_ids]
+      properties:
+        class_ids:
+          type: array
+          maxItems: 200
+          uniqueItems: true
+          items: { type: integer, minimum: 1 }
+        teacher_ids:
+          type: array
+          maxItems: 200
+          uniqueItems: true
+          items: { type: integer, minimum: 1 }
+        mode: { type: string, enum: [official, full], default: official }
         version_id: { type: integer, minimum: 1 }
     CalendarExceptionType:
       type: string

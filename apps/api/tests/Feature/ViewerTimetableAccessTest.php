@@ -100,6 +100,11 @@ it('keeps draft timetable versions out of every viewer read path', function (): 
             ->assertNotFound()
             ->assertJsonPath('code', 'VERSION_NOT_PUBLISHED');
     }
+    $this->postJson("/api/v1/semesters/{$semesterId}/timetable/export.zip", [
+        'teacher_ids' => [],
+        'class_ids' => [1],
+        'version_id' => $draftId,
+    ])->assertNotFound()->assertJsonPath('code', 'VERSION_NOT_PUBLISHED');
 
     $this->getJson(
         "/api/v1/semesters/{$semesterId}/timetable-versions/compare"

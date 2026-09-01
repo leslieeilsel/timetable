@@ -5,13 +5,13 @@ import {
   AlertTriangleIcon,
   ArrowRightLeftIcon,
   CheckCircle2Icon,
+  ChevronDownIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   DownloadIcon,
   FilePlus2Icon,
   LoaderCircleIcon,
   LockIcon,
-  PrinterIcon,
   Redo2Icon,
   SparklesIcon,
   Undo2Icon,
@@ -43,9 +43,11 @@ import type {
   TimetableEntry,
   TimetableVersion,
   Room,
+  Teacher,
   PaginationMeta,
 } from "@/lib/types"
 import { EmptyList, ErrorState, Field, LoadingState, PageHeader } from "@/components/page"
+import { BulkTimetableExportDialog } from "@/components/bulk-timetable-export-dialog"
 import {
   AssignmentPicker,
   ClassPicker,
@@ -77,7 +79,10 @@ import { TablePagination } from "@/components/table-pagination"
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
@@ -219,6 +224,7 @@ export function TimetablePage() {
   const [historyBusy, setHistoryBusy] = useState(false)
   const [replanStarting, setReplanStarting] = useState(false)
   const [compareOpen, setCompareOpen] = useState(false)
+  const [bulkExportOpen, setBulkExportOpen] = useState(false)
   const [slot, setSlot] = useState<{
     weekday: number
     itemId: number
@@ -237,6 +243,11 @@ export function TimetablePage() {
   const rooms = useQuery({
     queryKey: ["rooms"],
     queryFn: () => apiAllPages<Room>("/api/v1/rooms"),
+  })
+  const allTeachers = useQuery({
+    queryKey: ["teachers"],
+    queryFn: () => apiAllPages<Teacher>("/api/v1/teachers"),
+    enabled: bulkExportOpen,
   })
   const versions = useQuery({
     queryKey: ["timetable-versions", semesterId],
@@ -281,6 +292,43 @@ export function TimetablePage() {
       )
     return (rooms.data?.data ?? []).map((room) => ({ id: room.id, name: room.name }))
   }, [settings.data, assignments.data, rooms.data, view])
+  const assignmentTeachers = useMemo(
+    () =>
+      Array.from(
+        new Map(
+          (assignments.data?.data ?? [])
+            .flatMap((assignment) => [assignment.teacher, ...assignment.collaborators])
+            .map((teacher) => [teacher.id, teacher]),
+        ).values(),
+      ),
+    [assignments.data],
+  )
+  const scheduledTeacherIds = useMemo(
+    () => new Set(assignmentTeachers.map((teacher) => teacher.id)),
+    [assignmentTeachers],
+  )
+  const bulkExportClasses = useMemo(
+    () =>
+      (settings.data?.data ?? [])
+        .filter((item) => item.status === "active" && item.school_class.status === "active")
+        .map((item) => ({
+          id: item.school_class.id,
+          name: item.school_class.name,
+          gradeName: item.school_class.grade.name,
+        })),
+    [settings.data],
+  )
+  const bulkExportTeachers = useMemo(() => {
+    const source = allTeachers.data?.data ?? assignmentTeachers
+    return source
+      .filter((teacher) => teacher.is_active)
+      .map((teacher) => ({
+        id: teacher.id,
+        name: teacher.name,
+        hasSchedule: scheduledTeacherIds.has(teacher.id),
+      }))
+      .sort((left, right) => left.name.localeCompare(right.name, "zh-CN"))
+  }, [allTeachers.data, assignmentTeachers, scheduledTeacherIds])
   useEffect(() => {
     setResourceId((current) =>
       resources.some((item) => String(item.id) === current)
@@ -519,7 +567,6 @@ export function TimetablePage() {
     if (next) setResourceId(String(next.id))
   }
   const exportQuery = `view=${view}&resource_id=${resourceId}&mode=${full ? "full" : "official"}${selectedVersionId ? `&version_id=${selectedVersionId}` : ""}`
-  const csvExportUrl = `/api/v1/semesters/${semesterId}/timetable/export.csv?${exportQuery}`
   const xlsxExportUrl = `/api/v1/semesters/${semesterId}/timetable/export.xlsx?${exportQuery}`
   const createDraft = async () => {
     const etag = timetable.data?.etag ?? semester.data.etag
@@ -771,30 +818,37 @@ export function TimetablePage() {
               </dl>
               <DropdownMenu>
                 <DropdownMenuTrigger
-                  render={
-                    <Button variant="outline" disabled={!resourceId || !versionSelectionReady} />
-                  }
+                  render={<Button variant="outline" disabled={!versionSelectionReady} />}
                 >
                   <DownloadIcon />
                   导出
+                  <ChevronDownIcon className="text-muted-foreground" />
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => window.location.assign(csvExportUrl)}>
-                    CSV（通用数据）
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => window.location.assign(xlsxExportUrl)}>
-                    Excel XLSX（保留格式）
-                  </DropdownMenuItem>
+                <DropdownMenuContent align="end" className="w-max min-w-52">
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel>导出当前</DropdownMenuLabel>
+                    <DropdownMenuItem
+                      disabled={!resourceId}
+                      className="whitespace-nowrap"
+                      onClick={() => window.location.assign(xlsxExportUrl)}
+                    >
+                      当前
+                      {view === "class" ? "班级" : view === "teacher" ? "教师" : "教室"}
+                      课表（Excel · A4 竖向）
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel>批量导出</DropdownMenuLabel>
+                    <DropdownMenuItem
+                      className="whitespace-nowrap"
+                      onClick={() => setBulkExportOpen(true)}
+                    >
+                      选择班级和教师…
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Button
-                variant="outline"
-                disabled={!resourceId || !versionSelectionReady}
-                onClick={() => window.print()}
-              >
-                <PrinterIcon />
-                打印 / PDF
-              </Button>
             </div>
           </div>
         </section>
@@ -999,6 +1053,22 @@ export function TimetablePage() {
         versions={selectableVersions}
         selectedVersion={selectedVersion ?? null}
         onClose={() => setCompareOpen(false)}
+      />
+      <BulkTimetableExportDialog
+        open={bulkExportOpen}
+        onOpenChange={setBulkExportOpen}
+        semesterId={current.id}
+        versionId={selectedVersionId}
+        versionLabel={
+          selectedVersion
+            ? "v" + selectedVersion.version_no + " · " + selectedVersion.name
+            : "当前课表"
+        }
+        mode={full ? "full" : "official"}
+        classes={bulkExportClasses}
+        teachers={bulkExportTeachers}
+        teachersLoading={bulkExportOpen && (allTeachers.isPending || assignments.isPending)}
+        teachersError={allTeachers.isError || assignments.isError}
       />
     </>
   )

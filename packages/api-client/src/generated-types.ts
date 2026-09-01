@@ -1210,10 +1210,27 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 导出带元数据和格式的 Excel 课表 */
+        /** 导出 A4 竖向打印版 Excel 课表 */
         get: operations["getSemestersSemesterTimetableExportXlsx"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/timetable/export.zip": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 批量导出班级与教师课表 */
+        post: operations["postSemestersSemesterTimetableExportZip"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1599,6 +1616,16 @@ export interface components {
             target_entry_id: number;
             version_id: number;
         };
+        BulkTimetableExportPayload: {
+            class_ids?: number[];
+            teacher_ids?: number[];
+            /**
+             * @default official
+             * @enum {string}
+             */
+            mode: "official" | "full";
+            version_id?: number;
+        } | unknown | unknown;
         /** @enum {string} */
         CalendarExceptionType: "move" | "swap" | "teacher_change" | "room_change" | "cancel" | "makeup" | "activity";
         /** @enum {string} */
@@ -4173,7 +4200,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Office Open XML 工作簿 */
+            /** @description 按课节与星期排版、适配 A4 竖向单页打印的 Office Open XML 工作簿 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4185,6 +4212,36 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    postSemestersSemesterTimetableExportZip: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                semester: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkTimetableExportPayload"];
+            };
+        };
+        responses: {
+            /** @description 按班级课表、教师课表目录整理的 ZIP 压缩包，每项为 A4 竖向 Excel 课表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/zip": string;
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
         };
     };

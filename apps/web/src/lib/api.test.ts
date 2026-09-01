@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { api, apiAllPages, ApiError, apiMessage, jsonBody } from "@/lib/api"
+import { api, apiAllPages, apiDownload, ApiError, apiMessage, jsonBody } from "@/lib/api"
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -55,6 +55,33 @@ describe("API utilities", () => {
       }),
     ).resolves.toMatchObject({ data: { saved: true } })
     expect(fetchMock).toHaveBeenCalledTimes(4)
+  })
+
+  it("downloads binary responses and reads an RFC 5987 filename", async () => {
+    vi.stubGlobal("document", { cookie: "" })
+    vi.stubGlobal("window", new EventTarget())
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(
+        new Response("PK-test-archive", {
+          status: 200,
+          headers: {
+            "Content-Type": "application/zip",
+            "Content-Disposition": "attachment; filename*=UTF-8''%E8%AF%BE%E8%A1%A8.zip",
+          },
+        }),
+      )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const result = await apiDownload("/api/v1/export.zip", {
+      method: "POST",
+      body: jsonBody({ class_ids: [1] }),
+    })
+
+    expect(result.filename).toBe("课表.zip")
+    await expect(result.blob.text()).resolves.toBe("PK-test-archive")
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
   it("rejects paginated results assembled from different ETag revisions", async () => {

@@ -17,6 +17,11 @@ export interface ApiResult<T> extends ApiEnvelope<T> {
   etag: string | null
 }
 
+export interface ApiDownloadResult {
+  blob: Blob
+  filename: string | null
+}
+
 const unsafeMethods = new Set(["POST", "PUT", "PATCH", "DELETE"])
 let csrfReady = false
 
@@ -44,6 +49,25 @@ export async function api<T>(
   options: RequestInit & { etag?: string | null; formData?: boolean } = {},
 ): Promise<ApiResult<T>> {
   return request<T>(path, options, true)
+}
+
+export async function apiDownload(
+  path: string,
+  options: RequestInit & { formData?: boolean } = {},
+): Promise<ApiDownloadResult> {
+  return downloadRequest(path, options, true)
+}
+
+export function saveDownload({ blob, filename }: ApiDownloadResult, fallbackFilename: string) {
+  const objectUrl = URL.createObjectURL(blob)
+  const link = document.createElement("a")
+  link.href = objectUrl
+  link.download = filename || fallbackFilename
+  link.hidden = true
+  document.body.append(link)
+  link.click()
+  link.remove()
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0)
 }
 
 export async function apiAllPages<T>(path: string): Promise<ApiResult<T[]>> {
@@ -119,6 +143,61 @@ async function request<T>(
     meta: payload?.meta,
     etag: response.headers.get("ETag"),
   }
+}
+
+async function downloadRequest(
+  path: string,
+  options: RequestInit & { formData?: boolean },
+  retryExpiredCsrf: boolean,
+): Promise<ApiDownloadResult> {
+  const method = (options.method ?? "GET").toUpperCase()
+  if (unsafeMethods.has(method)) await ensureCsrf()
+
+  const headers = new Headers(options.headers)
+  headers.set("Accept", "application/octet-stream, application/json")
+  if (unsafeMethods.has(method)) {
+    const xsrf = cookie("XSRF-TOKEN")
+    if (xsrf) headers.set("X-XSRF-TOKEN", xsrf)
+  }
+  if (options.body && !options.formData) headers.set("Content-Type", "application/json")
+
+  const response = await fetch(path, { ...options, method, headers, credentials: "include" })
+  if (!response.ok) {
+    const isJson = response.headers.get("content-type")?.includes("application/json")
+    const payload = isJson ? await response.json() : null
+    if (response.status === 419) {
+      csrfReady = false
+      if (retryExpiredCsrf && unsafeMethods.has(method))
+        return downloadRequest(path, options, false)
+    }
+    if (response.status === 401) window.dispatchEvent(new Event("auth:invalid"))
+    if (response.status === 412) window.dispatchEvent(new Event("data:stale"))
+    throw new ApiError(
+      payload?.message ?? "请求失败（" + response.status + "）",
+      response.status,
+      payload?.code ?? "REQUEST_FAILED",
+      payload ?? {},
+    )
+  }
+
+  return {
+    blob: await response.blob(),
+    filename: responseFilename(response.headers.get("content-disposition")),
+  }
+}
+
+function responseFilename(contentDisposition: string | null) {
+  if (!contentDisposition) return null
+  const encoded = contentDisposition.match(/filename\*\s*=\s*UTF-8''([^;]+)/i)?.[1]
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded.trim().replace(/^"|"$/g, ""))
+    } catch {
+      // Fall back to the ASCII filename when a server sends malformed encoding.
+    }
+  }
+  const plain = contentDisposition.match(/filename\s*=\s*(?:"([^"]+)"|([^;]+))/i)
+  return (plain?.[1] ?? plain?.[2])?.trim() || null
 }
 
 export function jsonBody(value: unknown) {
