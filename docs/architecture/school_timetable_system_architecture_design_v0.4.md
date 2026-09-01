@@ -90,14 +90,7 @@ Vite+ 是本项目所有 Node/TypeScript 工作流的统一入口，但项目可
 
 ### 2.2 shadcn 预设管理
 
-预设代码 `b27GcrRo` 是 UI 初始基线，不应只存在于聊天记录或个人笔记中。
-
-仓库初始化时使用 Vite+ 下载并运行固定版本的 shadcn CLI，同时保存预设解码结果：
-
-```bash
-vp dlx shadcn@<固定版本> preset decode b27GcrRo --json \
-  > docs/architecture/shadcn-preset-b27GcrRo.json
-```
+预设代码 `b27GcrRo` 是 UI 初始化时使用的历史基线。应用完成初始化后，以仓库内实际组件和设计令牌为准，不再保留一次性的预设解码文件。
 
 在已经创建好的 Vite+ React 应用中初始化：
 
@@ -321,7 +314,6 @@ school-timetable/
 │   │   └── school_timetable_system_design_v0.3.md
 │   ├── architecture/
 │   │   ├── school_timetable_system_architecture_design_v0.4.md
-│   │   ├── shadcn-preset-b27GcrRo.json
 │   │   └── decisions/               # ADR 架构决策记录
 │   └── api/
 │
