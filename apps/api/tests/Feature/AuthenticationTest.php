@@ -2,6 +2,7 @@
 
 use App\Enums\Role;
 use App\Models\User;
+use App\Modules\Resources\Models\Teacher;
 use Illuminate\Support\Facades\Hash;
 
 it('starts a session for the configured Vite development host', function (): void {
@@ -51,6 +52,74 @@ it('requires a temporary password to be changed before using the workspace', fun
 
     expect(Hash::check('Permanent5678', $user->fresh()->password))->toBeTrue();
     $this->getJson('/api/v1/catalog')->assertOk();
+});
+
+it('lets an administrator create exactly one teacher account for an active teacher profile', function (): void {
+    $this->withHeaders(['Origin' => 'http://localhost:5174', 'Referer' => 'http://localhost:5174/']);
+    $admin = User::factory()->create(['role' => Role::Admin, 'must_change_password' => false]);
+    $teacher = Teacher::query()->create([
+        'employee_no' => 'T-ACCOUNT-001',
+        'name' => '教师账号测试',
+        'is_active' => true,
+    ]);
+    $this->actingAs($admin)->withSession(['auth_version' => $admin->auth_version]);
+
+    $created = $this->postJson('/api/v1/users', [
+        'name' => '教师账号测试',
+        'email' => 'bound-teacher@example.test',
+        'role' => Role::Teacher->value,
+        'teacher_id' => $teacher->id,
+        'temporary_password' => 'Temporary1234',
+    ])->assertCreated()
+        ->assertJsonPath('data.role', 'teacher')
+        ->assertJsonPath('data.teacher_id', $teacher->id)
+        ->assertJsonPath('data.teacher.name', '教师账号测试');
+
+    $this->postJson('/api/v1/users', [
+        'name' => '缺少绑定',
+        'email' => 'teacher-without-binding@example.test',
+        'role' => Role::Teacher->value,
+        'temporary_password' => 'Temporary1234',
+    ])->assertUnprocessable()
+        ->assertJsonValidationErrors('teacher_id');
+    $this->postJson('/api/v1/users', [
+        'name' => '重复绑定',
+        'email' => 'duplicate-teacher@example.test',
+        'role' => Role::Teacher->value,
+        'teacher_id' => $teacher->id,
+        'temporary_password' => 'Temporary1234',
+    ])->assertUnprocessable()
+        ->assertJsonValidationErrors('teacher_id');
+
+    $userId = (int) $created->json('data.id');
+    $this->withHeader('If-Match', $created->headers->get('ETag'))
+        ->patchJson("/api/v1/users/{$userId}", ['role' => Role::Viewer->value])
+        ->assertOk()
+        ->assertJsonPath('data.teacher_id', null)
+        ->assertJsonPath('data.teacher', null);
+});
+
+it('refuses login when a teacher account is bound to an inactive teacher profile', function (): void {
+    $this->withHeaders(['Origin' => 'http://localhost:5174', 'Referer' => 'http://localhost:5174/']);
+    $teacher = Teacher::query()->create([
+        'employee_no' => 'T-INACTIVE-001',
+        'name' => '已停用教师',
+        'is_active' => false,
+    ]);
+    User::factory()->create([
+        'email' => 'inactive-teacher@example.test',
+        'password' => 'Permanent5678',
+        'role' => Role::Teacher,
+        'teacher_id' => $teacher->id,
+        'must_change_password' => false,
+    ]);
+
+    $this->postJson('/api/v1/auth/login', [
+        'email' => 'inactive-teacher@example.test',
+        'password' => 'Permanent5678',
+    ])->assertUnprocessable()
+        ->assertJsonPath('code', 'INVALID_CREDENTIALS');
+    $this->getJson('/api/v1/me')->assertUnauthorized();
 });
 
 it('protects the last enabled administrator', function (): void {

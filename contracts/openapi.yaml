@@ -38,11 +38,13 @@ tags:
   - name: 自动排课
     description: 求解任务、进度、候选方案、诊断和采用。
   - name: 课表版本
-    description: 草稿、当前课表和历史版本切换。
+    description: 草稿、日期生效区间、当前课表和历史版本切换。
   - name: 课表
     description: 手工排课、冲突、锁定、校验与导出。
   - name: 日常运行
     description: 按实际日期处理临时调课、请假与代课，不修改基础周课表。
+  - name: 教师课表
+    description: 教师账号只读查看本人叠加长期与临时调整后的实际课表。
   - name: 运维
     description: 进程和数据库就绪状态。
 x-role-permission-matrix:
@@ -52,6 +54,15 @@ x-role-permission-matrix:
   viewer:
     description: 只读查看当前上下文及课表，并按班级、教师或教室导出 CSV；不能执行任何业务写入。
     operations: [authenticated reads, POST /api/v1/auth/logout, POST /api/v1/auth/change-password]
+  teacher:
+    description: 仅可读取当前账号绑定教师的实际课表，不能访问教务管理接口或读取其他教师课表。
+    operations:
+      - GET /api/v1/me
+      - GET /api/v1/teacher/me/timetable
+      - GET /api/v1/teacher/me/classes
+      - GET /api/v1/teacher/me/classes/{schoolClass}/timetable
+      - POST /api/v1/auth/logout
+      - POST /api/v1/auth/change-password
   scheduler:
     description: 包含查看者权限，并可维护学年学期、基础资料、班级配置、作息、任课关系与课表。
     exclusions:
@@ -664,6 +675,71 @@ paths:
         "412": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
         "428": { $ref: "#/components/responses/Problem" }
+  /api/v1/teacher/me/timetable:
+    get:
+      operationId: getTeacherOwnTimetable
+      tags: [教师课表]
+      summary: 查看当前教师最多连续 14 天的实际课表
+      parameters:
+        - name: from
+          in: query
+          required: false
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: false
+          schema: { type: string, format: date }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /api/v1/teacher/me/classes:
+    get:
+      operationId: getTeacherOwnClasses
+      tags: [教师课表]
+      summary: 按日期生效的长期课表查询当前教师有权查看的任课班级
+      parameters:
+        - name: from
+          in: query
+          required: false
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: false
+          schema: { type: string, format: date }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /api/v1/teacher/me/classes/{schoolClass}/timetable:
+    get:
+      operationId: getTeacherAuthorizedClassTimetable
+      tags: [教师课表]
+      summary: 查看有长期任课权限班级叠加临时调整后的实际课表
+      parameters:
+        - name: schoolClass
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+        - name: from
+          in: query
+          required: false
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: false
+          schema: { type: string, format: date }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
   /api/v1/school-settings:
     get:
       operationId: getschoolSettings
@@ -1786,6 +1862,56 @@ paths:
         "412": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
         "428": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/long-term-adjustments:
+    get:
+      operationId: getSemesterLongTermAdjustments
+      tags: [课表版本]
+      summary: 查询按日期连续覆盖学期的基础课表生效区间
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: publishSemesterLongTermAdjustment
+      tags: [课表版本]
+      summary: 在指定日期区间发布完整草稿并迁移已有临时调整
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LongTermAdjustmentWrite" }
+      responses:
+        "201": { $ref: "#/components/responses/Created" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "412": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/long-term-adjustments/preview:
+    post:
+      operationId: previewSemesterLongTermAdjustment
+      tags: [课表版本]
+      summary: 发布前检查草稿完整性以及临时调课与代课迁移影响
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LongTermAdjustmentWrite" }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
   /api/v1/semesters/{semester}/timetable-versions/compare:
     get:
       operationId: compareSemesterTimetableVersions
@@ -2678,7 +2804,7 @@ paths:
         - $ref: "#/components/parameters/Search"
         - name: role
           in: query
-          schema: { type: string, enum: [admin, scheduler, viewer] }
+          schema: { type: string, enum: [admin, scheduler, viewer, teacher] }
         - $ref: "#/components/parameters/ResourceStatus"
         - $ref: "#/components/parameters/Sort"
         - $ref: "#/components/parameters/Direction"
@@ -2975,6 +3101,15 @@ components:
     OperationalStatus:
       type: string
       enum: [draft, active, cancelled]
+    LongTermAdjustmentWrite:
+      type: object
+      additionalProperties: false
+      required: [version_id, effective_from, effective_to, reason]
+      properties:
+        version_id: { type: integer, minimum: 1 }
+        effective_from: { type: string, format: date }
+        effective_to: { type: string, format: date }
+        reason: { type: string, minLength: 2, maxLength: 500 }
     CalendarExceptionWrite:
       type: object
       additionalProperties: false

@@ -17,6 +17,7 @@ use App\Modules\Timetable\Models\TimetableEntry;
 use App\Modules\Timetable\Models\TimetableVersion;
 use App\Support\ApiProblemException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class TimetableVersionService
 {
@@ -185,6 +186,7 @@ class TimetableVersionService
         foreach ($candidate->entries->sortBy('id') as $candidateEntry) {
             $assignment = $candidateEntry->teachingAssignment;
             $entryId = (int) DB::table('timetable_entries')->insertGetId([
+                'entry_key' => (string) Str::uuid(),
                 'semester_id' => $semester->id,
                 'timetable_version_id' => $version->id,
                 'teaching_assignment_id' => $assignment->id,
@@ -330,6 +332,7 @@ class TimetableVersionService
                 $timestamp = now();
                 foreach ($entries as $entry) {
                     $newEntryId = (int) DB::table('timetable_entries')->insertGetId([
+                        'entry_key' => $entry->entry_key ?? (string) Str::uuid(),
                         'semester_id' => $entry->semester_id,
                         'timetable_version_id' => $target->id,
                         'teaching_assignment_id' => $entry->teaching_assignment_id,

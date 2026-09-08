@@ -1,4 +1,4 @@
-export type Role = "admin" | "scheduler" | "viewer"
+export type Role = "admin" | "scheduler" | "viewer" | "teacher"
 export type LifecycleStatus = "draft" | "open" | "closed"
 export type ResourceStatus = "active" | "inactive"
 export type AssignmentStatus = "draft" | "confirmed" | "inactive"
@@ -30,6 +30,8 @@ export interface User {
   name: string
   email: string
   role: Role
+  teacher_id?: number | null
+  teacher?: Pick<Teacher, "id" | "name" | "employee_no" | "is_active"> | null
   is_active: boolean
   must_change_password: boolean
   created_at?: string
@@ -363,6 +365,22 @@ export interface TimetableVersion {
   entries_count?: number
   created_at: string
   activated_at: string | null
+}
+
+export interface TimetableEffectivePeriod {
+  id: number
+  semester_id: number
+  timetable_version_id: number
+  effective_from: string
+  effective_to: string
+  status: "active" | "cancelled"
+  reason: string
+  created_by: number
+  timetable_version: Pick<
+    TimetableVersion,
+    "id" | "version_no" | "name" | "status" | "source" | "activated_at"
+  >
+  creator: Pick<User, "id" | "name">
 }
 
 export interface TimetableEntry {

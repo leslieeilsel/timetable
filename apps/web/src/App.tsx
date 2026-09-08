@@ -4,6 +4,7 @@ import { useAuth } from "@/lib/auth"
 import { pageTitleForPath, SYSTEM_NAME } from "@/lib/brand"
 import { useSchoolContext } from "@/lib/queries"
 import { semesterPath, type SemesterDestination } from "@/lib/semester"
+import type { Role } from "@/lib/types"
 import { LoadingState } from "@/components/page"
 import { WorkspaceLoadingState } from "@/components/workspace-loading-state"
 
@@ -79,6 +80,11 @@ const TeacherLeavesPage = lazy(() =>
     default: module.TeacherLeavesPage,
   })),
 )
+const LongTermAdjustmentsPage = lazy(() =>
+  import("@/pages/long-term-adjustments-page").then((module) => ({
+    default: module.LongTermAdjustmentsPage,
+  })),
+)
 const UsersPage = lazy(() =>
   import("@/pages/system-pages").then((module) => ({ default: module.UsersPage })),
 )
@@ -86,13 +92,7 @@ const SettingsPage = lazy(() =>
   import("@/pages/system-pages").then((module) => ({ default: module.SettingsPage })),
 )
 
-function RequireRole({
-  roles,
-  children,
-}: {
-  roles: Array<"admin" | "scheduler" | "viewer">
-  children: ReactNode
-}) {
+function RequireRole({ roles, children }: { roles: Role[]; children: ReactNode }) {
   const { user } = useAuth()
   return user && roles.includes(user.role) ? children : <Navigate to="/" replace />
 }
@@ -238,6 +238,14 @@ export default function App() {
               }
             />
             <Route
+              path="daily/long-term"
+              element={
+                <RequireRole roles={["admin", "scheduler"]}>
+                  <CurrentSemesterNavigate destination="long-term" />
+                </RequireRole>
+              }
+            />
+            <Route
               path="daily/leaves"
               element={
                 <RequireRole roles={["admin", "scheduler"]}>
@@ -291,6 +299,14 @@ export default function App() {
               element={
                 <RequireRole roles={["admin", "scheduler"]}>
                   <DailyAdjustmentsPage />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="semesters/:semesterId/long-term"
+              element={
+                <RequireRole roles={["admin", "scheduler"]}>
+                  <LongTermAdjustmentsPage />
                 </RequireRole>
               }
             />

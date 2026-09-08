@@ -53,6 +53,7 @@ const labels: Record<string, string> = {
   timetable: "课表调整与诊断",
   daily: "日常运行",
   adjustments: "临时调课",
+  "long-term": "长期调课",
   leaves: "请假与代课",
   users: "用户管理",
   settings: "系统设置",

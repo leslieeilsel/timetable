@@ -174,7 +174,7 @@ class TeacherLeaveController
             'entry_id' => ['required', 'integer'],
             'date' => ['required', 'date_format:Y-m-d'],
         ]);
-        $entry = $this->entryForCurrentVersion($semester, (int) $data['entry_id']);
+        $entry = $this->entryForDate($semester, (int) $data['entry_id'], $data['date']);
         $this->assertAffected($semester, $leave, $entry, $data['date']);
         $settings = AppSetting::query()->findOrFail(1);
 
@@ -222,7 +222,7 @@ class TeacherLeaveController
                     ]);
                 }
                 $seen[$pair] = true;
-                $entry = $this->entryForCurrentVersion($lockedSemester, (int) $item['entry_id']);
+                $entry = $this->entryForDate($lockedSemester, (int) $item['entry_id'], $item['date']);
                 $this->assertAffected($lockedSemester, $lockedLeave, $entry, $item['date']);
                 $entry->loadMissing('teachingAssignment');
                 if (! $entry->teachingAssignment->allows_substitution) {
@@ -333,9 +333,9 @@ class TeacherLeaveController
         return [$startsAt, $endsAt];
     }
 
-    private function entryForCurrentVersion(Semester $semester, int $entryId): TimetableEntry
+    private function entryForDate(Semester $semester, int $entryId, string $date): TimetableEntry
     {
-        $version = $this->daily->currentVersion($semester);
+        $version = $this->daily->versionForDate($semester, $date);
 
         return TimetableEntry::query()->with([
             'teacher', 'teachers', 'course', 'item', 'schoolClasses', 'teachingAssignment',

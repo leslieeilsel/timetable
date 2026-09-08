@@ -12,6 +12,7 @@ use App\Modules\Scheduling\Models\SchedulingConstraint;
 use App\Modules\SemesterClassSetting\Models\SemesterClassSetting;
 use App\Modules\TeachingAssignment\Models\TeachingAssignment;
 use App\Modules\TeachingAssignment\Models\TeachingGroup;
+use App\Modules\Timetable\Models\TimetableEffectivePeriod;
 use App\Modules\Timetable\Models\TimetableEntry;
 use App\Modules\Timetable\Models\TimetableVersion;
 use Illuminate\Database\Eloquent\Collection;
@@ -47,6 +48,7 @@ use Illuminate\Support\Carbon;
  * @property-read Collection<int, CalendarException> $calendarExceptions
  * @property-read Collection<int, TeacherLeave> $teacherLeaves
  * @property-read Collection<int, TimetableEntry> $timetableEntries
+ * @property-read Collection<int, TimetableEffectivePeriod> $timetableEffectivePeriods
  */
 class Semester extends Model
 {
@@ -142,5 +144,11 @@ class Semester extends Model
     public function timetableEntries(): HasMany
     {
         return $this->hasMany(TimetableEntry::class);
+    }
+
+    /** @return HasMany<TimetableEffectivePeriod, $this> */
+    public function timetableEffectivePeriods(): HasMany
+    {
+        return $this->hasMany(TimetableEffectivePeriod::class);
     }
 }

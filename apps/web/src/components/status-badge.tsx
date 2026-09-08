@@ -12,10 +12,12 @@ const labels: Record<string, string> = {
   admin: "管理员",
   scheduler: "排课员",
   viewer: "查看者",
+  teacher: "教师",
+  historical: "历史版本",
 }
 
 export function StatusBadge({ value, label }: { value: string; label?: string }) {
-  if (["admin", "scheduler", "viewer"].includes(value)) {
+  if (["admin", "scheduler", "viewer", "teacher"].includes(value)) {
     return (
       <Badge
         variant="outline"
@@ -35,7 +37,7 @@ export function StatusBadge({ value, label }: { value: string; label?: string })
         "inline-flex items-center gap-2 text-sm font-medium whitespace-nowrap",
         ["open", "active", "confirmed"].includes(value) && "text-emerald-700",
         value === "draft" && "text-amber-700",
-        ["closed", "inactive", "cancelled"].includes(value) && "text-slate-500",
+        ["closed", "inactive", "cancelled", "historical"].includes(value) && "text-slate-500",
       )}
     >
       <span
@@ -43,7 +45,7 @@ export function StatusBadge({ value, label }: { value: string; label?: string })
           "status-dot",
           ["open", "active", "confirmed"].includes(value) && "bg-emerald-500",
           value === "draft" && "bg-amber-500",
-          ["closed", "inactive", "cancelled"].includes(value) && "bg-slate-400",
+          ["closed", "inactive", "cancelled", "historical"].includes(value) && "bg-slate-400",
         )}
       />
       {label ?? labels[value] ?? value}

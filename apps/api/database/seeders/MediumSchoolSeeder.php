@@ -8,6 +8,7 @@ use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use RuntimeException;
 
 class MediumSchoolSeeder extends Seeder
@@ -41,6 +42,7 @@ class MediumSchoolSeeder extends Seeder
         DB::transaction(function (): void {
             $users = $this->seedUsers();
             $catalog = $this->seedCatalog();
+            $this->seedTeacherAccount($catalog['core_teacher_ids'][0]);
             $calendar = $this->seedCalendar();
             $this->clearOwnedSemesterData($calendar['semester_ids']);
 
@@ -87,6 +89,17 @@ class MediumSchoolSeeder extends Seeder
                     DB::table('semesters')->where('id', $semester['id'])->update([
                         'current_timetable_version_id' => $timetable['version_id'],
                         'timetable_revision' => $timetable['entry_count'],
+                        'updated_at' => now(),
+                    ]);
+                    DB::table('timetable_effective_periods')->insert([
+                        'semester_id' => $semester['id'],
+                        'timetable_version_id' => $timetable['version_id'],
+                        'effective_from' => $semester['start_date'],
+                        'effective_to' => $semester['end_date'],
+                        'status' => 'active',
+                        'reason' => '初始演示课表',
+                        'created_by' => $users['scheduler_id'],
+                        'created_at' => now(),
                         'updated_at' => now(),
                     ]);
                     if ($semester['status'] === 'open') {
@@ -171,6 +184,21 @@ class MediumSchoolSeeder extends Seeder
             'scheduler_id' => $this->idBy('users', 'email', 'demo-scheduler@example.test'),
             'viewer_id' => $this->idBy('users', 'email', 'demo-viewer@example.test'),
         ];
+    }
+
+    private function seedTeacherAccount(int $teacherId): void
+    {
+        User::query()->updateOrCreate(
+            ['email' => 'demo-teacher@example.test'],
+            [
+                'name' => '演示教师',
+                'password' => Hash::make('DemoTeacher2026!'),
+                'role' => 'teacher',
+                'teacher_id' => $teacherId,
+                'is_active' => true,
+                'must_change_password' => false,
+            ],
+        );
     }
 
     /**
@@ -338,7 +366,7 @@ class MediumSchoolSeeder extends Seeder
     /**
      * @return array{
      *     years: list<array{id: int, name: string, code_year: int}>,
-     *     semesters: list<array{id: int, academic_year_id: int, academic_year_name: string, sequence: int, name: string, status: string}>,
+     *     semesters: list<array{id: int, academic_year_id: int, academic_year_name: string, sequence: int, name: string, start_date: string, end_date: string, status: string}>,
      *     semester_ids: list<int>, current_semester_id: int, current_year_id: int
      * }
      */
@@ -399,7 +427,10 @@ class MediumSchoolSeeder extends Seeder
                 $semesters[] = [
                     'id' => $semesterId, 'academic_year_id' => $yearId,
                     'academic_year_name' => $definition['name'], 'sequence' => $semesterDefinition['sequence'],
-                    'name' => $semesterDefinition['name'], 'status' => $semesterDefinition['status'],
+                    'name' => $semesterDefinition['name'],
+                    'start_date' => $semesterDefinition['start_date'],
+                    'end_date' => $semesterDefinition['end_date'],
+                    'status' => $semesterDefinition['status'],
                 ];
                 if ($definition['code_year'] === 2026 && $semesterDefinition['sequence'] === 1) {
                     $currentSemesterId = $semesterId;
@@ -432,6 +463,7 @@ class MediumSchoolSeeder extends Seeder
         DB::table('calendar_exceptions')->whereIn('semester_id', $semesterIds)->delete();
         DB::table('timetable_entries')->whereIn('semester_id', $semesterIds)->delete();
         DB::table('semesters')->whereIn('id', $semesterIds)->update(['current_timetable_version_id' => null]);
+        DB::table('timetable_effective_periods')->whereIn('semester_id', $semesterIds)->delete();
         DB::table('timetable_versions')->whereIn('semester_id', $semesterIds)->delete();
         $runIds = DB::table('schedule_runs')->whereIn('semester_id', $semesterIds)->pluck('id');
         $candidateIds = DB::table('schedule_candidates')->whereIn('schedule_run_id', $runIds)->pluck('id');
@@ -727,6 +759,7 @@ class MediumSchoolSeeder extends Seeder
                 $assignment = $lesson['assignment'];
                 $itemId = $courseItems[$lesson['color']];
                 $entries[] = [
+                    'entry_key' => (string) Str::uuid(),
                     'semester_id' => $semester['id'], 'timetable_version_id' => $versionId,
                     'teaching_assignment_id' => $assignment['id'],
                     'school_class_id' => $assignment['school_class_id'], 'teacher_id' => $assignment['teacher_id'],

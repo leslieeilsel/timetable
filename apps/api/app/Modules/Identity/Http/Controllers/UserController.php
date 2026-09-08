@@ -34,6 +34,7 @@ class UserController
             'per_page' => ['sometimes', 'integer', Rule::in([20, 50, 100])],
         ]);
         $query = User::query()
+            ->with('teacher:id,name,employee_no,is_active')
             ->when(isset($filters['search']), function ($query) use ($filters): void {
                 $search = '%'.Normalizer::text($filters['search']).'%';
                 $query->where(fn ($match) => $match->where('name', 'like', $search)
@@ -61,8 +62,15 @@ class UserController
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:100'],
-            'email' => ['required', 'string', 'email:rfc', 'max:255'],
+            'email' => ['required', 'string', 'email:rfc', 'max:255', Rule::unique('users', 'email')],
             'role' => ['required', Rule::enum(Role::class)],
+            'teacher_id' => [
+                'nullable', 'integer',
+                'required_if:role,'.Role::Teacher->value,
+                'prohibited_unless:role,'.Role::Teacher->value,
+                Rule::exists('teachers', 'id')->where('is_active', true),
+                Rule::unique('users', 'teacher_id'),
+            ],
             'temporary_password' => ['required', Password::min(12)->letters()->mixedCase()->numbers()],
         ]);
 
@@ -72,13 +80,14 @@ class UserController
                 'name' => Normalizer::text($validated['name']),
                 'email' => Normalizer::email($validated['email']),
                 'role' => $validated['role'],
+                'teacher_id' => $validated['teacher_id'] ?? null,
                 'password' => $validated['temporary_password'],
                 'is_active' => true,
                 'must_change_password' => true,
             ]);
             $this->audit->record($request, $actor, 'create', 'user', $user->id, null, $this->data($user));
 
-            return $user;
+            return $user->refresh();
         }, 3);
 
         return response()->json(['data' => $this->data($user)], 201)
@@ -91,6 +100,11 @@ class UserController
             'name' => ['sometimes', 'required', 'string', 'max:100'],
             'email' => ['sometimes', 'required', 'string', 'email:rfc', 'max:255', Rule::unique('users')->ignore($user->id)],
             'role' => ['sometimes', Rule::enum(Role::class)],
+            'teacher_id' => [
+                'sometimes', 'nullable', 'integer',
+                Rule::exists('teachers', 'id')->where('is_active', true),
+                Rule::unique('users', 'teacher_id')->ignore($user->id),
+            ],
             'is_active' => ['sometimes', 'boolean'],
         ]);
 
@@ -101,6 +115,14 @@ class UserController
             $before = $this->data($target);
             $nextRole = isset($validated['role']) ? Role::from($validated['role']) : $target->role;
             $nextActive = $validated['is_active'] ?? $target->is_active;
+            $nextTeacherId = $nextRole === Role::Teacher
+                ? (array_key_exists('teacher_id', $validated) ? $validated['teacher_id'] : $target->teacher_id)
+                : null;
+            if ($nextRole === Role::Teacher && $nextTeacherId === null) {
+                throw new ApiProblemException('TEACHER_BINDING_REQUIRED', '教师账号必须绑定一名启用中的教师', 422, [
+                    'errors' => ['teacher_id' => ['请选择该账号对应的教师']],
+                ]);
+            }
             if ($target->role === Role::Admin && $target->is_active && ($nextRole !== Role::Admin || ! $nextActive)) {
                 $enabledAdmins = User::query()->where('role', Role::Admin->value)->where('is_active', true)->lockForUpdate()->count();
                 if ($enabledAdmins <= 1) {
@@ -112,13 +134,15 @@ class UserController
                 'name' => isset($validated['name']) ? Normalizer::text($validated['name']) : $target->name,
                 'email' => isset($validated['email']) ? Normalizer::email($validated['email']) : $target->email,
                 'role' => $nextRole,
+                'teacher_id' => $nextTeacherId,
                 'is_active' => $nextActive,
             ]);
-            $sensitiveChanged = $target->isDirty(['email', 'role', 'is_active']);
+            $sensitiveChanged = $target->isDirty(['email', 'role', 'teacher_id', 'is_active']);
             if ($sensitiveChanged) {
                 $target->auth_version++;
             }
             $target->save();
+            $target->unsetRelation('teacher');
             if ($sensitiveChanged) {
                 DB::table('sessions')->where('user_id', $target->id)->delete();
             }
@@ -171,6 +195,8 @@ class UserController
             'name' => $user->name,
             'email' => $user->email,
             'role' => $user->role->value,
+            'teacher_id' => $user->teacher_id,
+            'teacher' => $user->teacher?->only(['id', 'name', 'employee_no', 'is_active']),
             'is_active' => $user->is_active,
             'must_change_password' => $user->must_change_password,
             'created_at' => $user->created_at?->toISOString(),
@@ -203,6 +229,7 @@ class UserController
             'name' => $user->name,
             'email' => $user->email,
             'role' => $user->role->value,
+            'teacher_id' => $user->teacher_id,
             'is_active' => $user->is_active,
             'must_change_password' => $user->must_change_password,
             'auth_version' => $user->auth_version,

@@ -3,10 +3,12 @@
 namespace App\Models;
 
 use App\Enums\Role;
+use App\Modules\Resources\Models\Teacher;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -16,11 +18,13 @@ use Illuminate\Notifications\Notifiable;
  * @property string $email
  * @property string $password
  * @property Role $role
+ * @property int|null $teacher_id
  * @property bool $is_active
  * @property bool $must_change_password
  * @property int $auth_version
+ * @property-read Teacher|null $teacher
  */
-#[Fillable(['name', 'email', 'password', 'role', 'is_active', 'must_change_password', 'auth_version'])]
+#[Fillable(['name', 'email', 'password', 'role', 'teacher_id', 'is_active', 'must_change_password', 'auth_version'])]
 #[Hidden(['password', 'remember_token', 'auth_version'])]
 class User extends Authenticatable
 {
@@ -41,5 +45,11 @@ class User extends Authenticatable
             'must_change_password' => 'boolean',
             'auth_version' => 'integer',
         ];
+    }
+
+    /** @return BelongsTo<Teacher, $this> */
+    public function teacher(): BelongsTo
+    {
+        return $this->belongsTo(Teacher::class);
     }
 }

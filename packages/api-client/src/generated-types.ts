@@ -352,6 +352,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/teacher/me/timetable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 查看当前教师最多连续 14 天的实际课表 */
+        get: operations["getTeacherOwnTimetable"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teacher/me/classes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 按日期生效的长期课表查询当前教师有权查看的任课班级 */
+        get: operations["getTeacherOwnClasses"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teacher/me/classes/{schoolClass}/timetable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 查看有长期任课权限班级叠加临时调整后的实际课表 */
+        get: operations["getTeacherAuthorizedClassTimetable"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/school-settings": {
         parameters: {
             query?: never;
@@ -997,6 +1048,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/semesters/{semester}/long-term-adjustments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 查询按日期连续覆盖学期的基础课表生效区间 */
+        get: operations["getSemesterLongTermAdjustments"];
+        put?: never;
+        /** 在指定日期区间发布完整草稿并迁移已有临时调整 */
+        post: operations["publishSemesterLongTermAdjustment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/long-term-adjustments/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 发布前检查草稿完整性以及临时调课与代课迁移影响 */
+        post: operations["previewSemesterLongTermAdjustment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/semesters/{semester}/timetable-versions/compare": {
         parameters: {
             query?: never;
@@ -1630,6 +1716,14 @@ export interface components {
         CalendarExceptionType: "move" | "swap" | "teacher_change" | "room_change" | "cancel" | "makeup" | "activity";
         /** @enum {string} */
         OperationalStatus: "draft" | "active" | "cancelled";
+        LongTermAdjustmentWrite: {
+            version_id: number;
+            /** Format: date */
+            effective_from: string;
+            /** Format: date */
+            effective_to: string;
+            reason: string;
+        };
         CalendarExceptionWrite: {
             /** Format: date */
             effective_date: string;
@@ -2484,6 +2578,66 @@ export interface operations {
             412: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
             428: components["responses"]["Problem"];
+        };
+    };
+    getTeacherOwnTimetable: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    getTeacherOwnClasses: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    getTeacherAuthorizedClassTimetable: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path: {
+                schoolClass: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
         };
     };
     getschoolSettings: {
@@ -3817,6 +3971,72 @@ export interface operations {
             428: components["responses"]["Problem"];
         };
     };
+    getSemesterLongTermAdjustments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+        };
+    };
+    publishSemesterLongTermAdjustment: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LongTermAdjustmentWrite"];
+            };
+        };
+        responses: {
+            201: components["responses"]["Created"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+        };
+    };
+    previewSemesterLongTermAdjustment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LongTermAdjustmentWrite"];
+            };
+        };
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
     compareSemesterTimetableVersions: {
         parameters: {
             query: {
@@ -4787,7 +5007,7 @@ export interface operations {
         parameters: {
             query?: {
                 search?: components["parameters"]["Search"];
-                role?: "admin" | "scheduler" | "viewer";
+                role?: "admin" | "scheduler" | "viewer" | "teacher";
                 status?: components["parameters"]["ResourceStatus"];
                 sort?: components["parameters"]["Sort"];
                 direction?: components["parameters"]["Direction"];

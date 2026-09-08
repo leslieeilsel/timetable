@@ -2,9 +2,11 @@
 
 namespace App\Modules\Resources\Models;
 
+use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
  * @property int $id
@@ -12,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
  * @property string $name
  * @property bool $is_active
  * @property-read Collection<int, Course> $courses
+ * @property-read User|null $user
  */
 class Teacher extends Model
 {
@@ -26,5 +29,11 @@ class Teacher extends Model
     public function courses(): BelongsToMany
     {
         return $this->belongsToMany(Course::class, 'teacher_course');
+    }
+
+    /** @return HasOne<User, $this> */
+    public function user(): HasOne
+    {
+        return $this->hasOne(User::class);
     }
 }

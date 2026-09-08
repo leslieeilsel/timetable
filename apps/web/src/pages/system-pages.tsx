@@ -3,11 +3,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useSearchParams } from "react-router"
 import { CopyIcon, PlusIcon } from "lucide-react"
 import { toast } from "sonner"
-import { api, apiMessage, jsonBody } from "@/lib/api"
-import type { AcademicYear, PaginationMeta, Semester, User } from "@/lib/types"
+import { api, apiAllPages, apiMessage, jsonBody } from "@/lib/api"
+import type { AcademicYear, PaginationMeta, Semester, Teacher, User } from "@/lib/types"
 import { EmptyList, ErrorState, Field, LoadingState, PageHeader } from "@/components/page"
 import { ListToolbar, ToolbarSelect } from "@/components/list-toolbar"
 import { SimpleSelect } from "@/components/simple-select"
+import { SearchablePicker } from "@/components/searchable-picker"
 import { StatusBadge } from "@/components/status-badge"
 import { TableActionButton } from "@/components/table-action-button"
 import { TablePagination } from "@/components/table-pagination"
@@ -41,7 +42,7 @@ export function UsersPage() {
   const [resetting, setResetting] = useState<ManagedUser | null>(null)
   const [search, setSearch] = useState(() => urlParams.get("q") ?? "")
   const [roleFilter, setRoleFilter] = useState(() =>
-    enumParam(urlParams, "role", ["all", "admin", "scheduler", "viewer"], "all"),
+    enumParam(urlParams, "role", ["all", "admin", "scheduler", "viewer", "teacher"], "all"),
   )
   const [statusFilter, setStatusFilter] = useState(() =>
     enumParam(urlParams, "status", ["all", "active", "inactive"], "all"),
@@ -104,7 +105,7 @@ export function UsersPage() {
     <>
       <PageHeader
         title="用户管理"
-        description="账号权限分为管理员、排课员和查看者；敏感变更会撤销该账号的现有会话。"
+        description="管理教务人员与教师账号；教师账号只能登录独立课表端查看本人课表。"
       />
       <div className="p-5 md:p-7">
         {!users.data?.data.length && !hasFilters ? (
@@ -127,6 +128,7 @@ export function UsersPage() {
                 <option value="admin">管理员</option>
                 <option value="scheduler">排课员</option>
                 <option value="viewer">查看者</option>
+                <option value="teacher">教师</option>
               </ToolbarSelect>
               <ToolbarSelect value={statusFilter} onChange={setStatusFilter} label="状态筛选">
                 <option value="all">全部状态</option>
@@ -143,6 +145,7 @@ export function UsersPage() {
                     <TableHead>姓名</TableHead>
                     <TableHead>邮箱</TableHead>
                     <TableHead>角色</TableHead>
+                    <TableHead>教师档案</TableHead>
                     <TableHead>状态</TableHead>
                     <TableHead>密码</TableHead>
                     <TableHead className="text-right">操作</TableHead>
@@ -179,6 +182,16 @@ export function UsersPage() {
                       </TableCell>
                       <TableCell data-label="角色">
                         <StatusBadge value={user.role} />
+                      </TableCell>
+                      <TableCell data-label="教师档案">
+                        {user.teacher ? (
+                          <span className="text-sm">
+                            {user.teacher.name}
+                            {user.teacher.employee_no ? ` · ${user.teacher.employee_no}` : ""}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
                       </TableCell>
                       <TableCell data-label="状态">
                         <StatusBadge value={user.is_active ? "active" : "inactive"} />
@@ -245,6 +258,11 @@ function UserDialog({
   onSaved: () => Promise<void>
 }) {
   const [form, setForm] = useState(() => userForm(user))
+  const teachers = useQuery({
+    queryKey: ["teachers", "user-binding"],
+    queryFn: () => apiAllPages<Teacher>("/api/v1/teachers"),
+    enabled: open,
+  })
   const save = async () => {
     try {
       await api(user ? `/api/v1/users/${user.id}` : "/api/v1/users", {
@@ -252,11 +270,18 @@ function UserDialog({
         etag: user?.etag,
         body: jsonBody(
           user
-            ? { name: form.name, email: form.email, role: form.role, is_active: form.is_active }
+            ? {
+                name: form.name,
+                email: form.email,
+                role: form.role,
+                teacher_id: form.role === "teacher" ? form.teacher_id : null,
+                is_active: form.is_active,
+              }
             : {
                 name: form.name,
                 email: form.email,
                 role: form.role,
+                teacher_id: form.role === "teacher" ? form.teacher_id : null,
                 temporary_password: form.temporary_password,
               },
         ),
@@ -295,13 +320,37 @@ function UserDialog({
             <SimpleSelect
               className="w-full"
               value={form.role}
-              onValueChange={(value) => setForm({ ...form, role: value as ManagedUser["role"] })}
+              onValueChange={(value) =>
+                setForm({
+                  ...form,
+                  role: value as ManagedUser["role"],
+                  teacher_id: value === "teacher" ? form.teacher_id : null,
+                })
+              }
             >
               <option value="viewer">查看者</option>
               <option value="scheduler">排课员</option>
               <option value="admin">管理员</option>
+              <option value="teacher">教师</option>
             </SimpleSelect>
           </Field>
+          {form.role === "teacher" && (
+            <Field label="绑定教师">
+              <SearchablePicker
+                options={(teachers.data?.data ?? []).map((teacher) => ({
+                  id: teacher.id,
+                  label: teacher.name,
+                  description: teacher.employee_no ?? "未填工号",
+                  disabled: !teacher.is_active,
+                }))}
+                ariaLabel="搜索教师"
+                placeholder={teachers.isLoading ? "正在载入教师…" : "选择账号对应的教师"}
+                value={form.teacher_id}
+                onValueChange={(teacherId) => setForm({ ...form, teacher_id: teacherId })}
+                disabled={teachers.isLoading}
+              />
+            </Field>
+          )}
           {user ? (
             <Field label="账号状态">
               <SimpleSelect
@@ -329,7 +378,12 @@ function UserDialog({
             取消
           </Button>
           <Button
-            disabled={!form.name || !form.email || (!user && form.temporary_password.length < 12)}
+            disabled={
+              !form.name ||
+              !form.email ||
+              (form.role === "teacher" && !form.teacher_id) ||
+              (!user && form.temporary_password.length < 12)
+            }
             onClick={() => void save()}
           >
             保存
@@ -345,6 +399,7 @@ function userForm(user: ManagedUser | null | undefined) {
     name: user?.name ?? "",
     email: user?.email ?? "",
     role: user?.role ?? "viewer",
+    teacher_id: user?.teacher_id ?? null,
     is_active: user?.is_active ?? true,
     temporary_password: "",
   }

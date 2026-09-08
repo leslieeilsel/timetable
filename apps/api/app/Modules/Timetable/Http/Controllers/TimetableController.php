@@ -31,6 +31,7 @@ use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -349,6 +350,7 @@ class TimetableController
                 );
                 try {
                     $entry = TimetableEntry::query()->create([
+                        'entry_key' => (string) Str::uuid(),
                         'semester_id' => $lockedSemester->id,
                         'timetable_version_id' => $version->id,
                         'teaching_assignment_id' => $assignment->id,

@@ -29,7 +29,7 @@
         <env name="DB_URL" value=""/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
-        <env name="SANCTUM_STATEFUL_DOMAINS" value="localhost:5173,127.0.0.1:5173"/>
+        <env name="SANCTUM_STATEFUL_DOMAINS" value="localhost:5173,127.0.0.1:5173,localhost:5174,127.0.0.1:5174"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>

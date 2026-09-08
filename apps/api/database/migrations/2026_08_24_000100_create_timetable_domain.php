@@ -481,7 +481,7 @@ return new class extends Migration
         }
 
         $checks = [
-            'users' => ['ck_users_role' => "role in ('admin','scheduler','viewer')"],
+            'users' => ['ck_users_role' => "role in ('admin','scheduler','viewer','teacher')"],
             'academic_years' => [
                 'ck_year_dates' => 'start_date < end_date',
                 'ck_year_status' => "status in ('draft','open','closed')",

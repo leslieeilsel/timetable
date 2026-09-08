@@ -20,6 +20,7 @@ const pageTitles: Record<string, string> = {
   "/scheduling/generate": "方案生成",
   "/scheduling/timetable": "课表调整与诊断",
   "/daily/adjustments": "临时调课",
+  "/daily/long-term": "长期调课",
   "/daily/leaves": "请假与代课",
   "/users": "用户管理",
   "/settings": "系统设置",
@@ -33,6 +34,7 @@ const semesterPageTitles: Record<string, string> = {
   generate: "方案生成",
   timetable: "课表调整与诊断",
   adjustments: "临时调课",
+  "long-term": "长期调课",
   leaves: "请假与代课",
 }
 

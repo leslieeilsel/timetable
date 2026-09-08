@@ -5,8 +5,10 @@ namespace App\Modules\Scheduling\Http\Controllers;
 use App\Modules\AcademicCalendar\Models\AppSetting;
 use App\Modules\AcademicCalendar\Models\Semester;
 use App\Modules\Audit\Services\AuditLogger;
+use App\Modules\DailyOperations\Services\DailyTimetableService;
 use App\Modules\Scheduling\Models\ScheduleCandidate;
 use App\Modules\Scheduling\Models\ScheduleRun;
+use App\Modules\Timetable\Services\TimetableEffectivePeriodService;
 use App\Modules\Timetable\Services\TimetableVersionService;
 use App\Support\ApiProblemException;
 use App\Support\EtagService;
@@ -23,6 +25,8 @@ class ScheduleCandidateController
         private readonly EtagService $etags,
         private readonly AuditLogger $audit,
         private readonly TimetableVersionService $versions,
+        private readonly TimetableEffectivePeriodService $periods,
+        private readonly DailyTimetableService $daily,
     ) {}
 
     public function show(
@@ -135,8 +139,21 @@ class ScheduleCandidateController
             );
             $activate = (bool) ($data['activate'] ?? false);
             $previous = null;
+            $periodResult = null;
             if ($activate) {
                 $previous = $this->versions->activate($lockedSemester, $version);
+                $periodResult = $this->periods->publish(
+                    $lockedSemester,
+                    $version,
+                    $lockedSemester->start_date->toDateString(),
+                    $lockedSemester->end_date->toDateString(),
+                    $actor,
+                    (string) $data['reason'],
+                );
+                foreach ($periodResult['affected_dates'] as $date) {
+                    $daily = $this->daily->forDate($lockedSemester, $date);
+                    $this->daily->assertActualRowsConflictFree($daily['rows'], $date);
+                }
             } else {
                 $lockedSemester->increment('timetable_revision');
                 $lockedSemester->refresh();
@@ -148,6 +165,7 @@ class ScheduleCandidateController
                 'activated' => $activate,
                 'previous_version_id' => $previous?->id,
                 'reason' => $data['reason'] ?? null,
+                'effective_period_id' => $periodResult['period']->id ?? null,
             ]);
 
             return response()->json([

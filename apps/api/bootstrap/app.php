@@ -2,6 +2,8 @@
 
 use App\Http\Middleware\AssignRequestId;
 use App\Http\Middleware\EnsureSessionIsValid;
+use App\Http\Middleware\EnsureStaffRole;
+use App\Http\Middleware\EnsureTeacherRole;
 use App\Modules\Identity\Console\CreateAdminCommand;
 use App\Support\ApiProblemException;
 use Illuminate\Foundation\Application;
@@ -20,7 +22,11 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->statefulApi();
         $middleware->append(AssignRequestId::class);
-        $middleware->alias(['session.valid' => EnsureSessionIsValid::class]);
+        $middleware->alias([
+            'session.valid' => EnsureSessionIsValid::class,
+            'role.staff' => EnsureStaffRole::class,
+            'role.teacher' => EnsureTeacherRole::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

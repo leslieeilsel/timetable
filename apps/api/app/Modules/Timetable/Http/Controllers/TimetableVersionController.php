@@ -7,7 +7,9 @@ use App\Enums\TimetableVersionStatus;
 use App\Modules\AcademicCalendar\Models\AppSetting;
 use App\Modules\AcademicCalendar\Models\Semester;
 use App\Modules\Audit\Services\AuditLogger;
+use App\Modules\DailyOperations\Services\DailyTimetableService;
 use App\Modules\Timetable\Models\TimetableVersion;
+use App\Modules\Timetable\Services\TimetableEffectivePeriodService;
 use App\Modules\Timetable\Services\TimetableVersionComparisonService;
 use App\Modules\Timetable\Services\TimetableVersionService;
 use App\Support\ApiProblemException;
@@ -26,6 +28,8 @@ class TimetableVersionController
         private readonly AuditLogger $audit,
         private readonly TimetableVersionService $versions,
         private readonly TimetableVersionComparisonService $comparisons,
+        private readonly TimetableEffectivePeriodService $periods,
+        private readonly DailyTimetableService $daily,
     ) {}
 
     public function index(Request $request, Semester $semester): JsonResponse
@@ -154,10 +158,23 @@ class TimetableVersionController
             $locked = TimetableVersion::query()->lockForUpdate()->findOrFail($version->id);
             $before = $locked->toArray();
             $previous = $this->versions->activate($lockedSemester, $locked);
+            $periodResult = $this->periods->publish(
+                $lockedSemester,
+                $locked,
+                $lockedSemester->start_date->toDateString(),
+                $lockedSemester->end_date->toDateString(),
+                $actor,
+                $data['reason'],
+            );
+            foreach ($periodResult['affected_dates'] as $date) {
+                $daily = $this->daily->forDate($lockedSemester, $date);
+                $this->daily->assertActualRowsConflictFree($daily['rows'], $date);
+            }
             $this->audit->record($request, $actor, 'activate', 'timetable_version', $locked->id, $before, [
                 ...$locked->fresh()->toArray(),
                 'previous_version_id' => $previous?->id,
                 'reason' => $data['reason'],
+                'effective_period_id' => $periodResult['period']->id,
             ]);
 
             return response()->json([

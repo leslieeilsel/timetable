@@ -1,0 +1,1763 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@font-face {
+  font-family: "Noto Serif SC";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url("@fontsource/noto-serif-sc/files/noto-serif-sc-chinese-simplified-400-normal.woff2")
+    format("woff2");
+}
+
+@font-face {
+  font-family: "Noto Serif SC";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url("@fontsource/noto-serif-sc/files/noto-serif-sc-chinese-simplified-700-normal.woff2")
+    format("woff2");
+}
+
+@theme inline {
+  --font-heading: var(--font-app);
+  --font-sans: var(--font-app);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+}
+
+:root {
+  --font-app: "FZYaSongS-R-GB", "Noto Serif SC", "Songti SC", "STSong", "SimSun", ui-serif, serif;
+  --font-data:
+    "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --background: #fbfbf9;
+  --foreground: #171814;
+  --card: #fbfbf9;
+  --card-foreground: #171814;
+  --popover: #ffffff;
+  --popover-foreground: #171814;
+  --primary: #1e1f1c;
+  --primary-foreground: #ffffff;
+  --secondary: #f1f1ed;
+  --secondary-foreground: #292a25;
+  --muted: #f2f2ee;
+  --muted-foreground: #66685f;
+  --accent: #f0f0eb;
+  --accent-foreground: #171814;
+  --destructive: #c94c4c;
+  --border: #e3e3dc;
+  --input: #d9dad3;
+  --ring: #77796f;
+  --course-morning: #d47416;
+  --course-afternoon: #3474c5;
+  --resize-dur: 300ms;
+  --resize-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --page-slide-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  color-scheme: light;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+    border-color: var(--border);
+    outline-color: color-mix(in srgb, var(--ring), transparent 50%);
+  }
+
+  html {
+    min-height: 100%;
+    scrollbar-gutter: stable both-edges;
+    background: #efefec;
+    font-family: var(--font-app);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    min-width: 320px;
+    min-height: 100dvh;
+    margin: 0;
+    background: #efefec;
+    color: var(--foreground);
+    font-family: var(--font-app);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  button,
+  input {
+    color: inherit;
+    font: inherit;
+  }
+
+  button,
+  a,
+  input {
+    touch-action: manipulation;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: default;
+  }
+}
+
+.teacher-page {
+  min-height: 100dvh;
+  background: #efefec;
+}
+
+.teacher-shell {
+  position: relative;
+  width: 100%;
+  max-width: 430px;
+  min-height: 100dvh;
+  margin: 0 auto;
+  overflow-x: hidden;
+  background: var(--background);
+}
+
+.auth-shell {
+  display: flex;
+  flex-direction: column;
+  padding: max(27px, env(safe-area-inset-top)) 28px max(26px, env(safe-area-inset-bottom));
+}
+
+.auth-brand {
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.auth-content {
+  width: 100%;
+  margin-top: clamp(70px, 16vh, 136px);
+}
+
+.auth-content h1 {
+  margin: 0;
+  font-size: 27px;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.25;
+}
+
+.auth-description {
+  margin: 6px 0 30px;
+  color: var(--muted-foreground);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+}
+
+.field-label {
+  display: block;
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.teacher-input {
+  width: 100%;
+  height: 48px;
+  margin: 0 0 21px;
+  padding: 0 13px;
+  border: 1px solid var(--input);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--foreground);
+  font-family:
+    "PingFang SC",
+    "Microsoft YaHei",
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+  font-size: 15px;
+  line-height: 48px;
+  outline: none;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.teacher-input::placeholder {
+  color: #9a9c94;
+}
+
+.teacher-input:focus {
+  border-color: #7b7d73;
+  box-shadow: 0 0 0 3px rgb(23 24 20 / 7%);
+}
+
+.teacher-input[aria-invalid="true"] {
+  border-color: color-mix(in srgb, var(--destructive), white 44%);
+}
+
+.password-field {
+  position: relative;
+}
+
+.password-field .teacher-input {
+  padding-right: 46px;
+}
+
+.password-toggle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: grid;
+  width: 46px;
+  height: 48px;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: #787a72;
+}
+
+.password-toggle svg {
+  width: 17px;
+  height: 17px;
+  stroke-width: 1.65;
+}
+
+.primary-action {
+  display: inline-flex;
+  width: 100%;
+  height: 48px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 4px;
+  border: 0;
+  border-radius: 5px;
+  background: #1d1e1b;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  transition:
+    background 160ms ease,
+    transform 80ms ease,
+    opacity 160ms ease;
+}
+
+.primary-action:hover {
+  background: #2a2b27;
+}
+
+.primary-action:active {
+  transform: translateY(1px);
+}
+
+.primary-action:disabled {
+  opacity: 0.56;
+}
+
+.primary-action svg {
+  width: 17px;
+  height: 17px;
+}
+
+.form-error {
+  margin: -6px 0 16px;
+  padding: 10px 12px;
+  border-radius: 5px;
+  background: #f9eaea;
+  color: #b64343;
+  font-family:
+    "PingFang SC",
+    "Microsoft YaHei",
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.auth-help {
+  margin: 14px 0 0;
+  color: var(--muted-foreground);
+  text-align: center;
+  font-size: 12px;
+}
+
+.auth-footer {
+  margin-top: auto;
+  padding-top: 44px;
+  color: #92948c;
+  text-align: center;
+  font-size: 11px;
+}
+
+.spin {
+  animation: teacher-spin 800ms linear infinite;
+}
+
+@keyframes teacher-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.password-shell {
+  padding-bottom: max(36px, env(safe-area-inset-bottom));
+}
+
+.plain-header,
+.schedule-header {
+  position: relative;
+  z-index: 20;
+  display: grid;
+  height: calc(58px + env(safe-area-inset-top));
+  align-items: end;
+  padding: env(safe-area-inset-top) 16px 0;
+  border-bottom: 1px solid var(--border);
+  background: rgb(251 251 249 / 96%);
+}
+
+.plain-header {
+  grid-template-columns: 44px 1fr 44px;
+  align-items: center;
+}
+
+.plain-header strong {
+  align-self: center;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.header-icon-button {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  margin-left: -9px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.header-icon-button:hover {
+  background: var(--muted);
+}
+
+.header-icon-button svg {
+  width: 19px;
+  height: 19px;
+  stroke-width: 1.65;
+}
+
+.password-content {
+  padding: 22px 28px 40px;
+}
+
+.password-intro {
+  margin: 0 0 38px;
+  color: var(--muted-foreground);
+  font-size: 13px;
+}
+
+.password-control {
+  display: flex;
+  flex-direction: column;
+}
+
+.password-form .teacher-input {
+  margin-bottom: 26px;
+}
+
+.password-hint {
+  margin: -19px 0 28px;
+  color: var(--muted-foreground);
+  font-family:
+    "PingFang SC",
+    "Microsoft YaHei",
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+  font-size: 11px;
+}
+
+.password-submit {
+  margin-top: 13px;
+}
+
+.text-action {
+  display: block;
+  margin: 20px auto 0;
+  border: 0;
+  background: transparent;
+  color: #5f6159;
+  font-size: 13px;
+}
+
+.schedule-header {
+  position: sticky;
+  top: 0;
+  grid-template-columns: 38px minmax(0, 1fr) 38px;
+  align-items: center;
+  padding-right: 15px;
+  padding-left: 15px;
+}
+
+.header-balance {
+  width: 36px;
+  height: 36px;
+}
+
+.context-trigger,
+.context-label {
+  justify-self: center;
+  min-width: 0;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.context-trigger {
+  display: inline-flex;
+  height: 40px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 15px;
+  font-weight: 600;
+  outline: none;
+}
+
+.context-trigger:hover,
+.context-trigger[data-popup-open] {
+  background: var(--muted);
+}
+
+.context-trigger:focus-visible,
+.avatar-trigger:focus-visible,
+.header-icon-button:focus-visible,
+.return-today-button:focus-visible,
+.week-nav-button:focus-visible,
+.month-calendar-toolbar button:focus-visible,
+.month-day:focus-visible,
+.calendar-handle:focus-visible,
+.week-group-title:focus-visible,
+.view-tabs button:focus-visible,
+.password-toggle:focus-visible,
+.text-action:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--foreground), transparent 58%);
+  outline-offset: 2px;
+}
+
+.context-trigger svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 1.8;
+  transition: transform 180ms ease;
+}
+
+.context-trigger[data-popup-open] svg {
+  transform: rotate(180deg);
+}
+
+.context-label {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.avatar-trigger,
+.account-avatar {
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-family:
+    "PingFang SC",
+    "Microsoft YaHei",
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+  font-weight: 600;
+}
+
+.avatar-trigger {
+  width: 34px;
+  height: 34px;
+  justify-self: end;
+  border: 1px solid #d9dad4;
+  background: #f1f1ed;
+  color: #43453f;
+  font-size: 13px;
+}
+
+.avatar-trigger:hover,
+.avatar-trigger[data-popup-open] {
+  border-color: #c5c6be;
+  background: #eaeae5;
+}
+
+.teacher-menu {
+  min-width: 196px;
+  overflow: hidden;
+  padding: 5px;
+  border: 1px solid #deded7;
+  border-radius: 7px;
+  background: var(--popover);
+  box-shadow: 0 10px 28px rgb(27 28 24 / 10%);
+  opacity: 0;
+  transform: translateY(-3px) scale(0.985);
+  transform-origin: top center;
+  outline: none;
+  transition:
+    opacity 160ms ease,
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.teacher-menu-open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.teacher-menu-closing {
+  opacity: 0;
+  transform: translateY(-2px) scale(0.99);
+  transition-duration: 110ms;
+}
+
+.teacher-menu-label {
+  padding: 7px 10px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+
+.teacher-menu-item {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 5px;
+  font-size: 13px;
+  outline: none;
+  user-select: none;
+}
+
+.teacher-menu-item[data-highlighted] {
+  background: var(--accent);
+}
+
+.teacher-menu-item svg {
+  width: 16px;
+  height: 16px;
+  color: #696b63;
+  stroke-width: 1.6;
+}
+
+.teacher-menu-separator {
+  height: 1px;
+  margin: 4px -5px;
+  background: var(--border);
+}
+
+.context-menu {
+  width: 214px;
+}
+
+.active-context-item {
+  font-weight: 600;
+}
+
+.context-check {
+  margin-left: auto;
+  color: var(--foreground) !important;
+}
+
+.account-menu {
+  width: 188px;
+  transform-origin: top right;
+}
+
+.account-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 9px;
+  padding-bottom: 9px;
+  color: var(--foreground);
+}
+
+.account-summary > span:last-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.account-summary strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--foreground);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.account-summary small {
+  margin-top: 2px;
+  color: var(--muted-foreground);
+  font-size: 10px;
+}
+
+.account-avatar {
+  width: 29px;
+  height: 29px;
+  flex: none;
+  background: #eeeeea;
+  color: #50524b;
+  font-size: 11px;
+}
+
+.danger-menu-item {
+  color: #bb4040;
+}
+
+.danger-menu-item svg {
+  color: #bb4040;
+}
+
+.t-resize {
+  transition:
+    width var(--resize-dur) var(--resize-ease),
+    height var(--resize-dur) var(--resize-ease);
+  will-change: width, height;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-resize {
+    transition: none !important;
+  }
+}
+
+.date-controls {
+  padding: 9px 18px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.date-toolbar {
+  display: grid;
+  min-height: 40px;
+  grid-template-columns: minmax(0, 1fr) 62px;
+  align-items: center;
+  gap: 14px;
+}
+
+.date-toolbar-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-self: end;
+  gap: 18px;
+}
+
+.return-today-button {
+  height: 36px;
+  padding: 0 3px;
+  border: 0;
+  background: transparent;
+  color: #0f7653;
+  font-family: var(--font-data);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.return-today-button:hover {
+  color: #095f42;
+}
+
+.date-range-control {
+  display: flex;
+  min-width: 0;
+  min-height: 40px;
+  align-items: center;
+}
+
+.date-range-control.with-week-navigation {
+  width: 100%;
+}
+
+.date-range-control.with-week-navigation .date-picker-label {
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+}
+
+.date-range-control.with-week-navigation .date-picker-label strong {
+  padding-top: 0;
+}
+
+.week-nav-button {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #666860;
+  outline: none;
+}
+
+.week-nav-button:hover:not(:disabled) {
+  background: var(--muted);
+}
+
+.week-nav-button:disabled {
+  opacity: 0.24;
+}
+
+.week-nav-button svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 1.7;
+}
+
+.date-picker-label {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+  min-height: 40px;
+  align-items: center;
+  overflow: hidden;
+}
+
+.date-picker-label strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.015em;
+  white-space: nowrap;
+}
+
+.date-picker-label input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.view-tabs {
+  display: flex;
+  height: 31px;
+  flex: none;
+  align-items: flex-start;
+  gap: 18px;
+}
+
+.view-tabs button {
+  position: relative;
+  width: 22px;
+  height: 31px;
+  padding: 0 0 9px;
+  border: 0;
+  background: transparent;
+  color: #85877e;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.view-tabs button::after {
+  position: absolute;
+  right: 2px;
+  bottom: 0;
+  left: 2px;
+  height: 2px;
+  background: transparent;
+  content: "";
+}
+
+.view-tabs button.active {
+  color: var(--foreground);
+  font-weight: 700;
+}
+
+.view-tabs button.active::after {
+  background: var(--foreground);
+}
+
+.calendar-viewport {
+  position: relative;
+  height: 0;
+  overflow: hidden;
+}
+
+.calendar-viewport[data-calendar-state="week"] {
+  height: 72px;
+}
+
+.calendar-viewport[data-calendar-state="month"] {
+  height: calc(76px + var(--month-row-count) * 44px);
+}
+
+.calendar-view {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms var(--resize-ease);
+}
+
+.calendar-view[data-active="true"] {
+  z-index: 1;
+  opacity: 1;
+  pointer-events: auto;
+  transition-duration: var(--resize-dur);
+}
+
+.calendar-swipe-window {
+  contain: layout paint;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: pan-y;
+  user-select: none;
+}
+
+.calendar-swipe-window[data-dragging="true"] {
+  cursor: grabbing;
+}
+
+.compact-swipe-window {
+  height: 72px;
+}
+
+.month-swipe-window {
+  height: calc(var(--month-row-count) * 44px);
+}
+
+.calendar-swipe-track {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+  transform: translate3d(-100%, 0, 0);
+}
+
+.calendar-swipe-track > .week-strip,
+.calendar-swipe-track > .month-days {
+  min-width: 100%;
+  flex: 0 0 100%;
+}
+
+.week-strip {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  margin-top: 18px;
+  touch-action: pan-y;
+}
+
+.month-calendar-toolbar {
+  display: grid;
+  height: 52px;
+  grid-template-columns: 40px 1fr 40px;
+  align-items: center;
+}
+
+.month-calendar-heading {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+}
+
+.month-calendar-heading > strong {
+  text-align: center;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.course-marker-legend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted-foreground);
+  font-family:
+    "PingFang SC",
+    "Microsoft YaHei",
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.course-marker-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.course-marker-legend i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.course-marker-legend .morning {
+  color: var(--course-morning);
+}
+
+.course-marker-legend .afternoon {
+  color: var(--course-afternoon);
+}
+
+.month-calendar-toolbar button {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #666860;
+  outline: none;
+}
+
+.month-calendar-toolbar button:hover:not(:disabled) {
+  background: var(--muted);
+}
+
+.month-calendar-toolbar button:disabled {
+  opacity: 0.24;
+}
+
+.month-calendar-toolbar svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 1.7;
+}
+
+.month-weekdays,
+.month-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  touch-action: pan-y;
+}
+
+.month-weekdays {
+  height: 24px;
+  align-items: center;
+  color: var(--muted-foreground);
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.month-day {
+  position: relative;
+  display: grid;
+  height: 44px;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: #55574f;
+  outline: none;
+  touch-action: pan-y;
+}
+
+.month-day strong {
+  position: relative;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 50%;
+  font-family:
+    "PingFang SC",
+    "Microsoft YaHei",
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.month-day:hover:not(:disabled):not(.selected) strong {
+  background: var(--muted);
+}
+
+.month-day.selected strong {
+  background: var(--foreground);
+  color: #fff;
+  font-weight: 700;
+}
+
+.month-day.selected:hover strong {
+  background: var(--foreground);
+  color: #fff;
+}
+
+.course-markers {
+  position: absolute;
+  right: 0;
+  bottom: 2px;
+  left: 0;
+  display: flex;
+  height: 5px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.course-marker-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.course-marker-group i {
+  width: 4px;
+  height: 4px;
+  flex: none;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.course-marker-group.morning {
+  color: var(--course-morning);
+}
+
+.course-marker-group.afternoon {
+  color: var(--course-afternoon);
+}
+
+.month-day.today:not(.selected) strong {
+  box-shadow: inset 0 0 0 1px #b8bab2;
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+.month-day.outside-month {
+  color: #a0a29a;
+}
+
+.month-day:disabled {
+  cursor: default;
+  opacity: 0.25;
+}
+
+.month-day:focus-visible strong {
+  box-shadow:
+    0 0 0 2px var(--background),
+    0 0 0 3px #8f9188;
+}
+
+.calendar-handle {
+  position: relative;
+  display: flex;
+  width: 44px;
+  min-width: 44px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  margin: -2px auto -14px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted-foreground);
+  outline: none;
+  transition: color 140ms ease;
+}
+
+.calendar-handle::before {
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: transparent;
+  content: "";
+  transition: background-color 140ms ease;
+}
+
+.calendar-handle:hover {
+  color: var(--foreground);
+}
+
+.calendar-handle:hover::before {
+  background: var(--muted);
+}
+
+.calendar-handle:active::before {
+  background: #e8e8e2;
+}
+
+.calendar-handle svg {
+  position: relative;
+  z-index: 1;
+  width: 13px;
+  height: 13px;
+  stroke-width: 1.8;
+  transition: transform var(--resize-dur) var(--resize-ease);
+}
+
+.calendar-handle[data-open="true"] svg {
+  transform: rotate(180deg);
+}
+
+.date-button {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  height: 54px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1px 0 7px;
+  border: 0;
+  background: transparent;
+  color: #74766d;
+  outline: none;
+}
+
+.date-button .course-markers {
+  bottom: 0;
+}
+
+.date-button > span {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.date-button > strong {
+  display: grid;
+  width: 27px;
+  height: 27px;
+  place-items: center;
+  border-radius: 50%;
+  font-family:
+    "PingFang SC",
+    "Microsoft YaHei",
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.date-button.active {
+  color: var(--foreground);
+}
+
+.date-button.active > strong {
+  background: var(--foreground);
+  color: #fff;
+  font-weight: 700;
+}
+
+.date-button:focus-visible > strong {
+  box-shadow:
+    0 0 0 2px var(--background),
+    0 0 0 3px #8f9188;
+}
+
+.date-button:disabled {
+  cursor: default;
+  opacity: 0.32;
+}
+
+.schedule-content {
+  position: relative;
+  padding: 17px 18px max(48px, env(safe-area-inset-bottom));
+}
+
+.schedule-content.week-mode {
+  touch-action: pan-y;
+}
+
+.fetching-indicator {
+  position: absolute;
+  top: 20px;
+  right: 19px;
+  width: 14px;
+  height: 14px;
+  color: #8c8e86;
+  stroke-width: 1.7;
+}
+
+.schedule-summary,
+.week-summary {
+  display: flex;
+  min-height: 30px;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.schedule-summary > strong,
+.week-summary > strong {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.schedule-summary b,
+.week-summary b {
+  font-family:
+    "PingFang SC",
+    "Microsoft YaHei",
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.lesson-list {
+  margin-inline: -8px;
+  border-top: 1px solid var(--border);
+}
+
+.lesson-row {
+  display: grid;
+  min-height: 82px;
+  grid-template-columns: 112px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.lesson-row.attention {
+  border-bottom-color: #d8e5dd;
+  background: #f0f5f2;
+}
+
+.lesson-row time {
+  align-self: start;
+  padding-top: 2px;
+  font-family:
+    "PingFang SC",
+    "Microsoft YaHei",
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+.lesson-time {
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.lesson-time time {
+  padding-top: 0;
+}
+
+.lesson-period {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted-foreground);
+  font-family:
+    "PingFang SC",
+    "Microsoft YaHei",
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.lesson-period i {
+  width: 5px;
+  height: 5px;
+  flex: none;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.lesson-period.morning i {
+  color: var(--course-morning);
+}
+
+.lesson-period.afternoon i {
+  color: var(--course-afternoon);
+}
+
+.lesson-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.lesson-attention {
+  display: flex;
+  min-width: 0;
+  grid-column: 1 / -1;
+  align-items: baseline;
+  color: #0f7653;
+  font-family: var(--font-data);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.lesson-attention b {
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.lesson-attention span {
+  overflow: hidden;
+  color: #376e59;
+  text-overflow: ellipsis;
+}
+
+.lesson-attention span::before {
+  margin: 0 6px;
+  color: #83a091;
+  content: "·";
+}
+
+.lesson-main strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.lesson-main > span {
+  overflow: hidden;
+  color: var(--muted-foreground);
+  text-overflow: ellipsis;
+  font-family: var(--font-data);
+  font-size: 14px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.lesson-row.inactive {
+  color: var(--muted-foreground);
+}
+
+.lesson-row.inactive time,
+.lesson-row.inactive .lesson-main strong {
+  text-decoration: line-through;
+}
+
+.lesson-row.completed:not(.inactive) {
+  color: #666860;
+}
+
+.lesson-row.completed:not(.inactive) .lesson-main > span {
+  color: var(--muted-foreground);
+}
+
+.status-tag {
+  align-self: center;
+  padding: 2px 5px 3px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  font-family:
+    "PingFang SC",
+    "Microsoft YaHei",
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.status-tag.temporary {
+  color: #dc7d31;
+}
+
+.status-tag.substitute {
+  color: #2a9569;
+}
+
+.status-tag.adjusted {
+  color: #7662ae;
+}
+
+.status-tag.cancelled {
+  color: #d45151;
+}
+
+.week-summary {
+  min-height: 31px;
+  margin-bottom: 10px;
+  padding-right: 22px;
+}
+
+.week-summary > span {
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+
+.week-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.week-group {
+  padding: 4px 0 0;
+}
+
+.week-group.today {
+  margin: 0 -9px;
+  padding: 11px 9px 5px;
+  border: 1px solid #e4e5de;
+  border-radius: 6px;
+  background: #f3f3ef;
+}
+
+.week-group.today .compact-lessons .lesson-row:last-child {
+  border-bottom: 0;
+}
+
+.week-group-title {
+  display: flex;
+  width: 100%;
+  min-height: 31px;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0 1px 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  outline: none;
+  text-align: left;
+}
+
+.week-group-title strong {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.week-group-title span {
+  color: var(--muted-foreground);
+  font-family:
+    "PingFang SC",
+    "Microsoft YaHei",
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+  font-size: 12px;
+}
+
+.week-group-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.week-group-link svg {
+  width: 13px;
+  height: 13px;
+  stroke-width: 1.6;
+}
+
+.compact-lessons {
+  border-top: 1px solid var(--border);
+}
+
+.lesson-row.compact {
+  min-height: 58px;
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+  padding: 9px 1px;
+}
+
+.lesson-row.compact time {
+  align-self: center;
+  padding-top: 0;
+  font-size: 14px;
+}
+
+.lesson-row.compact .lesson-main {
+  display: grid;
+  grid-template-columns: minmax(64px, 0.5fr) minmax(0, 1.5fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.lesson-row.compact .lesson-main strong {
+  font-size: 15px;
+}
+
+.lesson-row.compact .lesson-main > span {
+  font-size: 13px;
+}
+
+.week-no-access {
+  margin: 0;
+  padding: 11px 0;
+  border-top: 1px solid var(--border);
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+
+.empty-state {
+  padding: 57px 8px 0;
+}
+
+.empty-state h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+.empty-state > p {
+  margin: 7px 0 0;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+
+.next-upcoming {
+  display: flex;
+  flex-direction: column;
+  margin-top: 39px;
+  padding-top: 17px;
+  border-top: 1px solid var(--border);
+}
+
+.next-upcoming > span {
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+
+.next-upcoming > strong {
+  margin-top: 12px;
+  font-family:
+    "PingFang SC",
+    "Microsoft YaHei",
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.next-upcoming > b {
+  margin-top: 5px;
+  font-size: 15px;
+}
+
+.next-upcoming > small {
+  margin-top: 4px;
+  color: var(--muted-foreground);
+  font-size: 10px;
+}
+
+.error-state {
+  display: flex;
+  min-height: 330px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.error-state > svg {
+  width: 23px;
+  height: 23px;
+  color: var(--destructive);
+  stroke-width: 1.5;
+}
+
+.error-state h2 {
+  margin: 14px 0 0;
+  font-size: 17px;
+}
+
+.error-state p {
+  margin: 6px 0 0;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+
+.error-state button {
+  margin-top: 21px;
+  padding: 8px 15px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: transparent;
+  font-size: 12px;
+}
+
+.loading-shell {
+  padding: max(22px, env(safe-area-inset-top)) 18px 40px;
+}
+
+.loading-header,
+.loading-line,
+.loading-card,
+.loading-dates span,
+.loading-rows span {
+  border-radius: 5px;
+  background: #ecece7;
+  animation: loading-pulse 1.35s ease-in-out infinite alternate;
+}
+
+.loading-header {
+  width: 118px;
+  height: 21px;
+  margin: 0 auto 43px;
+}
+
+.loading-line {
+  width: 120px;
+  height: 14px;
+}
+
+.loading-line.wide {
+  width: 178px;
+}
+
+.loading-dates {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 13px;
+  margin: 25px 4px 34px;
+}
+
+.loading-dates span {
+  height: 44px;
+  border-radius: 18px;
+}
+
+.loading-card {
+  height: 148px;
+  margin-bottom: 25px;
+}
+
+.loading-rows {
+  display: flex;
+  flex-direction: column;
+  margin-top: 14px;
+}
+
+.loading-rows span {
+  height: 76px;
+  border-radius: 0;
+  border-bottom: 1px solid #deded8;
+}
+
+@keyframes loading-pulse {
+  from {
+    opacity: 0.55;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (min-width: 700px) {
+  .teacher-shell {
+    border-right: 1px solid #e4e4df;
+    border-left: 1px solid #e4e4df;
+    box-shadow: 0 0 34px rgb(35 36 31 / 5%);
+  }
+}
+
+@media (max-width: 360px) {
+  .auth-shell {
+    padding-right: 22px;
+    padding-left: 22px;
+  }
+
+  .password-content {
+    padding-right: 22px;
+    padding-left: 22px;
+  }
+
+  .date-controls,
+  .schedule-content {
+    padding-right: 15px;
+    padding-left: 15px;
+  }
+
+  .date-toolbar-actions {
+    gap: 10px;
+  }
+
+  .return-today-button {
+    font-size: 12px;
+  }
+
+  .lesson-row {
+    grid-template-columns: 102px minmax(0, 1fr) auto;
+  }
+
+  .lesson-row.compact .lesson-main > span {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

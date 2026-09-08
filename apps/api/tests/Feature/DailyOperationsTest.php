@@ -3,6 +3,7 @@
 use App\Enums\Role;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 beforeEach(function (): void {
     $this->withHeaders(['Origin' => 'http://localhost:5173', 'Referer' => 'http://localhost:5173/']);
@@ -350,11 +351,387 @@ it('rejects an unqualified teacher in a temporary teacher change preview', funct
         ->assertJsonPath('code', 'DAILY_TEACHER_NOT_QUALIFIED');
 });
 
+it('lets a teacher view only their own effective timetable', function (): void {
+    $fixture = dailyOperationsFixture($this->scheduler->id);
+    DB::table('app_settings')->where('id', 1)->update(['current_semester_id' => $fixture['semester_id']]);
+    $teacherUser = User::factory()->create([
+        'email' => 'teacher@example.test',
+        'role' => Role::Teacher,
+        'teacher_id' => $fixture['teacher_id'],
+        'must_change_password' => false,
+    ]);
+
+    $this->actingAs($teacherUser)->withSession(['auth_version' => $teacherUser->auth_version]);
+
+    $this->getJson('/api/v1/teacher/me/timetable?from=2026-09-07&to=2026-09-07')
+        ->assertOk()
+        ->assertJsonPath('data.teacher.id', $fixture['teacher_id'])
+        ->assertJsonPath('data.days.0.rows.0.original_entry_id', $fixture['entry_id'])
+        ->assertJsonPath('data.days.0.rows.0.duty_status', 'assigned');
+    $this->getJson('/api/v1/teacher/me/classes?from=2026-09-07&to=2026-09-07')
+        ->assertOk()
+        ->assertJsonPath('data.classes.0.id', $fixture['class_id'])
+        ->assertJsonPath('data.classes.0.accessible_dates.0', '2026-09-07')
+        ->assertJsonCount(1, 'data.classes');
+    $this->getJson("/api/v1/teacher/me/classes/{$fixture['class_id']}/timetable?from=2026-09-07&to=2026-09-07")
+        ->assertOk()
+        ->assertJsonPath('data.school_class.id', $fixture['class_id'])
+        ->assertJsonPath('data.days.0.accessible', true)
+        ->assertJsonPath('data.days.0.rows.0.original_entry_id', $fixture['entry_id']);
+
+    $class = DB::table('school_classes')->where('id', $fixture['class_id'])->first();
+    $unauthorizedClassId = DB::table('school_classes')->insertGetId([
+        'academic_year_id' => $class->academic_year_id,
+        'grade_id' => $class->grade_id,
+        'name' => '无权查看班级',
+        'code' => 'NO-ACCESS',
+        'status' => 'active',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    $this->getJson("/api/v1/teacher/me/classes/{$unauthorizedClassId}/timetable?from=2026-09-07&to=2026-09-07")
+        ->assertForbidden()
+        ->assertJsonPath('code', 'TEACHER_CLASS_FORBIDDEN');
+    $this->getJson('/api/v1/catalog')
+        ->assertForbidden()
+        ->assertJsonPath('code', 'FORBIDDEN');
+    $this->getJson("/api/v1/semesters/{$fixture['semester_id']}/daily-timetable?date=2026-09-07")
+        ->assertForbidden()
+        ->assertJsonPath('code', 'FORBIDDEN');
+});
+
+it('does not grant long-term class access to a temporary replacement teacher', function (): void {
+    $fixture = dailyOperationsFixture($this->scheduler->id);
+    DB::table('app_settings')->where('id', 1)->update(['current_semester_id' => $fixture['semester_id']]);
+    $etag = $this->getJson("/api/v1/semesters/{$fixture['semester_id']}")->headers->get('ETag');
+    $this->withHeader('If-Match', $etag)
+        ->postJson("/api/v1/semesters/{$fixture['semester_id']}/calendar-exceptions", [
+            'effective_date' => '2026-09-07',
+            'type' => 'teacher_change',
+            'original_entry_id' => $fixture['entry_id'],
+            'replacement_teacher_id' => $fixture['substitute_teacher_id'],
+            'reason' => '仅当天临时代课',
+        ])->assertCreated();
+    $replacementUser = User::factory()->create([
+        'email' => 'temporary-replacement@example.test',
+        'role' => Role::Teacher,
+        'teacher_id' => $fixture['substitute_teacher_id'],
+        'must_change_password' => false,
+    ]);
+    $this->actingAs($replacementUser)->withSession(['auth_version' => $replacementUser->auth_version]);
+
+    $this->getJson('/api/v1/teacher/me/timetable?from=2026-09-07&to=2026-09-07')
+        ->assertOk()
+        ->assertJsonPath('data.days.0.rows.0.duty_status', 'added')
+        ->assertJsonPath('data.days.0.rows.0.status', 'teacher_change');
+    $this->getJson('/api/v1/teacher/me/classes?from=2026-09-07&to=2026-09-07')
+        ->assertOk()
+        ->assertJsonCount(0, 'data.classes');
+    $this->getJson("/api/v1/teacher/me/classes/{$fixture['class_id']}/timetable?from=2026-09-07&to=2026-09-07")
+        ->assertForbidden()
+        ->assertJsonPath('code', 'TEACHER_CLASS_FORBIDDEN');
+});
+
+it('changes class access when a different teacher is assigned in the date-effective long-term version', function (): void {
+    $fixture = dailyOperationsFixture($this->scheduler->id);
+    DB::table('app_settings')->where('id', 1)->update(['current_semester_id' => $fixture['semester_id']]);
+    DB::table('timetable_effective_periods')->insert([
+        'semester_id' => $fixture['semester_id'],
+        'timetable_version_id' => $fixture['version_id'],
+        'effective_from' => '2026-09-01',
+        'effective_to' => '2026-09-13',
+        'status' => 'active',
+        'reason' => '原任课关系',
+        'created_by' => $this->scheduler->id,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    $etag = $this->getJson("/api/v1/semesters/{$fixture['semester_id']}")->headers->get('ETag');
+    $draft = $this->withHeader('If-Match', $etag)
+        ->postJson("/api/v1/semesters/{$fixture['semester_id']}/timetable-versions", [
+            'name' => '长期任课变更版本',
+            'base_version_id' => $fixture['version_id'],
+        ])->assertCreated();
+    $draftId = (int) $draft->json('data.id');
+    $draftEntry = DB::table('timetable_entries')->where('timetable_version_id', $draftId)->first();
+    DB::table('timetable_entries')->where('id', $draftEntry->id)->update([
+        'teacher_id' => $fixture['substitute_teacher_id'],
+    ]);
+    DB::table('timetable_entry_teachers')->where('timetable_entry_id', $draftEntry->id)->delete();
+    DB::table('timetable_entry_teachers')->insert([
+        'timetable_entry_id' => $draftEntry->id,
+        'timetable_version_id' => $draftId,
+        'teacher_id' => $fixture['substitute_teacher_id'],
+        'week_pattern' => $draftEntry->week_pattern,
+        'weekday' => $draftEntry->weekday,
+        'item_id' => $draftEntry->item_id,
+    ]);
+    DB::table('timetable_effective_periods')->insert([
+        [
+            'semester_id' => $fixture['semester_id'],
+            'timetable_version_id' => $draftId,
+            'effective_from' => '2026-09-14',
+            'effective_to' => '2026-09-20',
+            'status' => 'active',
+            'reason' => '长期更换任课教师',
+            'created_by' => $this->scheduler->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ],
+        [
+            'semester_id' => $fixture['semester_id'],
+            'timetable_version_id' => $fixture['version_id'],
+            'effective_from' => '2026-09-21',
+            'effective_to' => '2027-01-20',
+            'status' => 'active',
+            'reason' => '恢复原任课关系',
+            'created_by' => $this->scheduler->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ],
+    ]);
+
+    $originalUser = User::factory()->create([
+        'email' => 'original-long-term-teacher@example.test',
+        'role' => Role::Teacher,
+        'teacher_id' => $fixture['teacher_id'],
+        'must_change_password' => false,
+    ]);
+    $replacementUser = User::factory()->create([
+        'email' => 'replacement-long-term-teacher@example.test',
+        'role' => Role::Teacher,
+        'teacher_id' => $fixture['substitute_teacher_id'],
+        'must_change_password' => false,
+    ]);
+
+    $this->actingAs($originalUser)->withSession(['auth_version' => $originalUser->auth_version]);
+    $this->getJson('/api/v1/teacher/me/classes?from=2026-09-07&to=2026-09-07')
+        ->assertOk()
+        ->assertJsonPath('data.classes.0.id', $fixture['class_id']);
+    $this->getJson('/api/v1/teacher/me/classes?from=2026-09-15&to=2026-09-15')
+        ->assertOk()
+        ->assertJsonCount(0, 'data.classes');
+
+    $this->actingAs($replacementUser)->withSession(['auth_version' => $replacementUser->auth_version]);
+    $this->getJson('/api/v1/teacher/me/classes?from=2026-09-07&to=2026-09-07')
+        ->assertOk()
+        ->assertJsonCount(0, 'data.classes');
+    $this->getJson('/api/v1/teacher/me/classes?from=2026-09-15&to=2026-09-15')
+        ->assertOk()
+        ->assertJsonPath('data.classes.0.id', $fixture['class_id']);
+});
+
+it('publishes a long-term adjustment for only the selected date range', function (bool $existingCoverage): void {
+    $fixture = dailyOperationsFixture($this->scheduler->id);
+    if ($existingCoverage) {
+        DB::table('timetable_effective_periods')->insert([
+            'semester_id' => $fixture['semester_id'],
+            'timetable_version_id' => $fixture['version_id'],
+            'effective_from' => '2026-09-01',
+            'effective_to' => '2027-01-20',
+            'status' => 'active',
+            'reason' => '初始课表',
+            'created_by' => $this->scheduler->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+    $etag = $this->getJson("/api/v1/semesters/{$fixture['semester_id']}")->headers->get('ETag');
+    $draft = $this->withHeader('If-Match', $etag)
+        ->postJson("/api/v1/semesters/{$fixture['semester_id']}/timetable-versions", [
+            'name' => '九月长期调课',
+            'base_version_id' => $fixture['version_id'],
+        ])->assertCreated();
+    $draftId = (int) $draft->json('data.id');
+    $draftEntryId = (int) DB::table('timetable_entries')
+        ->where('timetable_version_id', $draftId)
+        ->value('id');
+    $moved = $this->withHeader('If-Match', $draft->headers->get('ETag'))
+        ->patchJson("/api/v1/semesters/{$fixture['semester_id']}/timetable/entries/{$draftEntryId}", [
+            'weekday' => 2,
+            'item_id' => $fixture['item_ids'][0],
+        ])->assertOk();
+
+    $payload = [
+        'version_id' => $draftId,
+        'effective_from' => '2026-09-14',
+        'effective_to' => '2026-09-20',
+        'reason' => '九月教研活动期间长期调课',
+    ];
+    $beforePeriods = DB::table('timetable_effective_periods')->orderBy('id')->get()->toJson();
+    $beforeSemester = DB::table('semesters')->where('id', $fixture['semester_id'])->first();
+    $preview = $this->postJson("/api/v1/semesters/{$fixture['semester_id']}/long-term-adjustments/preview", $payload)
+        ->assertOk()
+        ->assertJsonPath('data.allowed', true)
+        ->assertJsonPath('data.replaced_periods.0.version_id', $fixture['version_id'])
+        ->assertJsonPath('data.replaced_periods.0.effective_from', '2026-09-01')
+        ->assertJsonPath('data.replaced_periods.0.effective_to', '2027-01-20')
+        ->assertJsonPath('data.calendar_exceptions_to_rebase', 0)
+        ->assertJsonPath('data.cross_period_exceptions_to_validate', 0)
+        ->assertJsonPath('data.substitutions_to_rebase', 0);
+    expect(DB::table('timetable_effective_periods')->orderBy('id')->get()->toJson())->toBe($beforePeriods)
+        ->and(DB::table('semesters')->where('id', $fixture['semester_id'])->first())->toEqual($beforeSemester)
+        ->and(DB::table('timetable_versions')->where('id', $draftId)->value('status'))->toBe('draft')
+        ->and($preview->headers->get('ETag'))->toBe($moved->headers->get('ETag'));
+    $this->withHeader('If-Match', $moved->headers->get('ETag'))
+        ->postJson("/api/v1/semesters/{$fixture['semester_id']}/long-term-adjustments", $payload)
+        ->assertCreated()
+        ->assertJsonPath('data.timetable_version_id', $draftId);
+
+    $this->getJson("/api/v1/semesters/{$fixture['semester_id']}/daily-timetable?date=2026-09-07")
+        ->assertOk()
+        ->assertJsonPath('data.version.id', $fixture['version_id'])
+        ->assertJsonPath('data.summary.total', 1);
+    $this->getJson("/api/v1/semesters/{$fixture['semester_id']}/daily-timetable?date=2026-09-14")
+        ->assertOk()
+        ->assertJsonPath('data.version.id', $draftId)
+        ->assertJsonPath('data.summary.total', 0);
+    $this->getJson("/api/v1/semesters/{$fixture['semester_id']}/daily-timetable?date=2026-09-15")
+        ->assertOk()
+        ->assertJsonPath('data.version.id', $draftId)
+        ->assertJsonPath('data.summary.total', 1);
+    $this->getJson("/api/v1/semesters/{$fixture['semester_id']}/daily-timetable?date=2026-10-05")
+        ->assertOk()
+        ->assertJsonPath('data.version.id', $fixture['version_id'])
+        ->assertJsonPath('data.summary.total', 0);
+
+    expect(DB::table('timetable_effective_periods')
+        ->where('semester_id', $fixture['semester_id'])
+        ->where('status', 'active')
+        ->count())->toBe(3);
+})->with([true, false]);
+
+it('previews the same temporary rebase that publishing applies without retaining preview writes', function (): void {
+    $fixture = dailyOperationsFixture($this->scheduler->id);
+    $etag = $this->getJson("/api/v1/semesters/{$fixture['semester_id']}")->headers->get('ETag');
+    $exception = $this->withHeader('If-Match', $etag)
+        ->postJson("/api/v1/semesters/{$fixture['semester_id']}/calendar-exceptions", [
+            'effective_date' => '2026-09-07',
+            'type' => 'move',
+            'original_entry_id' => $fixture['entry_id'],
+            'replacement_item_id' => $fixture['item_ids'][1],
+            'reason' => '临时后移一节',
+        ])->assertCreated();
+    $substitutionId = DB::table('substitutions')->insertGetId([
+        'original_entry_id' => $fixture['entry_id'],
+        'effective_date' => '2026-09-21',
+        'replaced_teacher_id' => $fixture['teacher_id'],
+        'replacement_teacher_id' => $fixture['substitute_teacher_id'],
+        'created_by' => $this->scheduler->id,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    $draft = $this->withHeader('If-Match', $exception->headers->get('ETag'))
+        ->postJson("/api/v1/semesters/{$fixture['semester_id']}/timetable-versions", [
+            'name' => '保留临时安排',
+            'base_version_id' => $fixture['version_id'],
+        ])->assertCreated();
+    $draftId = (int) $draft->json('data.id');
+    $draftEntryId = (int) DB::table('timetable_entries')->where('timetable_version_id', $draftId)->value('id');
+    $payload = [
+        'version_id' => $draftId,
+        'effective_from' => '2026-09-01',
+        'effective_to' => '2026-09-30',
+        'reason' => '保留临时安排',
+    ];
+    $beforeException = DB::table('calendar_exceptions')->where('id', $exception->json('data.id'))->first();
+    $beforeSubstitution = DB::table('substitutions')->where('id', $substitutionId)->first();
+
+    $this->postJson("/api/v1/semesters/{$fixture['semester_id']}/long-term-adjustments/preview", $payload)
+        ->assertOk()
+        ->assertJsonPath('data.calendar_exceptions_to_rebase', 1)
+        ->assertJsonPath('data.cross_period_exceptions_to_validate', 0)
+        ->assertJsonPath('data.substitutions_to_rebase', 1);
+    expect(DB::table('calendar_exceptions')->where('id', $exception->json('data.id'))->first())->toEqual($beforeException)
+        ->and(DB::table('substitutions')->where('id', $substitutionId)->first())->toEqual($beforeSubstitution)
+        ->and(DB::table('timetable_effective_periods')->count())->toBe(0);
+
+    $this->withHeader('If-Match', $draft->headers->get('ETag'))
+        ->postJson("/api/v1/semesters/{$fixture['semester_id']}/long-term-adjustments", $payload)
+        ->assertCreated();
+    expect(DB::table('calendar_exceptions')->where('id', $exception->json('data.id'))->value('original_entry_id'))->toBe($draftEntryId)
+        ->and(DB::table('substitutions')->where('id', $substitutionId)->value('original_entry_id'))->toBe($draftEntryId);
+    $this->getJson("/api/v1/semesters/{$fixture['semester_id']}/daily-timetable?date=2026-09-07")
+        ->assertOk()
+        ->assertJsonPath('data.rows.1.status', 'moved_in')
+        ->assertJsonPath('data.rows.1.item_id', $fixture['item_ids'][1]);
+    $this->getJson("/api/v1/semesters/{$fixture['semester_id']}/daily-timetable?date=2026-09-21")
+        ->assertOk()
+        ->assertJsonPath('data.rows.0.status', 'substitution')
+        ->assertJsonPath('data.rows.0.teacher_id', $fixture['substitute_teacher_id']);
+});
+
+it('prevents a long-term timetable from conflicting with a temporary move into its date range', function (): void {
+    $fixture = dailyOperationsFixture($this->scheduler->id);
+    DB::table('timetable_effective_periods')->insert([
+        'semester_id' => $fixture['semester_id'],
+        'timetable_version_id' => $fixture['version_id'],
+        'effective_from' => '2026-09-01',
+        'effective_to' => '2027-01-20',
+        'status' => 'active',
+        'reason' => '初始课表',
+        'created_by' => $this->scheduler->id,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    $etag = $this->getJson("/api/v1/semesters/{$fixture['semester_id']}")->headers->get('ETag');
+    $temporaryMove = [
+        'effective_date' => '2026-09-07',
+        'replacement_date' => '2026-09-15',
+        'type' => 'move',
+        'original_entry_id' => $fixture['entry_id'],
+        'replacement_item_id' => $fixture['item_ids'][0],
+        'reason' => '从区间外临时移入长期调整区间',
+    ];
+    $storedMove = $this->withHeader('If-Match', $etag)
+        ->postJson("/api/v1/semesters/{$fixture['semester_id']}/calendar-exceptions", $temporaryMove)
+        ->assertCreated();
+    $draft = $this->withHeader('If-Match', $storedMove->headers->get('ETag'))
+        ->postJson("/api/v1/semesters/{$fixture['semester_id']}/timetable-versions", [
+            'name' => '跨区间冲突草稿',
+            'base_version_id' => $fixture['version_id'],
+        ])->assertCreated();
+    $draftId = (int) $draft->json('data.id');
+    $draftEntryId = (int) DB::table('timetable_entries')
+        ->where('timetable_version_id', $draftId)
+        ->value('id');
+    $movedDraft = $this->withHeader('If-Match', $draft->headers->get('ETag'))
+        ->patchJson("/api/v1/semesters/{$fixture['semester_id']}/timetable/entries/{$draftEntryId}", [
+            'weekday' => 2,
+            'item_id' => $fixture['item_ids'][0],
+        ])->assertOk();
+    $payload = [
+        'version_id' => $draftId,
+        'effective_from' => '2026-09-14',
+        'effective_to' => '2026-09-20',
+        'reason' => '应检测移入课程冲突',
+    ];
+
+    $this->postJson("/api/v1/semesters/{$fixture['semester_id']}/long-term-adjustments/preview", $payload)
+        ->assertStatus(409)
+        ->assertJsonPath('code', 'DAILY_TIMETABLE_CONFLICT')
+        ->assertJsonPath('date', '2026-09-15');
+    $this->withHeader('If-Match', $movedDraft->headers->get('ETag'))
+        ->postJson("/api/v1/semesters/{$fixture['semester_id']}/long-term-adjustments", $payload)
+        ->assertStatus(409)
+        ->assertJsonPath('code', 'DAILY_TIMETABLE_CONFLICT');
+
+    expect(DB::table('timetable_effective_periods')
+        ->where('semester_id', $fixture['semester_id'])
+        ->where('status', 'active')
+        ->count())->toBe(1)
+        ->and(DB::table('calendar_exceptions')->where('id', $storedMove->json('data.id'))->value('timetable_version_id'))
+        ->toBe($fixture['version_id'])
+        ->and(DB::table('semesters')->where('id', $fixture['semester_id'])->value('current_timetable_version_id'))
+        ->toBe($fixture['version_id']);
+});
+
 /**
  * @return array{
  *   semester_id: int,
  *   version_id: int,
  *   entry_id: int,
+ *   class_id: int,
  *   teacher_id: int,
  *   substitute_teacher_id: int,
  *   item_ids: list<int>
@@ -489,6 +866,7 @@ function dailyOperationsFixture(int $userId, bool $withTargetConflict = false): 
         'semester_id' => $semesterId,
         'version_id' => $versionId,
         'entry_id' => $entryId,
+        'class_id' => $classId,
         'teacher_id' => $teacherId,
         'substitute_teacher_id' => $substituteTeacherId,
         'item_ids' => $itemIds,
@@ -507,6 +885,7 @@ function insertDailyEntry(
     mixed $now,
 ): int {
     $entryId = DB::table('timetable_entries')->insertGetId([
+        'entry_key' => (string) Str::uuid(),
         'semester_id' => $semesterId, 'timetable_version_id' => $versionId,
         'teaching_assignment_id' => $assignmentId, 'school_class_id' => $classId,
         'teacher_id' => $teacherId, 'course_id' => $courseId, 'actual_room_id' => $roomId,

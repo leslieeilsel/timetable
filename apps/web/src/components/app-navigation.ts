@@ -4,6 +4,7 @@ import {
   BookOpenTextIcon,
   CalendarCheck2Icon,
   CalendarDaysIcon,
+  CalendarRangeIcon,
   ClipboardListIcon,
   GalleryVerticalEndIcon,
   MapPinIcon,
@@ -41,5 +42,6 @@ export const schedulingNavigationItems = [
 
 export const dailyNavigationItems = [
   { title: "临时调课", destination: "adjustments", icon: CalendarDaysIcon },
+  { title: "长期调课", destination: "long-term", icon: CalendarRangeIcon },
   { title: "请假与代课", destination: "leaves", icon: CalendarCheck2Icon },
 ] satisfies SemesterNavigationItem[]

@@ -17,6 +17,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 /**
  * @property int $id
+ * @property string|null $entry_key
  * @property int $semester_id
  * @property int $timetable_version_id
  * @property int $teaching_assignment_id
@@ -45,7 +46,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 class TimetableEntry extends Model
 {
     protected $fillable = [
-        'semester_id', 'timetable_version_id', 'teaching_assignment_id', 'school_class_id', 'teaching_group_id',
+        'entry_key', 'semester_id', 'timetable_version_id', 'teaching_assignment_id', 'school_class_id', 'teaching_group_id',
         'teacher_id', 'course_id', 'actual_room_id', 'week_pattern', 'active_weeks', 'weekday', 'item_id',
         'source', 'is_locked',
     ];

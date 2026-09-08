@@ -2,6 +2,7 @@
 
 namespace App\Modules\Identity\Http\Controllers;
 
+use App\Enums\Role;
 use App\Models\User;
 use App\Support\ApiProblemException;
 use App\Support\Normalizer;
@@ -25,6 +26,16 @@ class AuthController
         if (! Auth::attempt(['email' => $email, 'password' => $data['password'], 'is_active' => true])) {
             throw new ApiProblemException('INVALID_CREDENTIALS', '账号或密码错误', 422, [
                 'errors' => ['email' => ['账号或密码错误']],
+            ]);
+        }
+
+        $authenticated = $request->user()->load('teacher:id,name,employee_no,is_active');
+        if ($authenticated->role === Role::Teacher
+            && ($authenticated->teacher === null || ! $authenticated->teacher->is_active)) {
+            Auth::guard('web')->logout();
+            $request->session()->invalidate();
+            throw new ApiProblemException('INVALID_CREDENTIALS', '账号不可用，请联系管理员', 422, [
+                'errors' => ['email' => ['账号不可用，请联系管理员']],
             ]);
         }
 
@@ -84,6 +95,7 @@ class AuthController
             'name' => $user->name,
             'email' => $user->email,
             'role' => $user->role->value,
+            'teacher' => $user->teacher?->only(['id', 'name', 'employee_no']),
             'is_active' => $user->is_active,
             'must_change_password' => $user->must_change_password,
         ];

@@ -16,13 +16,17 @@ use App\Modules\TeachingAssignment\Models\TeachingAssignment;
 use App\Modules\Timetable\Models\TimetableEntry;
 use App\Modules\Timetable\Models\TimetableVersion;
 use App\Modules\Timetable\Services\RoomResolver;
+use App\Modules\Timetable\Services\TimetableEffectivePeriodService;
 use App\Support\ApiProblemException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
 class DailyTimetableService
 {
-    public function __construct(private readonly RoomResolver $rooms) {}
+    public function __construct(
+        private readonly RoomResolver $rooms,
+        private readonly TimetableEffectivePeriodService $periods,
+    ) {}
 
     /**
      * @return array{
@@ -40,7 +44,7 @@ class DailyTimetableService
         ?int $ignoreSubstitutionsForTeacherId = null,
     ): array {
         $context = $this->dateContext($semester, $date);
-        $version = $this->currentVersion($semester);
+        $version = $this->versionForDate($semester, $context['date']);
         $entries = TimetableEntry::query()
             ->where('timetable_version_id', $version->id)
             ->where('weekday', $context['weekday'])
@@ -54,7 +58,6 @@ class DailyTimetableService
             ->all();
         $exceptions = CalendarException::query()
             ->where('semester_id', $semester->id)
-            ->where('timetable_version_id', $version->id)
             ->where('status', OperationalStatus::Active->value)
             ->where(function ($query) use ($context): void {
                 $query->whereDate('effective_date', $context['date'])
@@ -78,7 +81,7 @@ class DailyTimetableService
             $effective = $exception->effective_date->toDateString() === $context['date'];
             $replacementDate = $exception->replacement_date?->toDateString()
                 ?? $exception->effective_date->toDateString();
-            if ($effective) {
+            if ($effective && $exception->timetable_version_id === $version->id) {
                 $this->applyEffectiveException($rows, $exception, $items, $context);
             }
             if ($replacementDate === $context['date']
@@ -147,8 +150,8 @@ class DailyTimetableService
         $type = $data['type'] instanceof CalendarExceptionType
             ? $data['type']
             : CalendarExceptionType::from($data['type']);
-        $version = $this->currentVersion($semester);
         $effective = $this->dateContext($semester, (string) $data['effective_date']);
+        $version = $this->versionForDate($semester, $effective['date']);
         $targetDate = (string) ($data['replacement_date'] ?? $data['effective_date']);
         $target = $this->dateContext($semester, $targetDate);
         $original = isset($data['original_entry_id'])
@@ -355,7 +358,7 @@ class DailyTimetableService
         ?int $excludedTeacherId = null,
     ): array {
         $dateContext = $this->dateContext($semester, $date);
-        $version = $this->currentVersion($semester);
+        $version = $this->versionForDate($semester, $dateContext['date']);
         $entry->loadMissing($this->entryRelations());
         $item = $entry->item;
         $itemStart = Carbon::parse($date.' '.$item->start_time);
@@ -467,6 +470,45 @@ class DailyTimetableService
             ->findOrFail($semester->current_timetable_version_id);
     }
 
+    public function versionForDate(Semester $semester, string $date): TimetableVersion
+    {
+        $version = $this->periods->versionForDate($semester, $date);
+        if ($version === null) {
+            throw new ApiProblemException('CURRENT_TIMETABLE_REQUIRED', '请先将一个完整课表版本设为当前课表', 409);
+        }
+
+        return $version;
+    }
+
+    /** @param list<array<string, mixed>> $rows */
+    public function assertActualRowsConflictFree(array $rows, string $date): void
+    {
+        $occupied = [];
+        foreach ($rows as $row) {
+            if ($row['is_cancelled']) {
+                continue;
+            }
+            $resources = ['room:'.$row['room_id']];
+            foreach ($row['class_ids'] as $classId) {
+                $resources[] = 'class:'.$classId;
+            }
+            foreach ($row['teacher_ids'] as $teacherId) {
+                $resources[] = 'teacher:'.$teacherId;
+            }
+            foreach ($resources as $resource) {
+                $key = $row['item_id'].':'.$resource;
+                if (isset($occupied[$key])) {
+                    throw new ApiProblemException('DAILY_TIMETABLE_CONFLICT', '长期调课与已有临时安排产生资源冲突', 409, [
+                        'date' => $date,
+                        'resource' => $resource,
+                        'entry_ids' => [$occupied[$key], $row['original_entry_id']],
+                    ]);
+                }
+                $occupied[$key] = $row['original_entry_id'];
+            }
+        }
+    }
+
     /** @return array{date: string, weekday: int, week_number: int} */
     private function dateContext(Semester $semester, string $date): array
     {
@@ -552,6 +594,7 @@ class DailyTimetableService
             'teacher_name' => $entry->teacher->name,
             'teacher_ids' => $entry->teachers->pluck('id')->map(fn ($id): int => (int) $id)->all(),
             'teacher_names' => $entry->teachers->pluck('name')->all(),
+            'original_teacher_ids' => $entry->teachers->pluck('id')->map(fn ($id): int => (int) $id)->all(),
             'room_id' => $entry->actual_room_id,
             'room_name' => $entry->actualRoom->name,
             'week_pattern' => $entry->week_pattern->value,

@@ -63,6 +63,7 @@ const roleLabels: Record<Role, string> = {
   admin: "系统管理员",
   scheduler: "排课员",
   viewer: "查看者",
+  teacher: "教师",
 }
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {

@@ -27,6 +27,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property-read Semester $semester
  * @property-read User $creator
  * @property-read Collection<int, TimetableEntry> $entries
+ * @property-read Collection<int, TimetableEffectivePeriod> $effectivePeriods
  */
 class TimetableVersion extends Model
 {
@@ -80,5 +81,11 @@ class TimetableVersion extends Model
     public function entries(): HasMany
     {
         return $this->hasMany(TimetableEntry::class);
+    }
+
+    /** @return HasMany<TimetableEffectivePeriod, $this> */
+    public function effectivePeriods(): HasMany
+    {
+        return $this->hasMany(TimetableEffectivePeriod::class);
     }
 }
