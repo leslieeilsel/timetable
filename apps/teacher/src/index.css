@@ -46,9 +46,9 @@
   --font-app: "FZYaSongS-R-GB", "Noto Serif SC", "Songti SC", "STSong", "SimSun", ui-serif, serif;
   --font-data:
     "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  --background: #fbfbf9;
+  --background: #ffffff;
   --foreground: #171814;
-  --card: #fbfbf9;
+  --card: #ffffff;
   --card-foreground: #171814;
   --popover: #ffffff;
   --popover-foreground: #171814;
@@ -84,7 +84,7 @@
   html {
     min-height: 100%;
     scrollbar-gutter: stable both-edges;
-    background: #efefec;
+    background: var(--background);
     font-family: var(--font-app);
     -webkit-tap-highlight-color: transparent;
   }
@@ -93,7 +93,7 @@
     min-width: 320px;
     min-height: 100dvh;
     margin: 0;
-    background: #efefec;
+    background: var(--background);
     color: var(--foreground);
     font-family: var(--font-app);
     -webkit-font-smoothing: antialiased;
@@ -123,7 +123,7 @@
 
 .teacher-page {
   min-height: 100dvh;
-  background: #efefec;
+  background: var(--background);
 }
 
 .teacher-shell {
@@ -197,7 +197,7 @@
     -apple-system,
     BlinkMacSystemFont,
     sans-serif;
-  font-size: 15px;
+  font-size: 16px;
   line-height: 48px;
   outline: none;
   transition:
@@ -337,7 +337,7 @@
   align-items: end;
   padding: env(safe-area-inset-top) 16px 0;
   border-bottom: 1px solid var(--border);
-  background: rgb(251 251 249 / 96%);
+  background: rgb(255 255 255 / 96%);
 }
 
 .plain-header {
@@ -823,26 +823,25 @@
 }
 
 .calendar-viewport[data-calendar-state="week"] {
-  height: 72px;
+  height: 122px;
 }
 
 .calendar-viewport[data-calendar-state="month"] {
-  height: calc(76px + var(--month-row-count) * 44px);
+  height: calc(86px + var(--month-row-count) * 44px);
 }
 
 .calendar-view {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 150ms var(--resize-ease);
+  padding-top: 10px;
 }
 
-.calendar-view[data-active="true"] {
-  z-index: 1;
-  opacity: 1;
-  pointer-events: auto;
-  transition-duration: var(--resize-dur);
+.month-toolbar-clip {
+  height: 0;
+  overflow: hidden;
+  transition: height var(--resize-dur) var(--resize-ease);
+}
+
+.calendar-viewport[data-calendar-state="month"] .month-toolbar-clip {
+  height: 52px;
 }
 
 .calendar-swipe-window {
@@ -857,11 +856,12 @@
   cursor: grabbing;
 }
 
-.compact-swipe-window {
-  height: 72px;
+.month-swipe-window {
+  height: 88px;
+  transition: height var(--resize-dur) var(--resize-ease);
 }
 
-.month-swipe-window {
+.calendar-viewport[data-calendar-state="month"] .month-swipe-window {
   height: calc(var(--month-row-count) * 44px);
 }
 
@@ -873,17 +873,23 @@
   transform: translate3d(-100%, 0, 0);
 }
 
-.calendar-swipe-track > .week-strip,
 .calendar-swipe-track > .month-days {
   min-width: 100%;
   flex: 0 0 100%;
 }
 
-.week-strip {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  margin-top: 18px;
-  touch-action: pan-y;
+.month-days {
+  align-content: start;
+  grid-auto-rows: 44px;
+  transform: translateY(calc(var(--compact-row) * -44px));
+}
+
+.calendar-viewport[data-resizing="true"] .month-days {
+  transition: transform var(--resize-dur) var(--resize-ease);
+}
+
+.calendar-viewport[data-calendar-state="month"] .month-days {
+  transform: translateY(calc(var(--month-row) * -44px));
 }
 
 .month-calendar-toolbar {
@@ -903,6 +909,81 @@
   text-align: center;
   font-size: 15px;
   font-weight: 700;
+}
+
+.month-title-flip {
+  display: inline-flex;
+  min-width: 112px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  line-height: 22px;
+  font-variant-numeric: tabular-nums;
+}
+
+.month-title-part {
+  position: relative;
+  display: grid;
+  height: 22px;
+  perspective: 180px;
+  overflow: clip;
+}
+
+.month-title-part[data-part="year"] {
+  --flip-duration: 420ms;
+  width: 4ch;
+}
+
+.month-title-part[data-part="month"] {
+  --flip-duration: 300ms;
+  width: 2ch;
+}
+
+.month-title-part > span {
+  grid-area: 1 / 1;
+  backface-visibility: hidden;
+}
+
+.month-title-part[data-flipping="true"] .month-title-out {
+  animation: month-title-turn-out var(--flip-duration) linear var(--flip-delay) both;
+}
+
+.month-title-part[data-flipping="true"] .month-title-in {
+  animation: month-title-turn-in var(--flip-duration) linear var(--flip-delay) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .month-title-part > span {
+    animation-delay: 0ms !important;
+  }
+}
+
+@keyframes month-title-turn-out {
+  from {
+    transform: translateY(0) rotateX(0);
+    opacity: 1;
+    animation-timing-function: cubic-bezier(0.4, 0, 1, 1);
+  }
+  45%,
+  to {
+    transform: translateY(calc(var(--flip-direction) * -30%))
+      rotateX(calc(var(--flip-direction) * 90deg));
+    opacity: 0;
+  }
+}
+
+@keyframes month-title-turn-in {
+  from,
+  45% {
+    transform: translateY(calc(var(--flip-direction) * 30%))
+      rotateX(calc(var(--flip-direction) * -90deg));
+    opacity: 0;
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  to {
+    transform: translateY(0) rotateX(0);
+    opacity: 1;
+  }
 }
 
 .course-marker-legend {
@@ -1250,7 +1331,51 @@
 
 .lesson-list {
   margin-inline: -8px;
-  border-top: 1px solid var(--border);
+}
+
+.lesson-period-group + .lesson-period-group {
+  margin-top: 18px;
+}
+
+.lesson-period-group.morning {
+  --period-color: var(--course-morning);
+  --period-heading-color: #91500e;
+}
+
+.lesson-period-group.afternoon {
+  --period-color: var(--course-afternoon);
+  --period-heading-color: #245c9c;
+}
+
+.lesson-period-heading {
+  display: flex;
+  margin: 0;
+  padding: 4px 8px 2px;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--period-heading-color);
+  font-family: var(--font-data);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.lesson-period-heading > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lesson-period-heading i {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--period-color);
+}
+
+.lesson-period-group .lesson-row:last-child {
+  border-bottom: 0;
 }
 
 .lesson-row {
@@ -1261,6 +1386,65 @@
   gap: 8px;
   padding: 12px 8px;
   border-bottom: 1px solid var(--border);
+}
+
+/* Share two text baselines across the time and course columns in day view. */
+.lesson-row:not(.compact) {
+  --lesson-primary-row: 1;
+  --lesson-secondary-row: 2;
+  min-height: 0;
+  grid-template-columns: 100px minmax(0, 1fr);
+  grid-template-rows: 24px 20px;
+  align-items: baseline;
+  column-gap: 16px;
+  row-gap: 3px;
+  padding: 10px 8px;
+}
+
+.lesson-row:not(.compact) .lesson-time,
+.lesson-row:not(.compact) .lesson-main {
+  display: contents;
+}
+
+.lesson-row:not(.compact) time,
+.lesson-row:not(.compact) .lesson-main > strong {
+  grid-row: var(--lesson-primary-row);
+  align-self: baseline;
+  padding-top: 0;
+  line-height: 24px;
+}
+
+.lesson-row:not(.compact) time,
+.lesson-row:not(.compact) .lesson-ended {
+  grid-column: 1;
+}
+
+.lesson-row:not(.compact) .lesson-main > strong,
+.lesson-row:not(.compact) .lesson-main > span {
+  grid-column: 2;
+}
+
+.lesson-row:not(.compact) .lesson-ended,
+.lesson-row:not(.compact) .lesson-main > span {
+  grid-row: var(--lesson-secondary-row);
+  align-self: baseline;
+  line-height: 20px;
+}
+
+.lesson-row:not(.compact) .status-tag {
+  grid-column: 3;
+  grid-row: var(--lesson-primary-row) / span 2;
+}
+
+.lesson-row.attention:not(.compact) {
+  --lesson-primary-row: 2;
+  --lesson-secondary-row: 3;
+  grid-template-rows: auto 24px 20px;
+}
+
+.lesson-row.attention:not(.compact) .lesson-attention {
+  grid-row: 1;
+  margin-bottom: 4px;
 }
 
 .lesson-row.attention {
@@ -1294,40 +1478,6 @@
 
 .lesson-time time {
   padding-top: 0;
-}
-
-.lesson-period {
-  display: inline-flex;
-  width: fit-content;
-  align-items: center;
-  gap: 4px;
-  color: var(--muted-foreground);
-  font-family:
-    "PingFang SC",
-    "Microsoft YaHei",
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    sans-serif;
-  font-size: 12px;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.lesson-period i {
-  width: 5px;
-  height: 5px;
-  flex: none;
-  border-radius: 50%;
-  background: currentColor;
-}
-
-.lesson-period.morning i {
-  color: var(--course-morning);
-}
-
-.lesson-period.afternoon i {
-  color: var(--course-afternoon);
 }
 
 .lesson-main {
@@ -1396,7 +1546,16 @@
 }
 
 .lesson-row.completed:not(.inactive) {
-  color: #666860;
+  color: #73766d;
+}
+
+.lesson-ended {
+  width: fit-content;
+  color: #666b60;
+  font-family: var(--font-data);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
 }
 
 .lesson-row.completed:not(.inactive) .lesson-main > span {
@@ -1451,42 +1610,39 @@
 .week-groups {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 26px;
 }
 
 .week-group {
-  padding: 4px 0 0;
+  padding: 0;
 }
 
-.week-group.today {
-  margin: 0 -9px;
-  padding: 11px 9px 5px;
-  border: 1px solid #e4e5de;
-  border-radius: 6px;
-  background: #f3f3ef;
-}
-
-.week-group.today .compact-lessons .lesson-row:last-child {
+.week-group .compact-lessons .lesson-row:last-child {
   border-bottom: 0;
 }
 
 .week-group-title {
   display: flex;
-  width: 100%;
-  min-height: 31px;
-  align-items: baseline;
+  width: calc(100% + 16px);
+  min-height: 42px;
+  align-items: center;
   justify-content: space-between;
-  padding: 0 1px 8px;
+  margin: 0 -8px 4px;
+  padding: 9px 8px;
   border: 0;
-  background: transparent;
+  border-radius: 4px;
+  background: #eeefe9;
   color: inherit;
   outline: none;
   text-align: left;
 }
 
 .week-group-title strong {
-  font-size: 15px;
-  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 700;
 }
 
 .week-group-title span {
@@ -1499,6 +1655,16 @@
     BlinkMacSystemFont,
     sans-serif;
   font-size: 12px;
+}
+
+.week-group-title .week-today-label {
+  padding: 3px 7px;
+  border-radius: 3px;
+  background: #345942;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
 }
 
 .week-group-link {
@@ -1514,13 +1680,18 @@
 }
 
 .compact-lessons {
-  border-top: 1px solid var(--border);
+  border-top: 0;
 }
 
 .lesson-row.compact {
   min-height: 58px;
   grid-template-columns: 72px minmax(0, 1fr) auto;
-  padding: 9px 1px;
+  padding: 9px 0;
+}
+
+.lesson-row.compact .lesson-time {
+  align-self: center;
+  gap: 3px;
 }
 
 .lesson-row.compact time {

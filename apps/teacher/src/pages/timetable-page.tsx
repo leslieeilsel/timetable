@@ -78,6 +78,14 @@ function emptySwipeGesture(): SwipeGesture {
   }
 }
 
+function calendarGestureAxis(distanceX: number, distanceY: number): SwipeGesture["axis"] {
+  const horizontal = Math.abs(distanceX)
+  const vertical = Math.abs(distanceY)
+  if (horizontal >= 6 && horizontal >= vertical * 0.7) return "horizontal"
+  if (vertical >= 12 && vertical > horizontal * 1.45) return "vertical"
+  return null
+}
+
 function useInterruptibleSwipePager({
   pageKey,
   previousDisabled,
@@ -127,6 +135,8 @@ function useInterruptibleSwipePager({
     const track = trackRef.current
     if (!viewport || !track) return
     let suppressClickUntil = 0
+    let touchStart: { identifier: number; x: number; y: number } | null = null
+    let touchAxis: SwipeGesture["axis"] = null
 
     function width() {
       return viewport?.clientWidth ?? 0
@@ -252,6 +262,28 @@ function useInterruptibleSwipePager({
       if (viewport?.hasPointerCapture(pointerId)) viewport.releasePointerCapture(pointerId)
     }
 
+    function handleTouchStart(event: TouchEvent) {
+      const touch = event.touches.length === 1 ? event.touches[0] : null
+      touchStart = touch
+        ? { identifier: touch.identifier, x: touch.clientX, y: touch.clientY }
+        : null
+      touchAxis = null
+    }
+
+    function handleTouchMove(event: TouchEvent) {
+      if (!touchStart || event.touches.length !== 1) return
+      const touch = event.touches[0]
+      if (touch.identifier !== touchStart.identifier) return
+      touchAxis ??= calendarGestureAxis(touch.clientX - touchStart.x, touch.clientY - touchStart.y)
+      // Pointer capture alone cannot stop a mobile browser from taking over vertical scrolling.
+      if (touchAxis === "horizontal" && event.cancelable) event.preventDefault()
+    }
+
+    function handleTouchEnd() {
+      touchStart = null
+      touchAxis = null
+    }
+
     function handlePointerDown(event: PointerEvent) {
       if (!event.isPrimary || event.button !== 0 || movePending.current) return
       if (interactionReleaseFrameRef.current !== null) {
@@ -279,12 +311,8 @@ function useInterruptibleSwipePager({
       const distanceY = point.clientY - gesture.startY
 
       if (!gesture.axis) {
-        if (Math.hypot(distanceX, distanceY) < 6) return
-        if (Math.abs(distanceY) > Math.abs(distanceX) * 1.08) {
-          gesture.axis = "vertical"
-          return
-        }
-        gesture.axis = "horizontal"
+        gesture.axis = calendarGestureAxis(distanceX, distanceY)
+        if (gesture.axis !== "horizontal") return
         gesture.baseOffset = cancelAnimationAtCurrentPosition()
         viewport?.setPointerCapture(event.pointerId)
         if (viewport) viewport.dataset.dragging = "true"
@@ -382,6 +410,10 @@ function useInterruptibleSwipePager({
       settle(direction, 0)
     }
 
+    viewport.addEventListener("touchstart", handleTouchStart, { passive: true })
+    viewport.addEventListener("touchmove", handleTouchMove, { passive: false })
+    viewport.addEventListener("touchend", handleTouchEnd)
+    viewport.addEventListener("touchcancel", handleTouchEnd)
     viewport.addEventListener("pointerdown", handlePointerDown)
     viewport.addEventListener("pointermove", handlePointerMove)
     viewport.addEventListener("pointerup", handlePointerUp)
@@ -393,6 +425,10 @@ function useInterruptibleSwipePager({
     resizeObserver.observe(viewport)
     return () => {
       resizeObserver.disconnect()
+      viewport.removeEventListener("touchstart", handleTouchStart)
+      viewport.removeEventListener("touchmove", handleTouchMove)
+      viewport.removeEventListener("touchend", handleTouchEnd)
+      viewport.removeEventListener("touchcancel", handleTouchEnd)
       viewport.removeEventListener("pointerdown", handlePointerDown)
       viewport.removeEventListener("pointermove", handlePointerMove)
       viewport.removeEventListener("pointerup", handlePointerUp)
@@ -465,6 +501,24 @@ export function TimetablePage() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>
+    const refresh = () => {
+      clearTimeout(timer)
+      setNow(new Date())
+      timer = setTimeout(refresh, 60_000 - (Date.now() % 60_000))
+    }
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") refresh()
+    }
+    refresh()
+    document.addEventListener("visibilitychange", onVisibilityChange)
+    return () => {
+      clearTimeout(timer)
+      document.removeEventListener("visibilitychange", onVisibilityChange)
+    }
+  }, [])
   const [context, setContext] = useState("mine")
   const [mode, setMode] = useState<ScheduleMode>("day")
   const [range, setRange] = useState<DateRange | null>(null)
@@ -549,7 +603,7 @@ export function TimetablePage() {
   const timetable = context === "mine" ? myTimetable.data : classTimetable.data
   const monthScheduleDays = monthTimetableQueries.flatMap((query) => query.data?.days ?? [])
   const rangeData = timetable ?? (context === "mine" ? myTimetable.data : classes.data)
-  const today = dateString(new Date())
+  const today = dateString(now)
   const selectedDay =
     timetable?.days.find((day) => day.date === selectedDate) ??
     timetable?.days.find((day) => day.date === today) ??
@@ -788,12 +842,14 @@ export function TimetablePage() {
                 days={[...timetable.days, ...(upcomingTimetable.data?.days ?? [])]}
                 context={context}
                 today={today}
+                now={now}
               />
             ) : (
               <WeekSchedule
                 days={timetable.days}
                 context={context}
                 today={today}
+                now={now}
                 onSelectDay={openDay}
               />
             )
@@ -821,65 +877,17 @@ function ContextItem({
   )
 }
 
-type CalendarWeekDay = {
-  date: string
-  weekday: number
-  week_number: number
-  disabled: boolean
-}
-
 type CalendarMonthPanel = {
   month: Date
   days: Date[]
+  compactRow: number
+  monthRow: number
+  monthRowCount: number
 }
-
-const CalendarWeekPanels = memo(function CalendarWeekPanels({
-  calendarWeeks,
-  scheduleByDate,
-  selected,
-  today,
-  showCourseMarkers,
-  onSelectDate,
-}: {
-  calendarWeeks: CalendarWeekDay[][]
-  scheduleByDate: Map<string, TimetableRow[]>
-  selected: string
-  today: string
-  showCourseMarkers: boolean
-  onSelectDate: (date: string) => void
-}) {
-  return calendarWeeks.map((calendarDays, panelIndex) => (
-    <div
-      className="week-strip"
-      key={calendarDays[0]?.date}
-      aria-hidden={panelIndex !== 1}
-      inert={panelIndex !== 1}
-    >
-      {calendarDays.map((day) => {
-        const active = day.date === selected
-        const rows = scheduleByDate.get(day.date) ?? []
-        return (
-          <button
-            type="button"
-            key={day.date}
-            className={cn("date-button", active && "active")}
-            aria-current={day.date === today ? "date" : undefined}
-            aria-pressed={active}
-            disabled={day.disabled}
-            onClick={() => onSelectDate(day.date)}
-          >
-            <span>{weekdayShort[day.weekday - 1]}</span>
-            <strong>{format(parseISO(day.date), "d")}</strong>
-            {showCourseMarkers && rows ? <CourseMarkers rows={rows} /> : null}
-          </button>
-        )
-      })}
-    </div>
-  ))
-})
 
 const CalendarMonthPanels = memo(function CalendarMonthPanels({
   calendarMonths,
+  expanded,
   scheduleByDate,
   selected,
   today,
@@ -889,6 +897,7 @@ const CalendarMonthPanels = memo(function CalendarMonthPanels({
   onSelectDate,
 }: {
   calendarMonths: CalendarMonthPanel[]
+  expanded: boolean
   scheduleByDate: Map<string, TimetableRow[]>
   selected: string
   today: string
@@ -902,11 +911,20 @@ const CalendarMonthPanels = memo(function CalendarMonthPanels({
   return calendarMonths.map((calendarMonth, panelIndex) => (
     <div
       className="month-days"
-      key={format(calendarMonth.month, "yyyy-MM")}
+      key={panelIndex}
+      style={
+        {
+          "--compact-row": calendarMonth.compactRow,
+          "--month-row": calendarMonth.monthRow,
+        } as React.CSSProperties
+      }
       aria-hidden={panelIndex !== 1}
       inert={panelIndex !== 1}
     >
-      {calendarMonth.days.map((date) => {
+      {calendarMonth.days.map((date, dayIndex) => {
+        const firstRow = expanded ? calendarMonth.monthRow : calendarMonth.compactRow
+        const rowCount = expanded ? calendarMonth.monthRowCount : 2
+        const hidden = dayIndex < firstRow * 7 || dayIndex >= (firstRow + rowCount) * 7
         const value = dateString(date)
         const rows = scheduleByDate.get(value)
         const { morning, afternoon } = lessonGroups(rows ?? [])
@@ -931,6 +949,8 @@ const CalendarMonthPanels = memo(function CalendarMonthPanels({
             aria-label={`${value === today ? "今天，" : ""}${dateLabel}${rows ? (lessonSummary ? `，${lessonSummary}` : "，无课") : ""}`}
             aria-current={value === today ? "date" : undefined}
             aria-pressed={value === selected}
+            aria-hidden={hidden || undefined}
+            inert={hidden}
             disabled={disabled}
             onClick={() => onSelectDate(value)}
           >
@@ -942,6 +962,70 @@ const CalendarMonthPanels = memo(function CalendarMonthPanels({
     </div>
   ))
 })
+
+function FlippingDatePart({
+  value,
+  order,
+  part,
+}: {
+  value: string
+  order: string
+  part: "year" | "month"
+}) {
+  const [flip, setFlip] = useState({ value, order, previous: "", direction: 1, delay: 0 })
+
+  if (flip.order !== order) {
+    setFlip({
+      value,
+      order,
+      previous: value !== flip.value ? flip.value : "",
+      direction: order > flip.order ? 1 : -1,
+      delay: part === "month" && order.slice(0, 4) !== flip.order.slice(0, 4) ? 120 : 0,
+    })
+  }
+
+  return (
+    <span
+      className="month-title-part"
+      data-part={part}
+      data-flipping={Boolean(flip.previous)}
+      style={
+        {
+          "--flip-direction": flip.direction,
+          "--flip-delay": `${flip.delay}ms`,
+        } as React.CSSProperties
+      }
+      aria-hidden="true"
+    >
+      {flip.previous ? (
+        <span key={`${flip.value}-out`} className="month-title-out">
+          {flip.previous}
+        </span>
+      ) : null}
+      <span
+        key={flip.value}
+        className="month-title-in"
+        onAnimationEnd={() =>
+          setFlip((current) => (current.value === value ? { ...current, previous: "" } : current))
+        }
+      >
+        {value}
+      </span>
+    </span>
+  )
+}
+
+function FlippingMonthTitle({ month }: { month: Date }) {
+  const order = format(month, "yyyy-MM")
+  return (
+    <strong className="month-title-flip" aria-label={format(month, "yyyy年M月")}>
+      <FlippingDatePart part="year" value={format(month, "yyyy")} order={order} />
+      <span aria-hidden="true">年</span>
+      <FlippingDatePart part="month" value={format(month, "M")} order={order} />
+      <span aria-hidden="true">月</span>
+    </strong>
+  )
+}
 
 function DateControls({
   from,
@@ -978,7 +1062,12 @@ function DateControls({
 }) {
   const selected = selectedDate ?? selectedDay?.date ?? from
   const [monthCalendarOpen, setMonthCalendarOpen] = useState(false)
+  const [calendarResizing, setCalendarResizing] = useState(false)
   const [visibleMonth, setVisibleMonth] = useState(() => startOfMonth(parseISO(selected)))
+  const [compactStart, setCompactStart] = useState(() =>
+    dateString(startOfWeek(parseISO(selected), { weekStartsOn: 1 })),
+  )
+  const lastSelected = useRef(selected)
   const [, refreshScheduleMarkers] = useState(0)
   const scheduleDaysRef = useRef(scheduleDays)
   const frozenScheduleDays = useRef(scheduleDays)
@@ -995,15 +1084,28 @@ function DateControls({
     calendarInteracting.current = active
     if (!active) refreshScheduleMarkers((revision) => revision + 1)
   }, [])
-  const selectWeekDate = useCallback((date: string) => selectDateRef.current(date), [])
   const selectMonthDate = useCallback((date: string) => {
     selectDateRef.current(date)
     modeChangeRef.current("day")
   }, [])
 
   useEffect(() => {
-    if (!monthCalendarOpen) setVisibleMonth(startOfMonth(parseISO(selected)))
-  }, [monthCalendarOpen, selected])
+    if (lastSelected.current === selected) return
+    lastSelected.current = selected
+    const date = parseISO(selected)
+    const start = parseISO(compactStart)
+    if (
+      !isSameMonth(date, visibleMonth) &&
+      (!monthCalendarOpen ||
+        isBefore(date, startOfWeek(startOfMonth(visibleMonth), { weekStartsOn: 1 })) ||
+        isAfter(date, endOfWeek(endOfMonth(visibleMonth), { weekStartsOn: 1 })))
+    ) {
+      setVisibleMonth(startOfMonth(date))
+    }
+    if (isBefore(date, start) || isAfter(date, addDays(start, 13))) {
+      setCompactStart(dateString(startOfWeek(date, { weekStartsOn: 1 })))
+    }
+  }, [compactStart, monthCalendarOpen, selected, visibleMonth])
 
   const selectedScheduleDay = scheduleDays.find((day) => day.date === selected)
   const weekNumber =
@@ -1021,40 +1123,32 @@ function DateControls({
       : `${format(parseISO(selected), "M月d日 EEE", { locale: zhCN })} · 第${weekNumber ?? "—"}周`
   const previousWeekDisabled = !isAfter(parseISO(from), parseISO(semesterStart))
   const nextWeekDisabled = !isBefore(parseISO(to), parseISO(semesterEnd))
-  const calendarWeeks = useMemo(
-    () =>
-      ([-1, 0, 1] as const).map((offset) => {
-        const weekStart = startOfWeek(addDays(parseISO(selected), offset * 7), { weekStartsOn: 1 })
-        return eachDayOfInterval({
-          start: weekStart,
-          end: endOfWeek(weekStart, { weekStartsOn: 1 }),
-        }).map((date) => {
-          const value = dateString(date)
-          const resolved = days.find((day) => day.date === value)
-          return {
-            date: value,
-            weekday: Number(format(date, "i")),
-            week_number: resolved?.week_number ?? weekNumber ?? 0,
-            disabled:
-              isBefore(date, parseISO(semesterStart)) || isAfter(date, parseISO(semesterEnd)),
-          }
-        })
-      }),
-    [days, selected, semesterEnd, semesterStart, weekNumber],
-  )
   const calendarMonths = useMemo(
     () =>
       ([-1, 0, 1] as const).map((offset) => {
-        const month = addMonths(visibleMonth, offset)
+        const anchor = addDays(parseISO(compactStart), monthCalendarOpen ? 0 : offset * 7)
+        const month = monthCalendarOpen
+          ? addMonths(visibleMonth, offset)
+          : offset === 0
+            ? visibleMonth
+            : startOfMonth(anchor)
+        const monthStart = startOfWeek(startOfMonth(month), { weekStartsOn: 1 })
+        const monthEnd = endOfWeek(endOfMonth(month), { weekStartsOn: 1 })
+        const panelStart = monthCalendarOpen && offset !== 0 ? monthStart : anchor
+        // Keep both compact weeks in this same grid, including a trailing week across months.
+        const gridStart = isBefore(panelStart, monthStart) ? panelStart : monthStart
+        const compactEnd = addDays(panelStart, 13)
+        const gridEnd = isAfter(compactEnd, monthEnd) ? compactEnd : monthEnd
+        const gridDays = eachDayOfInterval({ start: gridStart, end: gridEnd })
         return {
           month,
-          days: eachDayOfInterval({
-            start: startOfWeek(startOfMonth(month), { weekStartsOn: 1 }),
-            end: endOfWeek(endOfMonth(month), { weekStartsOn: 1 }),
-          }),
+          days: gridDays,
+          compactRow: gridDays.findIndex((date) => dateString(date) === dateString(panelStart)) / 7,
+          monthRow: gridDays.findIndex((date) => dateString(date) === dateString(monthStart)) / 7,
+          monthRowCount: eachDayOfInterval({ start: monthStart, end: monthEnd }).length / 7,
         }
       }),
-    [visibleMonth],
+    [compactStart, monthCalendarOpen, visibleMonth],
   )
   const displayedScheduleDays = calendarInteracting.current
     ? frozenScheduleDays.current
@@ -1063,7 +1157,11 @@ function DateControls({
     () => new Map(displayedScheduleDays.map((day) => [day.date, day.rows])),
     [displayedScheduleDays],
   )
-  const monthRowCount = calendarMonths[1].days.length / 7
+  const monthRowCount = calendarMonths[1].monthRowCount
+  const visibleMonthDays = calendarMonths[1].days.slice(
+    calendarMonths[1].monthRow * 7,
+    (calendarMonths[1].monthRow + monthRowCount) * 7,
+  )
   const calendarState = mode === "week" ? "closed" : monthCalendarOpen ? "month" : "week"
   const previousMonthDisabled = isBefore(
     endOfMonth(addMonths(visibleMonth, -1)),
@@ -1073,52 +1171,92 @@ function DateControls({
   const todayDate = parseISO(today)
   const canReturnToToday =
     !isBefore(todayDate, parseISO(semesterStart)) && !isAfter(todayDate, parseISO(semesterEnd))
-  const showReturnToToday = canReturnToToday && !isSameMonth(visibleMonth, todayDate)
-  const weekPager = useInterruptibleSwipePager({
-    pageKey: selected,
-    previousDisabled: previousWeekDisabled,
-    nextDisabled: nextWeekDisabled,
-    onMove: (direction) => onMoveRange(direction * 7),
+  const todayInView = monthCalendarOpen
+    ? visibleMonthDays.some((date) => dateString(date) === today)
+    : today >= compactStart && today <= dateString(addDays(parseISO(compactStart), 13))
+  const showReturnToToday = canReturnToToday && !todayInView
+  const compactPreviousDisabled = !isAfter(parseISO(compactStart), parseISO(semesterStart))
+  const compactNextDisabled = !isBefore(addDays(parseISO(compactStart), 13), parseISO(semesterEnd))
+  const calendarPager = useInterruptibleSwipePager({
+    pageKey: `${mode}:${monthCalendarOpen ? "month" : "week"}:${format(visibleMonth, "yyyy-MM")}:${compactStart}`,
+    previousDisabled: monthCalendarOpen ? previousMonthDisabled : compactPreviousDisabled,
+    nextDisabled: monthCalendarOpen ? nextMonthDisabled : compactNextDisabled,
+    onMove: (direction) => {
+      if (monthCalendarOpen) {
+        const month = addMonths(visibleMonth, direction)
+        setVisibleMonth(month)
+        setCompactStart(
+          dateString(
+            startOfWeek(isSameMonth(parseISO(selected), month) ? parseISO(selected) : month, {
+              weekStartsOn: 1,
+            }),
+          ),
+        )
+      } else {
+        const start = addDays(parseISO(compactStart), direction * 7)
+        const selectedInView =
+          selected >= compactStart && selected <= dateString(addDays(parseISO(compactStart), 13))
+        const moved = selectedInView ? addDays(parseISO(selected), direction * 7) : start
+        const date = isBefore(moved, parseISO(semesterStart))
+          ? semesterStart
+          : isAfter(moved, parseISO(semesterEnd))
+            ? semesterEnd
+            : dateString(moved)
+        const month = startOfMonth(parseISO(date))
+        setCompactStart(dateString(start))
+        setVisibleMonth(month)
+        onSelectDate(date)
+      }
+    },
     onInteractionChange: handleCalendarInteraction,
   })
-  const monthPager = useInterruptibleSwipePager({
-    pageKey: format(visibleMonth, "yyyy-MM"),
-    previousDisabled: previousMonthDisabled,
-    nextDisabled: nextMonthDisabled,
-    onMove: (direction) => setVisibleMonth((month) => addMonths(month, direction)),
-    onInteractionChange: handleCalendarInteraction,
-  })
+  const gridFrom = dateString(visibleMonthDays[0])
+  const gridTo = dateString(visibleMonthDays.at(-1)!)
 
   useEffect(() => {
-    if (!showCourseMarkers || mode !== "day" || !monthCalendarOpen) {
+    if (!showCourseMarkers || mode !== "day") {
       onMonthRangeChange(null)
       return
     }
-
-    const gridStart = startOfWeek(startOfMonth(visibleMonth), { weekStartsOn: 1 })
-    const gridEnd = endOfWeek(endOfMonth(visibleMonth), { weekStartsOn: 1 })
+    const gridStart = parseISO(monthCalendarOpen ? gridFrom : compactStart)
+    const gridEnd = monthCalendarOpen ? parseISO(gridTo) : addDays(gridStart, 13)
     const start = isBefore(gridStart, parseISO(semesterStart)) ? parseISO(semesterStart) : gridStart
     const end = isAfter(gridEnd, parseISO(semesterEnd)) ? parseISO(semesterEnd) : gridEnd
     onMonthRangeChange({ from: dateString(start), to: dateString(end) })
   }, [
+    compactStart,
+    gridFrom,
+    gridTo,
     mode,
     monthCalendarOpen,
     onMonthRangeChange,
     semesterEnd,
     semesterStart,
     showCourseMarkers,
-    visibleMonth,
   ])
 
+  function changeView(nextMode: ScheduleMode) {
+    if (nextMode === mode) return
+    const date = isBefore(todayDate, parseISO(semesterStart))
+      ? semesterStart
+      : isAfter(todayDate, parseISO(semesterEnd))
+        ? semesterEnd
+        : today
+    setMonthCalendarOpen(false)
+    setVisibleMonth(startOfMonth(parseISO(date)))
+    setCompactStart(dateString(startOfWeek(parseISO(date), { weekStartsOn: 1 })))
+    onSelectDate(date)
+    onModeChange(nextMode)
+  }
+
   function toggleMonthCalendar() {
-    if (!monthCalendarOpen) {
-      setVisibleMonth(startOfMonth(parseISO(selected)))
-    }
+    setCalendarResizing(true)
     setMonthCalendarOpen((open) => !open)
   }
 
   function returnToToday() {
     setVisibleMonth(startOfMonth(todayDate))
+    setCompactStart(dateString(startOfWeek(todayDate, { weekStartsOn: 1 })))
     onSelectDate(today)
     onModeChange("day")
   }
@@ -1181,7 +1319,7 @@ function DateControls({
               role="tab"
               aria-selected={mode === "day"}
               className={cn(mode === "day" && "active")}
-              onClick={() => onModeChange("day")}
+              onClick={() => changeView("day")}
             >
               日
             </button>
@@ -1190,7 +1328,7 @@ function DateControls({
               role="tab"
               aria-selected={mode === "week"}
               className={cn(mode === "week" && "active")}
-              onClick={() => onModeChange("week")}
+              onClick={() => changeView("week")}
             >
               周
             </button>
@@ -1201,77 +1339,68 @@ function DateControls({
       <div
         className="calendar-viewport t-resize"
         data-calendar-state={calendarState}
+        data-resizing={calendarResizing}
+        onTransitionEnd={(event) => {
+          if (event.target === event.currentTarget && event.propertyName === "height")
+            setCalendarResizing(false)
+        }}
         style={{ "--month-row-count": monthRowCount } as React.CSSProperties}
       >
         <div
-          className="calendar-view compact-calendar-view"
-          data-active={calendarState === "week"}
-          aria-hidden={calendarState !== "week"}
-          inert={calendarState !== "week"}
-        >
-          <div ref={weekPager.viewportRef} className="calendar-swipe-window compact-swipe-window">
-            <div ref={weekPager.trackRef} className="calendar-swipe-track">
-              <CalendarWeekPanels
-                calendarWeeks={calendarWeeks}
-                scheduleByDate={scheduleByDate}
-                selected={selected}
-                today={today}
-                showCourseMarkers={showCourseMarkers}
-                onSelectDate={selectWeekDate}
-              />
-            </div>
-          </div>
-        </div>
-
-        <div
           id="teacher-month-calendar"
-          className="calendar-view month-calendar-view"
-          data-active={calendarState === "month"}
-          aria-hidden={calendarState !== "month"}
-          inert={calendarState !== "month"}
+          className="calendar-view"
+          aria-hidden={calendarState === "closed"}
+          inert={calendarState === "closed"}
         >
-          <div className="month-calendar-toolbar">
-            <button
-              type="button"
-              aria-label="查看上个月"
-              disabled={previousMonthDisabled}
-              onClick={() => monthPager.go(-1)}
-            >
-              <ChevronLeft />
-            </button>
-            <div className="month-calendar-heading">
-              <strong>{format(visibleMonth, "yyyy年M月")}</strong>
-              {showCourseMarkers ? (
-                <span className="course-marker-legend" aria-label="课程标记图例">
-                  <span className="morning">
-                    <i />
-                    上午
+          <div
+            className="month-toolbar-clip"
+            aria-hidden={!monthCalendarOpen}
+            inert={!monthCalendarOpen}
+          >
+            <div className="month-calendar-toolbar">
+              <button
+                type="button"
+                aria-label="查看上个月"
+                disabled={previousMonthDisabled}
+                onClick={() => calendarPager.go(-1)}
+              >
+                <ChevronLeft />
+              </button>
+              <div className="month-calendar-heading">
+                <FlippingMonthTitle month={visibleMonth} />
+                {showCourseMarkers ? (
+                  <span className="course-marker-legend" aria-label="课程标记图例">
+                    <span className="morning">
+                      <i />
+                      上午
+                    </span>
+                    <span className="afternoon">
+                      <i />
+                      下午
+                    </span>
                   </span>
-                  <span className="afternoon">
-                    <i />
-                    下午
-                  </span>
-                </span>
-              ) : null}
+                ) : null}
+              </div>
+              <button
+                type="button"
+                aria-label="查看下个月"
+                disabled={nextMonthDisabled}
+                onClick={() => calendarPager.go(1)}
+              >
+                <ChevronRight />
+              </button>
             </div>
-            <button
-              type="button"
-              aria-label="查看下个月"
-              disabled={nextMonthDisabled}
-              onClick={() => monthPager.go(1)}
-            >
-              <ChevronRight />
-            </button>
           </div>
           <div className="month-weekdays" aria-hidden="true">
             {weekdayShort.map((weekday) => (
               <span key={weekday}>{weekday}</span>
             ))}
           </div>
-          <div ref={monthPager.viewportRef} className="calendar-swipe-window month-swipe-window">
-            <div ref={monthPager.trackRef} className="calendar-swipe-track">
+          <div ref={calendarPager.viewportRef} className="calendar-swipe-window month-swipe-window">
+            <div ref={calendarPager.trackRef} className="calendar-swipe-track">
               <CalendarMonthPanels
                 calendarMonths={calendarMonths}
+                expanded={monthCalendarOpen}
                 scheduleByDate={scheduleByDate}
                 selected={selected}
                 today={today}
@@ -1340,11 +1469,13 @@ function DaySchedule({
   days,
   context,
   today,
+  now,
 }: {
   day?: TimetableDay & { accessible?: boolean }
   days: Array<TimetableDay & { accessible?: boolean }>
   context: string
   today: string
+  now: Date
 }) {
   if (!day) {
     return <EmptyState title="当天没有课程" description="可以切换日期查看其他安排" />
@@ -1362,7 +1493,6 @@ function DaySchedule({
   const actualRows = activeRows(rows)
   const isMine = context === "mine"
   const isToday = day.date === today
-  const now = new Date()
   const attentionRow = isMine && isToday ? nextRowForToday(actualRows, now) : undefined
 
   if (!rows.length) {
@@ -1384,24 +1514,44 @@ function DaySchedule({
         </strong>
       </div>
       <div className="lesson-list">
-        {rows.map((row) => {
-          const timing = lessonTiming(row, now)
-          const attention =
-            row.key === attentionRow?.key
-              ? {
-                  label: timing === "ongoing" ? "正在上课" : "下一节",
-                  hint: timing === "upcoming" ? lessonStartHint(row, now) : undefined,
-                }
-              : undefined
+        {(["morning", "afternoon"] as const).map((period) => {
+          const periodRows = rows.filter((row) =>
+            period === "morning" ? row.start_time < "12:00:00" : row.start_time >= "12:00:00",
+          )
+          if (!periodRows.length) return null
+          const label = period === "morning" ? "上午" : "下午"
           return (
-            <LessonRow
-              key={row.key}
-              row={row}
-              showTeachers={!isMine}
-              showPeriod={isMine}
-              completed={isMine && isToday && timing === "completed"}
-              attention={attention}
-            />
+            <section
+              className={cn("lesson-period-group", period)}
+              key={period}
+              aria-label={`${label}课程`}
+            >
+              <h3 className="lesson-period-heading">
+                <span>
+                  <i aria-hidden="true" />
+                  {label}
+                </span>
+              </h3>
+              {periodRows.map((row) => {
+                const timing = lessonTiming(row, now)
+                const attention =
+                  row.key === attentionRow?.key
+                    ? {
+                        label: timing === "ongoing" ? "正在上课" : "下一节",
+                        hint: timing === "upcoming" ? lessonStartHint(row, now) : undefined,
+                      }
+                    : undefined
+                return (
+                  <LessonRow
+                    key={row.key}
+                    row={row}
+                    showTeachers={!isMine}
+                    completed={timing === "completed"}
+                    attention={attention}
+                  />
+                )
+              })}
+            </section>
           )
         })}
       </div>
@@ -1413,11 +1563,13 @@ function WeekSchedule({
   days,
   context,
   today,
+  now,
   onSelectDay,
 }: {
   days: Array<TimetableDay & { accessible?: boolean }>
   context: string
   today: string
+  now: Date
   onSelectDay: (date: string) => void
 }) {
   const isMine = context === "mine"
@@ -1447,19 +1599,20 @@ function WeekSchedule({
       <div className="week-groups">
         {visibleDays.map((day) => (
           <section
-            className={cn("week-group", day.date === today && "today")}
+            className="week-group"
             key={day.date}
             aria-label={format(parseISO(day.date), "M月d日 EEEE", { locale: zhCN })}
           >
             <button
               type="button"
               className="week-group-title"
+              aria-current={day.date === today ? "date" : undefined}
               aria-label={`查看${format(parseISO(day.date), "M月d日 EEEE", { locale: zhCN })}的日课表`}
               onClick={() => onSelectDay(day.date)}
             >
               <strong>
-                {day.date === today ? "今天 " : ""}
                 {format(parseISO(day.date), "EEE M月d日", { locale: zhCN })}
+                {day.date === today ? <span className="week-today-label">今天</span> : null}
               </strong>
               <span className="week-group-link">
                 <span>{activeRows(day.rows).length} 节</span>
@@ -1473,7 +1626,13 @@ function WeekSchedule({
                 {[...day.rows]
                   .sort((a, b) => a.item_sort_order - b.item_sort_order)
                   .map((row) => (
-                    <LessonRow key={row.key} row={row} showTeachers={!isMine} compact />
+                    <LessonRow
+                      key={row.key}
+                      row={row}
+                      showTeachers={!isMine}
+                      completed={lessonTiming(row, now) === "completed"}
+                      compact
+                    />
                   ))}
               </div>
             ) : (
@@ -1489,31 +1648,29 @@ function WeekSchedule({
 function LessonRow({
   row,
   showTeachers,
-  showPeriod = false,
   compact = false,
   completed = false,
   attention,
 }: {
   row: TimetableRow
   showTeachers: boolean
-  showPeriod?: boolean
   compact?: boolean
   completed?: boolean
   attention?: { label: string; hint?: string }
 }) {
   const status = rowStatus(row)
   const inactive = row.duty_status === "removed" || row.is_cancelled
+  const ended = completed && !inactive
   const metadata = showTeachers
     ? `${row.teacher_names.join("、")} · ${row.room_name}`
     : `${row.target_name} · ${row.room_name}`
-  const period = row.start_time < "12:00:00" ? "morning" : "afternoon"
   return (
     <article
       className={cn(
         "lesson-row",
         compact && "compact",
         inactive && "inactive",
-        completed && "completed",
+        ended && "completed",
         attention && "attention",
       )}
     >
@@ -1523,23 +1680,13 @@ function LessonRow({
           {attention.hint ? <span>{attention.hint}</span> : null}
         </small>
       ) : null}
-      {compact ? (
-        <time>{row.start_time.slice(0, 5)}</time>
-      ) : showPeriod ? (
-        <div className="lesson-time">
-          <span className={cn("lesson-period", period)}>
-            <i aria-hidden="true" />
-            {period === "morning" ? "上午" : "下午"}
-          </span>
-          <time>
-            {row.start_time.slice(0, 5)}–{row.end_time.slice(0, 5)}
-          </time>
-        </div>
-      ) : (
+      <div className="lesson-time">
         <time>
-          {row.start_time.slice(0, 5)}–{row.end_time.slice(0, 5)}
+          {row.start_time.slice(0, 5)}
+          {!compact ? `–${row.end_time.slice(0, 5)}` : ""}
         </time>
-      )}
+        {ended ? <span className="lesson-ended">已结束</span> : null}
+      </div>
       <div className="lesson-main">
         <strong>{row.course_name}</strong>
         <span>{metadata}</span>
