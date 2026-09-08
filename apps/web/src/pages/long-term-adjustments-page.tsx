@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { api, apiAllPages, apiMessage, jsonBody } from "@/lib/api"
+import { api, apiAllPages, apiMessage } from "@/lib/api"
 import { semesterPath, useResolvedSemesterId } from "@/lib/semester"
 import type { Semester, TimetableEffectivePeriod, TimetableVersion } from "@/lib/types"
 
@@ -130,7 +130,7 @@ export function LongTermAdjustmentsPage() {
         {
           method: "POST",
           etag: mutationEtag,
-          body: jsonBody({
+          body: JSON.stringify({
             base_version_id: Number(baseVersionId),
             name: draftName.trim() || `长期调课草稿 · ${effectiveFrom || current.start_date}`,
           }),
@@ -159,7 +159,7 @@ export function LongTermAdjustmentsPage() {
         `/api/v1/semesters/${semesterId}/long-term-adjustments/preview`,
         {
           method: "POST",
-          body: jsonBody({
+          body: JSON.stringify({
             version_id: Number(draftVersionId),
             effective_from: effectiveFrom,
             effective_to: effectiveTo,
@@ -182,7 +182,7 @@ export function LongTermAdjustmentsPage() {
       await api<TimetableEffectivePeriod>(`/api/v1/semesters/${semesterId}/long-term-adjustments`, {
         method: "POST",
         etag: mutationEtag,
-        body: jsonBody({
+        body: JSON.stringify({
           version_id: Number(draftVersionId),
           effective_from: effectiveFrom,
           effective_to: effectiveTo,

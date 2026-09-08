@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { api, apiAllPages, apiDownload, ApiError, apiMessage, jsonBody } from "@/lib/api"
+import { api, apiAllPages, apiDownload, ApiError, apiMessage } from "@/lib/api"
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -10,11 +10,10 @@ describe("API utilities", () => {
     )
   })
 
-  it("preserves structured API errors and serializes JSON bodies", () => {
+  it("preserves structured API error messages", () => {
     expect(apiMessage(new ApiError("教室冲突", 409, "TIMETABLE_RESOURCE_CONFLICT", {}))).toBe(
       "教室冲突",
     )
-    expect(jsonBody({ weekday: 1 })).toBe('{"weekday":1}')
   })
 
   it("turns validation envelopes into a specific field-level message", () => {
@@ -51,7 +50,7 @@ describe("API utilities", () => {
     await expect(
       api<{ saved: boolean }>("/api/v1/test", {
         method: "POST",
-        body: jsonBody({ value: 1 }),
+        body: JSON.stringify({ value: 1 }),
       }),
     ).resolves.toMatchObject({ data: { saved: true } })
     expect(fetchMock).toHaveBeenCalledTimes(4)
@@ -76,7 +75,7 @@ describe("API utilities", () => {
 
     const result = await apiDownload("/api/v1/export.zip", {
       method: "POST",
-      body: jsonBody({ class_ids: [1] }),
+      body: JSON.stringify({ class_ids: [1] }),
     })
 
     expect(result.filename).toBe("课表.zip")

@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, type ReactNode } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useLocation } from "react-router"
-import { api, ApiError, jsonBody } from "@/lib/api"
+import { api, ApiError } from "@/lib/api"
 import type { User } from "@/lib/types"
 
 interface AuthContextValue {
@@ -67,7 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const user = (
         await api<User>("/api/v1/auth/login", {
           method: "POST",
-          body: jsonBody({ email, password }),
+          body: JSON.stringify({ email, password }),
         })
       ).data
       client.setQueryData(["me"], user)

@@ -200,10 +200,6 @@ function responseFilename(contentDisposition: string | null) {
   return (plain?.[1] ?? plain?.[2])?.trim() || null
 }
 
-export function jsonBody(value: unknown) {
-  return JSON.stringify(value)
-}
-
 export function apiMessage(error: unknown) {
   if (error instanceof ApiError) {
     if (error.status === 412) return "数据已被其他人更新，请刷新后重试。"

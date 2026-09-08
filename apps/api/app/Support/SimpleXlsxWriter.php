@@ -8,18 +8,6 @@ use ZipArchive;
 final class SimpleXlsxWriter
 {
     /**
-     * @param  list<list<bool|float|int|string|null>>  $rows
-     */
-    public function write(array $rows, string $sheetName = '课表', int $headerRow = 1): string
-    {
-        return $this->writePackage(
-            $sheetName,
-            $this->styles(),
-            $this->worksheet($rows, $headerRow),
-        );
-    }
-
-    /**
      * @param  array{
      *     title: string,
      *     headers: list<string>,
@@ -149,14 +137,6 @@ XML;
 XML;
     }
 
-    private function styles(): string
-    {
-        return <<<'XML'
-<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="3"><font><sz val="11"/><name val="Aptos"/></font><font><b/><sz val="11"/><name val="Aptos"/></font><font><b/><color rgb="FFFFFFFF"/><sz val="11"/><name val="Aptos"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF2563EB"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="center"/></xf><xf numFmtId="0" fontId="2" fillId="2" borderId="0" xfId="0" applyAlignment="1" applyFill="1"><alignment vertical="center" wrapText="1"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>
-XML;
-    }
-
     private function timetableStyles(): string
     {
         $styles = <<<'XML'
@@ -169,48 +149,6 @@ XML;
             '<name val="Arial Unicode MS"/><charset val="134"/>',
             $styles,
         );
-    }
-
-    /**
-     * @param  list<list<bool|float|int|string|null>>  $rows
-     */
-    private function worksheet(array $rows, int $headerRow): string
-    {
-        $columnCount = 1;
-        foreach ($rows as $row) {
-            $columnCount = max($columnCount, count($row));
-        }
-        $lastColumn = $this->columnName($columnCount);
-        $lastRow = max(1, count($rows));
-        $columns = '<cols><col min="1" max="1" width="16" customWidth="1"/>';
-        if ($columnCount > 1) {
-            $columns .= '<col min="2" max="'.$columnCount.'" width="22" customWidth="1"/>';
-        }
-        $columns .= '</cols>';
-        $xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-            .'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
-            .'<dimension ref="A1:'.$lastColumn.$lastRow.'"/><sheetViews><sheetView workbookViewId="0">'
-            .'<pane ySplit="'.$headerRow.'" topLeftCell="A'.($headerRow + 1).'" activePane="bottomLeft" state="frozen"/>'
-            .'</sheetView></sheetViews><sheetFormatPr defaultRowHeight="18"/>'.$columns.'<sheetData>';
-
-        foreach ($rows as $rowIndex => $row) {
-            $number = $rowIndex + 1;
-            $xml .= '<row r="'.$number.'">';
-            foreach ($row as $columnIndex => $value) {
-                $style = $number === $headerRow ? 2 : ($number < $headerRow && $columnIndex === 0 && $value !== '' ? 1 : 0);
-                $reference = $this->columnName($columnIndex + 1).$number;
-                $xml .= '<c r="'.$reference.'" t="inlineStr" s="'.$style.'"><is><t xml:space="preserve">'
-                    .$this->xml((string) ($value ?? '')).'</t></is></c>';
-            }
-            $xml .= '</row>';
-        }
-
-        $xml .= '</sheetData>';
-        if ($lastRow >= $headerRow && $columnCount >= 7) {
-            $xml .= '<autoFilter ref="A'.$headerRow.':G'.$lastRow.'"/>';
-        }
-
-        return $xml.'</worksheet>';
     }
 
     /**

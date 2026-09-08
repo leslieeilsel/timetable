@@ -17,7 +17,7 @@ import {
   SquareIcon,
 } from "lucide-react"
 import { toast } from "sonner"
-import { api, apiAllPages, apiMessage, jsonBody } from "@/lib/api"
+import { api, apiAllPages, apiMessage } from "@/lib/api"
 import { assessCandidateQuality } from "@/lib/candidate-quality"
 import { semesterPath, useResolvedSemesterId } from "@/lib/semester"
 import type {
@@ -183,7 +183,7 @@ export function ScheduleGenerationPage() {
       const result = await api<ScheduleRun>(`/api/v1/semesters/${semesterId}/schedule-runs`, {
         method: "POST",
         etag: preparation.data.etag,
-        body: jsonBody({
+        body: JSON.stringify({
           scope: { type: scopeType, ids: scopeType === "all" ? [] : scopeIds },
           preservation: { keep_locked: keepLocked, keep_current: mode === "fill" },
           strategy: { profile },
@@ -1092,7 +1092,7 @@ function AdoptDialog({
         {
           method: "POST",
           etag,
-          body: jsonBody({
+          body: JSON.stringify({
             name: name.trim() || null,
             activate: value.activate,
             reason: value.activate ? reason.trim() : null,

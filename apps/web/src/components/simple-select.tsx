@@ -39,7 +39,7 @@ function collectItems(
 ) {
   Children.forEach(children, (child) => {
     if (!isValidElement<{ children?: ReactNode; value?: string | number }>(child)) return
-    if (child.type === "option" || child.type === SimpleSelectItem) {
+    if (child.type === "option") {
       const rawValue = child.props.value
       const value =
         typeof rawValue === "string" || typeof rawValue === "number" ? String(rawValue) : ""
@@ -99,21 +99,5 @@ export function SimpleSelect({
       </SelectTrigger>
       <SelectContent className={contentClassName}>{renderItems(children)}</SelectContent>
     </Select>
-  )
-}
-
-export function SimpleSelectItem({
-  value,
-  children,
-  disabled,
-}: {
-  value: string
-  children: ReactNode
-  disabled?: boolean
-}) {
-  return (
-    <SelectItem value={encodeValue(value)} disabled={disabled}>
-      {children}
-    </SelectItem>
   )
 }

@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useSearchParams } from "react-router"
 import { CopyIcon, PlusIcon } from "lucide-react"
 import { toast } from "sonner"
-import { api, apiAllPages, apiMessage, jsonBody } from "@/lib/api"
+import { api, apiAllPages, apiMessage } from "@/lib/api"
 import type { AcademicYear, PaginationMeta, Semester, Teacher, User } from "@/lib/types"
 import { EmptyList, ErrorState, Field, LoadingState, PageHeader } from "@/components/page"
 import { ListToolbar, ToolbarSelect } from "@/components/list-toolbar"
@@ -268,7 +268,7 @@ function UserDialog({
       await api(user ? `/api/v1/users/${user.id}` : "/api/v1/users", {
         method: user ? "PATCH" : "POST",
         etag: user?.etag,
-        body: jsonBody(
+        body: JSON.stringify(
           user
             ? {
                 name: form.name,
@@ -422,7 +422,7 @@ function ResetPasswordDialog({
       await api(`/api/v1/users/${user.id}/reset-password`, {
         method: "POST",
         etag: user.etag,
-        body: jsonBody({ temporary_password: password }),
+        body: JSON.stringify({ temporary_password: password }),
       })
       toast.success("临时密码已重置，原会话已撤销")
       onClose()
@@ -497,7 +497,7 @@ export function SettingsPage() {
     try {
       await api("/api/v1/context/current-semester", {
         method: "PUT",
-        body: jsonBody({ semester_id: selected ? Number(selected) : null }),
+        body: JSON.stringify({ semester_id: selected ? Number(selected) : null }),
       })
       toast.success("当前学期已更新")
       await Promise.all([
@@ -514,7 +514,7 @@ export function SettingsPage() {
       await api("/api/v1/school-settings", {
         method: "PATCH",
         etag: schoolSettings.data.etag,
-        body: jsonBody({ timezone }),
+        body: JSON.stringify({ timezone }),
       })
       toast.success("学校时区已更新")
       await Promise.all([

@@ -13,7 +13,7 @@ import {
   LogOutIcon,
 } from "lucide-react"
 import { useAuth } from "@/lib/auth"
-import { api, apiMessage, jsonBody } from "@/lib/api"
+import { api, apiMessage } from "@/lib/api"
 import { SYSTEM_NAME } from "@/lib/brand"
 import type { User } from "@/lib/types"
 import { cn } from "@/lib/utils"
@@ -79,7 +79,10 @@ export function ChangePasswordPage() {
   }
   const submit = form.handleSubmit(async (values) => {
     try {
-      await api<User>("/api/v1/auth/change-password", { method: "POST", body: jsonBody(values) })
+      await api<User>("/api/v1/auth/change-password", {
+        method: "POST",
+        body: JSON.stringify(values),
+      })
       await refresh()
       toast.success("密码已更新")
       void navigate("/", { replace: true })

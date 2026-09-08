@@ -2,7 +2,7 @@ import { useDeferredValue, useEffect, useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { PlusIcon } from "lucide-react"
 import { toast } from "sonner"
-import { api, apiMessage, jsonBody } from "@/lib/api"
+import { api, apiMessage } from "@/lib/api"
 import type { ClassSetting, PaginationMeta, TeachingGroup, TeachingGroupMode } from "@/lib/types"
 import { EmptyList, ErrorState, Field, LoadingState } from "@/components/page"
 import { ListToolbar, ToolbarSelect } from "@/components/list-toolbar"
@@ -303,7 +303,7 @@ function TeachingGroupForm({
         {
           method: group ? "PATCH" : "POST",
           etag,
-          body: jsonBody({
+          body: JSON.stringify({
             name: form.name.trim(),
             mode: form.mode,
             status: form.status,

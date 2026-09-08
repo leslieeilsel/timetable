@@ -459,17 +459,6 @@ class DailyTimetableService
         return $longest;
     }
 
-    public function currentVersion(Semester $semester): TimetableVersion
-    {
-        if ($semester->current_timetable_version_id === null) {
-            throw new ApiProblemException('CURRENT_TIMETABLE_REQUIRED', '请先将一个完整课表版本设为当前课表', 409);
-        }
-
-        return TimetableVersion::query()
-            ->where('semester_id', $semester->id)
-            ->findOrFail($semester->current_timetable_version_id);
-    }
-
     public function versionForDate(Semester $semester, string $date): TimetableVersion
     {
         $version = $this->periods->versionForDate($semester, $date);

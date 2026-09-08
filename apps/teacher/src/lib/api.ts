@@ -86,7 +86,3 @@ export function apiMessage(error: unknown) {
   if (error instanceof ApiError) return error.message
   return "操作失败，请稍后重试"
 }
-
-export function jsonBody(value: unknown) {
-  return JSON.stringify(value)
-}

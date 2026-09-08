@@ -2,7 +2,7 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { ArrowRightLeftIcon, CopyIcon, PlusIcon, Settings2Icon } from "lucide-react"
 import { toast } from "sonner"
-import { api, apiAllPages, apiMessage, jsonBody } from "@/lib/api"
+import { api, apiAllPages, apiMessage } from "@/lib/api"
 import { useResolvedSemesterId } from "@/lib/semester"
 import type {
   ClassSetting,
@@ -171,7 +171,7 @@ export function SemesterSetupPage() {
       await api(`/api/v1/semesters/${semesterId}/${type}/copy`, {
         method: "POST",
         etag,
-        body: jsonBody({ source_semester_id: source.id }),
+        body: JSON.stringify({ source_semester_id: source.id }),
       })
       toast.success("已从上学期复制")
       await refresh()
@@ -467,7 +467,7 @@ function ClassRoomMigrationDialog({
         {
           method: "POST",
           etag,
-          body: jsonBody({ target_room_id: Number(roomId) }),
+          body: JSON.stringify({ target_room_id: Number(roomId) }),
         },
       )
       toast.success(`固定教室已更新，并迁移 ${result.data.migrated_entries} 节已排课程`)
@@ -556,7 +556,7 @@ function ClassSettingDialog({
       await api(`/api/v1/semesters/${semesterId}/class-settings/${classId}`, {
         method: "PUT",
         etag,
-        body: jsonBody({
+        body: JSON.stringify({
           fixed_room_id: roomId ? Number(roomId) : null,
           homeroom_teacher_id: teacherId ? Number(teacherId) : null,
           status,
@@ -707,7 +707,7 @@ function TemplateDialog({
       await api(`/api/v1/semesters/${semesterId}/schedule-template`, {
         method: "PUT",
         etag,
-        body: jsonBody({
+        body: JSON.stringify({
           name,
           days: days.map((is_enabled, index) => ({ weekday: index + 1, is_enabled })),
           items,

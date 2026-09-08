@@ -12,7 +12,7 @@ import {
   UserRoundCheckIcon,
 } from "lucide-react"
 import { toast } from "sonner"
-import { api, apiAllPages, apiMessage, jsonBody } from "@/lib/api"
+import { api, apiAllPages, apiMessage } from "@/lib/api"
 import { useResolvedSemesterId } from "@/lib/semester"
 import type {
   DailyTimetableRow,
@@ -382,7 +382,7 @@ function LeaveEditor({
     try {
       const result = await api<TeacherLeavePreview>(
         `/api/v1/semesters/${semesterId}/teacher-leaves/preview`,
-        { method: "POST", body: jsonBody(payload()) },
+        { method: "POST", body: JSON.stringify(payload()) },
       )
       setPreview(result.data)
       setPreviewEtag(result.etag)
@@ -401,7 +401,7 @@ function LeaveEditor({
         {
           method: "POST",
           etag: previewEtag ?? etag,
-          body: jsonBody(payload()),
+          body: JSON.stringify(payload()),
         },
       )
       toast.success(
@@ -688,7 +688,7 @@ function LeaveDetailDialog({
       await api(`/api/v1/semesters/${semesterId}/teacher-leaves/${leaveId}/substitutions`, {
         method: "POST",
         etag: detail.data.etag,
-        body: jsonBody({ substitutions }),
+        body: JSON.stringify({ substitutions }),
       })
       toast.success(`已保存 ${substitutions.length} 节代课安排`)
       setChoices({})

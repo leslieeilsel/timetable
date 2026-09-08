@@ -3,7 +3,7 @@ import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router"
 import { ArrowLeftIcon, ChevronRightIcon, FileUpIcon, PlusIcon, Trash2Icon } from "lucide-react"
 import { toast } from "sonner"
-import { api, apiAllPages, ApiError, apiMessage, jsonBody } from "@/lib/api"
+import { api, apiAllPages, ApiError, apiMessage } from "@/lib/api"
 import { useAuth } from "@/lib/auth"
 import type { AcademicYear, Grade, PaginationMeta, SchoolClass, Semester } from "@/lib/types"
 import { DatePicker } from "@/components/date-picker"
@@ -76,7 +76,7 @@ export function AcademicYearsPage() {
       const result = await api<AcademicYear>("/api/v1/academic-years", {
         method: "POST",
         etag: years.data.etag,
-        body: jsonBody(form),
+        body: JSON.stringify(form),
       })
       toast.success("学年已创建，请继续配置上下两个学期和班级。")
       setOpen(false)
@@ -358,7 +358,7 @@ export function AcademicYearDetailPage() {
         {
           method: action === "delete" ? "DELETE" : "POST",
           etag: years.data.etag,
-          body: action === "reopen" ? jsonBody({ reason: "管理员重新开放" }) : undefined,
+          body: action === "reopen" ? JSON.stringify({ reason: "管理员重新开放" }) : undefined,
         },
       )
       toast.success(action === "delete" ? "学年已删除" : "学年状态已更新")
@@ -377,7 +377,7 @@ export function AcademicYearDetailPage() {
       if (action === "current")
         await api("/api/v1/context/current-semester", {
           method: "PUT",
-          body: jsonBody({ semester_id: semester.id }),
+          body: JSON.stringify({ semester_id: semester.id }),
         })
       else {
         if (action === "delete" && !window.confirm(`确定删除空的${semester.name}吗？`)) return
@@ -388,7 +388,7 @@ export function AcademicYearDetailPage() {
           {
             method: action === "delete" ? "DELETE" : "POST",
             etag: semester.etag,
-            body: body ? jsonBody(body) : undefined,
+            body: body ? JSON.stringify(body) : undefined,
           },
         )
       }
@@ -891,7 +891,7 @@ function ClassDialog({
       api(endpoint, {
         method: item ? "PATCH" : "POST",
         etag,
-        body: jsonBody({ ...body, ...extra }),
+        body: JSON.stringify({ ...body, ...extra }),
       })
     try {
       try {
@@ -999,7 +999,7 @@ function SemesterDialog({
       await api(`/api/v1/academic-years/${yearId}/semesters`, {
         method: "POST",
         etag,
-        body: jsonBody({ sequence, ...dates }),
+        body: JSON.stringify({ sequence, ...dates }),
       })
       toast.success("学期已创建")
       onClose()
@@ -1154,7 +1154,7 @@ function CsvImportDialog({
       await api(`/api/v1/academic-years/${yearId}/classes/import/commit`, {
         method: "POST",
         etag,
-        body: jsonBody({ token, selected_rows: selected }),
+        body: JSON.stringify({ token, selected_rows: selected }),
       })
       toast.success(`已导入 ${selected.length} 个班级`)
       onClose()

@@ -13,7 +13,7 @@ import {
   SearchIcon,
 } from "lucide-react"
 import { toast } from "sonner"
-import { api, apiAllPages, apiMessage, jsonBody } from "@/lib/api"
+import { api, apiAllPages, apiMessage } from "@/lib/api"
 import { useResolvedSemesterId } from "@/lib/semester"
 import type {
   CalendarException,
@@ -677,7 +677,7 @@ function ExceptionEditor({
     try {
       const result = await api<CalendarExceptionPreview>(
         `/api/v1/semesters/${semesterId}/calendar-exceptions/preview`,
-        { method: "POST", body: jsonBody(exceptionPayload(form)) },
+        { method: "POST", body: JSON.stringify(exceptionPayload(form)) },
       )
       setPreview(result.data)
       setPreviewEtag(result.etag)
@@ -695,7 +695,7 @@ function ExceptionEditor({
       await api(`/api/v1/semesters/${semesterId}/calendar-exceptions`, {
         method: "POST",
         etag: previewEtag ?? etag,
-        body: jsonBody(exceptionPayload(form)),
+        body: JSON.stringify(exceptionPayload(form)),
       })
       toast.success("临时调整已生效，基础周课表保持不变")
       onClose()

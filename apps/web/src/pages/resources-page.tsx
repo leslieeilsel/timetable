@@ -23,7 +23,7 @@ import {
   UsersIcon,
 } from "lucide-react"
 import { toast } from "sonner"
-import { api, apiAllPages, ApiError, apiMessage, jsonBody } from "@/lib/api"
+import { api, apiAllPages, ApiError, apiMessage } from "@/lib/api"
 import type { Grade, Course, Teacher, Room, PaginationMeta } from "@/lib/types"
 import { PageHeader, EmptyList, ErrorState, LoadingState, Field } from "@/components/page"
 import { ListToolbar, ToolbarSelect } from "@/components/list-toolbar"
@@ -539,7 +539,7 @@ function ResourceDialog({
         api<Resource>(endpoint, {
           method: item ? "PATCH" : "POST",
           etag,
-          body: jsonBody({ ...body, ...extra }),
+          body: JSON.stringify({ ...body, ...extra }),
         })
       let result
       try {
@@ -561,7 +561,7 @@ function ResourceDialog({
         await api(`/api/v1/teachers/${result.data.id}/courses`, {
           method: "PUT",
           etag: result.etag,
-          body: jsonBody({ course_ids: courseIds }),
+          body: JSON.stringify({ course_ids: courseIds }),
         })
       }
       toast.success(`${titles[kind]}已保存`)

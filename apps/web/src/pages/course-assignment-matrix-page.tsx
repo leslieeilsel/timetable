@@ -14,7 +14,7 @@ import {
   UsersIcon,
 } from "lucide-react"
 import { toast } from "sonner"
-import { api, apiAllPages, apiMessage, jsonBody } from "@/lib/api"
+import { api, apiAllPages, apiMessage } from "@/lib/api"
 import { useResolvedSemesterId } from "@/lib/semester"
 import type {
   ClassSetting,
@@ -454,7 +454,7 @@ export function CourseAssignmentMatrixPage() {
       await api(`/api/v1/semesters/${semesterId}/teaching-assignments/bulk`, {
         method: "POST",
         etag,
-        body: jsonBody({
+        body: JSON.stringify({
           operations: selectedCells.map((cell) => operationFromTemplate(cell, copied)),
         }),
       })
@@ -502,7 +502,7 @@ export function CourseAssignmentMatrixPage() {
       await api(`/api/v1/semesters/${semesterId}/teaching-assignments${path}`, {
         method: "POST",
         etag,
-        body: body === undefined ? undefined : jsonBody(body),
+        body: body === undefined ? undefined : JSON.stringify(body),
       })
       toast.success(success)
       await refresh()
@@ -561,7 +561,7 @@ export function CourseAssignmentMatrixPage() {
       await api(`/api/v1/semesters/${semesterId}/teaching-assignments/copy`, {
         method: "POST",
         etag,
-        body: jsonBody({ source_semester_id: sourceSemester.id, assignment_ids: missingIds }),
+        body: JSON.stringify({ source_semester_id: sourceSemester.id, assignment_ids: missingIds }),
       })
       toast.success(`已从上学期复制 ${missingIds.length} 条任课关系，均保存为草稿`)
       await refresh()
@@ -1466,7 +1466,7 @@ function BatchAssignmentDialog({
       await api(`/api/v1/semesters/${semesterId}/teaching-assignments/bulk`, {
         method: "POST",
         etag,
-        body: jsonBody({
+        body: JSON.stringify({
           operations: cells.map((cell) =>
             operationFromTemplate(cell, {
               ...template,

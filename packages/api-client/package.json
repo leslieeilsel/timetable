@@ -7,9 +7,6 @@
   "scripts": {
     "generate": "vp exec openapi-typescript ../../contracts/openapi.yaml -o src/generated-types.ts"
   },
-  "dependencies": {
-    "openapi-fetch": "0.17.0"
-  },
   "devDependencies": {
     "openapi-typescript": "^7.13.0"
   }

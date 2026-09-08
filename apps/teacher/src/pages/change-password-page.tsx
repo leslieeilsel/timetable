@@ -2,7 +2,7 @@ import { ArrowLeft, Eye, EyeOff, LoaderCircle } from "lucide-react"
 import { useState, type FormEvent } from "react"
 import { useNavigate } from "react-router"
 
-import { api, apiMessage, jsonBody } from "@/lib/api"
+import { api, apiMessage } from "@/lib/api"
 import { useAuth } from "@/lib/auth"
 import type { User } from "@/lib/types"
 
@@ -33,7 +33,7 @@ export function ChangePasswordPage() {
     try {
       await api<User>("/api/v1/auth/change-password", {
         method: "POST",
-        body: jsonBody({
+        body: JSON.stringify({
           current_password: currentPassword,
           password,
           password_confirmation: confirmation,

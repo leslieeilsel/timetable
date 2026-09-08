@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { AlertTriangleIcon } from "lucide-react"
 import { toast } from "sonner"
-import { api, apiMessage, jsonBody } from "@/lib/api"
+import { api, apiMessage } from "@/lib/api"
 import type {
   ClassSetting,
   Course,
@@ -159,7 +159,7 @@ export function AssignmentEditorDialog({
         {
           method: assignment ? "PATCH" : "POST",
           etag,
-          body: jsonBody(body),
+          body: JSON.stringify(body),
         },
       )
       toast.success(assignment ? "任课关系已更新" : "任课关系已加入矩阵")

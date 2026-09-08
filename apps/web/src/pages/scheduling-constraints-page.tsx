@@ -9,7 +9,7 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { CircleHelpIcon, PlusIcon } from "lucide-react"
 import { toast } from "sonner"
-import { api, apiAllPages, apiMessage, jsonBody } from "@/lib/api"
+import { api, apiAllPages, apiMessage } from "@/lib/api"
 import {
   supportsConstraintKindCategory,
   unsupportedConstraintReason,
@@ -974,7 +974,7 @@ function RuleDialog({
         {
           method: value ? "PATCH" : "POST",
           etag,
-          body: jsonBody({
+          body: JSON.stringify({
             name: name.trim(),
             kind: effectiveKind,
             category,
@@ -1449,7 +1449,7 @@ function PlacementDialog({
       await api(`/api/v1/semesters/${semesterId}/fixed-placements${value ? `/${value.id}` : ""}`, {
         method: value ? "PATCH" : "POST",
         etag,
-        body: jsonBody({
+        body: JSON.stringify({
           teaching_assignment_id: Number(assignmentId),
           week_pattern: weekPattern,
           weekday: Number(weekday),

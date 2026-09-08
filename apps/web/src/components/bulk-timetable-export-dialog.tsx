@@ -7,7 +7,7 @@ import {
   UsersIcon,
 } from "lucide-react"
 import { toast } from "sonner"
-import { apiDownload, apiMessage, jsonBody, saveDownload } from "@/lib/api"
+import { apiDownload, apiMessage, saveDownload } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -158,7 +158,7 @@ export function BulkTimetableExportDialog({
         "/api/v1/semesters/" + semesterId + "/timetable/export.zip",
         {
           method: "POST",
-          body: jsonBody({
+          body: JSON.stringify({
             class_ids: classes
               .filter((item) => selectedClassIds.has(item.id))
               .map((item) => item.id),

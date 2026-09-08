@@ -18,7 +18,7 @@ import {
   UnlockIcon,
 } from "lucide-react"
 import { toast } from "sonner"
-import { api, apiAllPages, ApiError, apiMessage, jsonBody } from "@/lib/api"
+import { api, apiAllPages, ApiError, apiMessage } from "@/lib/api"
 import { useAuth } from "@/lib/auth"
 import {
   resolveTimetableVersionSelection,
@@ -423,13 +423,13 @@ export function TimetablePage() {
           await api("/api/v1/semesters/" + semesterId + "/timetable/entries/" + action.entryId, {
             method: "PATCH",
             etag,
-            body: jsonBody({ weekday: position.weekday, item_id: position.itemId }),
+            body: JSON.stringify({ weekday: position.weekday, item_id: position.itemId }),
           })
         } else if (action.type === "swap") {
           await api("/api/v1/semesters/" + semesterId + "/timetable/swap", {
             method: "POST",
             etag,
-            body: jsonBody({
+            body: JSON.stringify({
               entry_id: action.entryId,
               target_entry_id: action.targetEntryId,
               version_id: Number(selectedVersionId),
@@ -454,7 +454,7 @@ export function TimetablePage() {
               {
                 method: "POST",
                 etag,
-                body: jsonBody({
+                body: JSON.stringify({
                   teaching_assignment_id: action.assignmentId,
                   weekday: action.position.weekday,
                   item_id: action.position.itemId,
@@ -577,7 +577,7 @@ export function TimetablePage() {
         {
           method: "POST",
           etag,
-          body: jsonBody({
+          body: JSON.stringify({
             base_version_id: selectedVersion?.id ?? null,
             name: selectedVersion
               ? `基于 v${selectedVersion.version_no} 的调整草稿`
@@ -612,7 +612,7 @@ export function TimetablePage() {
       const result = await api<ScheduleRun>("/api/v1/semesters/" + semesterId + "/schedule-runs", {
         method: "POST",
         etag: timetable.data.etag,
-        body: jsonBody({
+        body: JSON.stringify({
           scope: { type: "class", ids: [Number(resourceId)] },
           preservation: {
             keep_locked: true,
@@ -1399,7 +1399,7 @@ function SlotDialog({
     queryFn: () =>
       api<TimetableDiagnosis>(`/api/v1/semesters/${semesterId}/timetable/diagnose`, {
         method: "POST",
-        body: jsonBody({
+        body: JSON.stringify({
           ...(entry ? { entry_id: entry.id } : { teaching_assignment_id: Number(assignmentId) }),
           weekday,
           item_id: itemId,
@@ -1414,7 +1414,7 @@ function SlotDialog({
     queryFn: () =>
       api<TimetableSwapDiagnosis>(`/api/v1/semesters/${semesterId}/timetable/swap/diagnose`, {
         method: "POST",
-        body: jsonBody({
+        body: JSON.stringify({
           entry_id: entry?.id,
           target_entry_id: Number(swapTargetId),
           version_id: versionId,
@@ -1446,7 +1446,7 @@ function SlotDialog({
         await api(`/api/v1/semesters/${semesterId}/timetable/swap`, {
           method: "POST",
           etag,
-          body: jsonBody({
+          body: JSON.stringify({
             entry_id: entry.id,
             target_entry_id: Number(swapTargetId),
             version_id: versionId,
@@ -1491,7 +1491,7 @@ function SlotDialog({
         await api(`/api/v1/semesters/${semesterId}/timetable/entries/${entry.id}`, {
           method: "PATCH",
           etag,
-          body: jsonBody({ weekday, item_id: itemId }),
+          body: JSON.stringify({ weekday, item_id: itemId }),
         })
         operation = {
           type: "move",
@@ -1506,7 +1506,7 @@ function SlotDialog({
           {
             method: "POST",
             etag,
-            body: jsonBody({
+            body: JSON.stringify({
               teaching_assignment_id: Number(assignmentId),
               weekday,
               item_id: itemId,
