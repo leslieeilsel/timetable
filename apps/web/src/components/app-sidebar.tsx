@@ -278,20 +278,22 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         className="group/sidebar-logo size-8 cursor-pointer rounded-xl p-0 hover:bg-sidebar-accent focus-visible:bg-sidebar-accent"
         onClick={() => sidebar.setOpen(true)}
       >
-        <LogoMark className="size-8 max-w-none group-hover/sidebar-logo:hidden group-focus-visible/sidebar-logo:hidden" />
+        <LogoMark className="size-5.5 max-w-none group-hover/sidebar-logo:hidden group-focus-visible/sidebar-logo:hidden" />
         <PanelLeftIcon className="hidden size-4 group-hover/sidebar-logo:block group-focus-visible/sidebar-logo:block" />
       </Button>
     ) : (
       <div className="flex h-8 min-w-0 items-center gap-2">
         <Link
           to="/"
-          className="flex min-w-0 flex-1 items-center gap-3 rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-sidebar-ring/50"
+          className="flex min-w-0 flex-1 items-center gap-1 rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-sidebar-ring/50"
           onClick={() => sidebar.setOpenMobile(false)}
         >
-          <LogoMark className="size-8" />
-          <span className="grid min-w-0 flex-1 text-left leading-tight">
-            <span className="truncate text-sm font-semibold">{SYSTEM_NAME}</span>
-            <span className="mt-0.5 truncate text-xs text-sidebar-foreground/60">
+          <span className="flex size-8 shrink-0 items-center justify-center">
+            <LogoMark className="size-5.5" />
+          </span>
+          <span className="grid min-w-0 flex-1 text-left">
+            <span className="truncate text-[13px] leading-4 font-medium">{SYSTEM_NAME}</span>
+            <span className="mt-0.5 truncate text-[11px] leading-[14px] text-sidebar-foreground/55">
               {SYSTEM_TAGLINE}
             </span>
           </span>

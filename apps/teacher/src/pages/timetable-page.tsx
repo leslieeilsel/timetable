@@ -137,9 +137,10 @@ function useInterruptibleSwipePager({
     let suppressClickUntil = 0
     let touchStart: { identifier: number; x: number; y: number } | null = null
     let touchAxis: SwipeGesture["axis"] = null
+    let viewportWidth = viewport.clientWidth
 
     function width() {
-      return viewport?.clientWidth ?? 0
+      return viewportWidth
     }
 
     function transformForOffset(offset: number) {
@@ -420,6 +421,10 @@ function useInterruptibleSwipePager({
     viewport.addEventListener("pointercancel", handlePointerCancel)
     viewport.addEventListener("click", handleClick, true)
     const resizeObserver = new ResizeObserver(() => {
+      const nextWidth = viewport.clientWidth
+      // Expanding the calendar changes its height every frame, but not the swipe distance.
+      if (nextWidth === viewportWidth) return
+      viewportWidth = nextWidth
       if (!animationRef.current && gestureRef.current.pointerId === null) writeOffset(0)
     })
     resizeObserver.observe(viewport)
@@ -497,6 +502,10 @@ function activeRows(rows: TimetableRow[]) {
   return rows.filter((row) => row.duty_status !== "removed" && !row.is_cancelled)
 }
 
+function combineCalendarDays(queries: Array<{ data?: TeacherTimetable | TeacherClassTimetable }>) {
+  return queries.flatMap((query) => query.data?.days ?? [])
+}
+
 export function TimetablePage() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
@@ -561,7 +570,7 @@ export function TimetablePage() {
       ),
     [calendarRange, semester?.end_date, semester?.start_date],
   )
-  const monthTimetableQueries = useQueries({
+  const monthScheduleDays = useQueries({
     queries: calendarQueryRanges.map((monthRange) => ({
       queryKey: ["teacher-month-timetable", context, monthRange.from, monthRange.to],
       queryFn: () => {
@@ -574,6 +583,7 @@ export function TimetablePage() {
       retry: false,
       staleTime: CALENDAR_CACHE_TIME,
     })),
+    combine: combineCalendarDays,
   })
 
   const availableClasses = classes.data?.classes ?? []
@@ -601,7 +611,10 @@ export function TimetablePage() {
   }, [availableClasses, classes.data, context])
 
   const timetable = context === "mine" ? myTimetable.data : classTimetable.data
-  const monthScheduleDays = monthTimetableQueries.flatMap((query) => query.data?.days ?? [])
+  const scheduleDays = useMemo(
+    () => [...monthScheduleDays, ...(timetable?.days ?? [])],
+    [monthScheduleDays, timetable?.days],
+  )
   const rangeData = timetable ?? (context === "mine" ? myTimetable.data : classes.data)
   const today = dateString(now)
   const selectedDay =
@@ -800,7 +813,7 @@ export function TimetablePage() {
             semesterStart={rangeData.semester.start_date}
             semesterEnd={rangeData.semester.end_date}
             days={timetable?.days ?? daysFromRange(rangeData.from, rangeData.to)}
-            scheduleDays={[...monthScheduleDays, ...(timetable?.days ?? [])]}
+            scheduleDays={scheduleDays}
             selectedDate={selectedDate}
             selectedDay={selectedDay}
             today={today}

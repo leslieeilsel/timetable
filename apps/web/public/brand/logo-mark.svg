@@ -1,5 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" fill="none">
   <title>教务排课中心</title>
-  <rect x="9" y="9" width="46" height="46" rx="12" stroke="#2B2B28" stroke-width="6"/>
-  <path d="M16 27h13v10h19" stroke="#2B2B28" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="2" y="2" width="29" height="29" rx="5.5" fill="#1E63F9"/>
+  <rect x="33.5" y="2" width="29" height="29" rx="5.5" fill="#2E91FC"/>
+  <rect x="65" y="2" width="29" height="29" rx="5.5" fill="#A6CDFB"/>
+  <rect x="33.5" y="33.5" width="29" height="29" rx="5.5" fill="#29C569"/>
+  <rect x="33.5" y="65" width="29" height="29" rx="5.5" fill="#A2F1B2"/>
 </svg>
