@@ -1,5 +1,4 @@
 export const SYSTEM_NAME = "教务排课中心"
-export const SYSTEM_TAGLINE = "学校教务工作台"
 
 const pageTitles: Record<string, string> = {
   "/": "工作台",

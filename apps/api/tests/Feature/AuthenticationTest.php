@@ -266,7 +266,7 @@ it('enforces the scheduler and viewer permission boundaries', function (): void 
         'sort_order' => 1,
     ])->assertCreated();
     $this->getJson('/api/v1/users')->assertForbidden()->assertJsonPath('code', 'FORBIDDEN');
-    $this->patchJson('/api/v1/school-settings', ['timezone' => 'Asia/Shanghai'])
+    $this->patchJson('/api/v1/school-settings', ['system_name' => '教务排课中心'])
         ->assertForbidden()
         ->assertJsonPath('code', 'FORBIDDEN');
 });

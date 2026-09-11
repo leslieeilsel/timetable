@@ -46,6 +46,7 @@ Route::get('/v1/health', function () {
 });
 
 Route::prefix('v1')->group(function (): void {
+    Route::get('/branding', [SchoolSettingsController::class, 'branding']);
     Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:login');
 
     Route::middleware(['auth:sanctum', 'session.valid'])->group(function (): void {

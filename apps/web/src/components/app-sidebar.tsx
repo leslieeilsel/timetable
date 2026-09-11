@@ -18,7 +18,7 @@ import {
   schedulingNavigationItems,
 } from "@/components/app-navigation"
 import { useAuth } from "@/lib/auth"
-import { SYSTEM_NAME, SYSTEM_TAGLINE } from "@/lib/brand"
+import { useSystemBranding } from "@/lib/queries"
 import type { Role } from "@/lib/types"
 import {
   isDailySemesterPath,
@@ -27,7 +27,7 @@ import {
   useResolvedSemesterId,
 } from "@/lib/semester"
 import { WorkspaceUserMenu } from "@/components/workspace-user-menu"
-import { LogoMark } from "@/components/brand"
+import { LogoMark, SidebarBrand } from "@/components/brand"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
@@ -67,6 +67,7 @@ const roleLabels: Record<Role, string> = {
 }
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const branding = useSystemBranding()
   const { pathname } = useLocation()
   const { user } = useAuth()
   const { semesterId } = useResolvedSemesterId()
@@ -288,15 +289,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           className="flex min-w-0 flex-1 items-center gap-1 rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-sidebar-ring/50"
           onClick={() => sidebar.setOpenMobile(false)}
         >
-          <span className="flex size-8 shrink-0 items-center justify-center">
-            <LogoMark className="size-5.5" />
-          </span>
-          <span className="grid min-w-0 flex-1 text-left">
-            <span className="truncate text-[13px] leading-4 font-medium">{SYSTEM_NAME}</span>
-            <span className="mt-0.5 truncate text-[11px] leading-[14px] text-sidebar-foreground/55">
-              {SYSTEM_TAGLINE}
-            </span>
-          </span>
+          <SidebarBrand name={branding.system_name} tagline={branding.system_tagline} />
         </Link>
         <Button
           type="button"

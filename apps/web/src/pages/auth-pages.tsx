@@ -3,7 +3,7 @@ import { Navigate, useNavigate } from "react-router"
 import { LoaderCircleIcon } from "lucide-react"
 import { useAuth } from "@/lib/auth"
 import { apiMessage } from "@/lib/api"
-import { SYSTEM_NAME } from "@/lib/brand"
+import { useSystemName } from "@/lib/queries"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { LogoMark } from "@/components/brand"
@@ -17,6 +17,7 @@ const authButtonClassName =
   "h-12 w-full rounded-md bg-primary text-[15px] font-medium text-primary-foreground shadow-none hover:bg-primary/85 focus-visible:ring-0 focus-visible:shadow-[0_0_0_2px_var(--background),0_0_0_4px_var(--ring)] active:translate-y-0"
 
 export function LoginPage() {
+  const systemName = useSystemName()
   const { user, login } = useAuth()
   const navigate = useNavigate()
   const [submitting, setSubmitting] = useState(false)
@@ -60,7 +61,7 @@ export function LoginPage() {
             <span className="flex size-11 shrink-0 items-center justify-center">
               <LogoMark className="size-8" aria-hidden="true" />
             </span>
-            <span className="text-base font-semibold tracking-tight">{SYSTEM_NAME}</span>
+            <span className="text-base font-semibold tracking-tight">{systemName}</span>
           </div>
         </div>
       </header>

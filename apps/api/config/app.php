@@ -69,7 +69,7 @@ return [
     |
     */
 
-    'timezone' => env('SCHOOL_TIMEZONE', 'Asia/Shanghai'),
+    'timezone' => 'Asia/Shanghai',
 
     /*
     |--------------------------------------------------------------------------

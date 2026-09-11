@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/api/v1/branding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取公开系统名称与副标题 */
+        get: operations["getBranding"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/academic-years": {
         parameters: {
             query?: never;
@@ -410,14 +427,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** show */
+        /** 获取系统设置 */
         get: operations["getschoolSettings"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        /** update */
+        /** 更新系统名称与副标题（仅管理员） */
         patch: operations["patchschoolSettings"];
         trace?: never;
     };
@@ -1903,6 +1920,32 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getBranding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 仅返回用于登录页、侧栏与应用标题的系统名称和可选副标题。 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            system_name: string;
+                            system_tagline: string | null;
+                        };
+                    };
+                };
+            };
+            404: components["responses"]["Problem"];
+        };
+    };
     getacademicYears: {
         parameters: {
             query?: never;
@@ -2668,9 +2711,13 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: {
+        requestBody: {
             content: {
-                "application/json": components["schemas"]["WritePayload"];
+                "application/json": {
+                    system_name: string;
+                    /** @description 留空或 null 时隐藏副标题；省略时保留原值。 */
+                    system_tagline?: string | null;
+                };
             };
         };
         responses: {

@@ -231,6 +231,8 @@ function validationFieldLabel(field: string) {
     replacement_item_id: "目标课节",
     title: "活动名称",
     email: "邮箱",
+    system_name: "系统名称",
+    system_tagline: "副标题",
   }
   return labels[field] ?? field
 }

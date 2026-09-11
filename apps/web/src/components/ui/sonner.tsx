@@ -14,6 +14,7 @@ const Toaster = ({ toastOptions, ...props }: ToasterProps) => {
   return (
     <Sonner
       theme={theme as ToasterProps["theme"]}
+      position="top-center"
       containerAriaLabel="通知"
       className="toaster group"
       icons={{
@@ -29,6 +30,9 @@ const Toaster = ({ toastOptions, ...props }: ToasterProps) => {
           "--normal-text": "var(--popover-foreground)",
           "--normal-border": "var(--border)",
           "--border-radius": "var(--radius)",
+          "--toast-close-button-start": "auto",
+          "--toast-close-button-end": "0",
+          "--toast-close-button-transform": "translate(35%, -35%)",
         } as React.CSSProperties
       }
       toastOptions={{

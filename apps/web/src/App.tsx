@@ -1,8 +1,8 @@
 import { lazy, Suspense, useEffect, type ReactNode } from "react"
 import { Navigate, Route, Routes, useLocation } from "react-router"
 import { useAuth } from "@/lib/auth"
-import { pageTitleForPath, SYSTEM_NAME } from "@/lib/brand"
-import { useSchoolContext } from "@/lib/queries"
+import { pageTitleForPath } from "@/lib/brand"
+import { useSchoolContext, useSystemName } from "@/lib/queries"
 import { semesterPath, type SemesterDestination } from "@/lib/semester"
 import type { Role } from "@/lib/types"
 import { LoadingState } from "@/components/page"
@@ -98,10 +98,11 @@ function RequireRole({ roles, children }: { roles: Role[]; children: ReactNode }
 }
 
 function DocumentTitle() {
+  const systemName = useSystemName()
   const { pathname } = useLocation()
   useEffect(() => {
-    document.title = `${SYSTEM_NAME} · ${pageTitleForPath(pathname)}`
-  }, [pathname])
+    document.title = `${systemName} · ${pageTitleForPath(pathname)}`
+  }, [pathname, systemName])
   return null
 }
 

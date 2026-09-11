@@ -14,7 +14,7 @@ import {
 } from "lucide-react"
 import { useAuth } from "@/lib/auth"
 import { api, apiMessage } from "@/lib/api"
-import { SYSTEM_NAME } from "@/lib/brand"
+import { useSystemName } from "@/lib/queries"
 import type { User } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { LogoMark } from "@/components/brand"
@@ -40,6 +40,7 @@ const passwordSchema = z
   })
 
 export function ChangePasswordPage() {
+  const systemName = useSystemName()
   const { user, loading, refresh, logout } = useAuth()
   const navigate = useNavigate()
   const form = useForm<z.infer<typeof passwordSchema>>({
@@ -112,7 +113,7 @@ export function ChangePasswordPage() {
       {mustChangePassword && (
         <div className="mb-10 flex items-center gap-3">
           <LogoMark className="size-10" />
-          <p className="text-base font-semibold tracking-tight">{SYSTEM_NAME}</p>
+          <p className="text-base font-semibold tracking-tight">{systemName}</p>
         </div>
       )}
 

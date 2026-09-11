@@ -1,7 +1,7 @@
 import { useDeferredValue, useEffect, useRef, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useSearchParams } from "react-router"
-import { CopyIcon, PlusIcon } from "lucide-react"
+import { CopyIcon, PanelLeftIcon, PlusIcon } from "lucide-react"
 import { toast } from "sonner"
 import { api, apiAllPages, apiMessage } from "@/lib/api"
 import type { AcademicYear, PaginationMeta, Semester, Teacher, User } from "@/lib/types"
@@ -14,6 +14,7 @@ import { TableActionButton } from "@/components/table-action-button"
 import { TablePagination } from "@/components/table-pagination"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { SidebarBrand } from "@/components/brand"
 import {
   Dialog,
   DialogContent,
@@ -30,7 +31,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { useSchoolContext } from "@/lib/queries"
+import { useSchoolContext, type SystemBranding } from "@/lib/queries"
 import { enumParam, mergeSearchParams, positiveIntegerParam } from "@/lib/url-state"
 
 type ManagedUser = User & { etag: string }
@@ -460,11 +461,10 @@ function ResetPasswordDialog({
 }
 
 export function SettingsPage() {
-  const client = useQueryClient()
   const context = useSchoolContext()
   const schoolSettings = useQuery({
     queryKey: ["school-settings"],
-    queryFn: () => api<{ timezone: string }>("/api/v1/school-settings"),
+    queryFn: () => api<SystemBranding>("/api/v1/school-settings"),
   })
   const years = useQuery({
     queryKey: ["academic-years"],
@@ -488,54 +488,61 @@ export function SettingsPage() {
     },
   })
   const [selected, setSelected] = useState("")
-  const [timezone, setTimezone] = useState("")
+  const [systemName, setSystemName] = useState("")
+  const [systemTagline, setSystemTagline] = useState("")
+  const [saving, setSaving] = useState<"semester" | "name" | null>(null)
   useEffect(() => setSelected(String(context.data?.current_semester?.id ?? "")), [context.data])
-  useEffect(() => setTimezone(schoolSettings.data?.data.timezone ?? ""), [schoolSettings.data])
+  useEffect(() => {
+    setSystemName(schoolSettings.data?.data.system_name ?? "")
+    setSystemTagline(schoolSettings.data?.data.system_tagline ?? "")
+  }, [schoolSettings.data])
   if (context.isLoading || years.isLoading || semesters.isLoading || schoolSettings.isLoading)
     return <LoadingState />
+  const loadError = context.error ?? years.error ?? semesters.error ?? schoolSettings.error
+  if (loadError) return <ErrorState retry={() => window.location.reload()} />
+  const semesterId = selected ? Number(selected) : null
+  const semesterChanged = semesterId !== (context.data?.current_semester?.id ?? null)
+  const nextSettings = {
+    system_name: systemName.trim(),
+    system_tagline: systemTagline.trim() || null,
+  }
+  const savedSettings = schoolSettings.data?.data
+  const brandingChanged = Boolean(
+    savedSettings &&
+    (nextSettings.system_name !== savedSettings.system_name.trim() ||
+      nextSettings.system_tagline !== (savedSettings.system_tagline?.trim() || null)),
+  )
   const save = async () => {
+    if (saving || !semesterChanged) return
+    setSaving("semester")
     try {
       await api("/api/v1/context/current-semester", {
         method: "PUT",
-        body: JSON.stringify({ semester_id: selected ? Number(selected) : null }),
+        body: JSON.stringify({ semester_id: semesterId }),
       })
-      toast.success("当前学期已更新")
-      await Promise.all([
-        client.invalidateQueries({ queryKey: ["context"] }),
-        client.invalidateQueries({ queryKey: ["all-open-semesters"] }),
-      ])
+      window.location.reload()
     } catch (error) {
       toast.error(apiMessage(error))
+      setSaving(null)
     }
   }
-  const saveTimezone = async () => {
-    if (!timezone || !schoolSettings.data?.etag) return
+  const saveSystemName = async () => {
+    if (saving || !brandingChanged || !nextSettings.system_name || !schoolSettings.data?.etag)
+      return
+    setSaving("name")
     try {
       await api("/api/v1/school-settings", {
         method: "PATCH",
         etag: schoolSettings.data.etag,
-        body: JSON.stringify({ timezone }),
+        body: JSON.stringify(nextSettings),
       })
-      toast.success("学校时区已更新")
-      await Promise.all([
-        client.invalidateQueries({ queryKey: ["school-settings"] }),
-        client.invalidateQueries({ queryKey: ["context"] }),
-      ])
+      window.location.reload()
     } catch (error) {
       toast.error(apiMessage(error))
+      setSaving(null)
     }
   }
   const selectedSemester = semesters.data?.find((semester) => String(semester.id) === selected)
-  const schoolTime = new Intl.DateTimeFormat("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    weekday: "short",
-    hour12: false,
-    timeZone: timezone || "Asia/Shanghai",
-  }).format(new Date())
   return (
     <>
       <PageHeader
@@ -569,35 +576,94 @@ export function SettingsPage() {
             </div>
           </div>
           <div className="mt-7 flex justify-end">
-            <Button onClick={() => void save()}>保存当前学期</Button>
+            <Button
+              disabled={saving !== null || !semesterChanged}
+              aria-busy={saving === "semester"}
+              onClick={() => void save()}
+            >
+              保存
+            </Button>
           </div>
         </section>
-        <section className="pt-7">
-          <p className="text-lg font-semibold">学校时区</p>
-          <div className="mt-7 grid gap-5 sm:grid-cols-[140px_minmax(0,1fr)] sm:items-start">
-            <p className="pt-3 text-sm font-medium">IANA 时区</p>
-            <div className="max-w-2xl">
-              <SimpleSelect
-                value={timezone}
-                onValueChange={setTimezone}
-                className="w-full"
-                label="IANA 时区"
-              >
-                <option value="Asia/Shanghai">Asia/Shanghai</option>
-                <option value="Asia/Hong_Kong">Asia/Hong_Kong</option>
-                <option value="Asia/Taipei">Asia/Taipei</option>
-                <option value="Asia/Singapore">Asia/Singapore</option>
-              </SimpleSelect>
-              <div className="mt-5 flex items-center gap-4 border-y py-4 text-sm">
-                <span className="font-medium">当前学校时间</span>
-                <span className="text-muted-foreground">{schoolTime}</span>
+        <form
+          className="pt-7"
+          onSubmit={(event) => {
+            event.preventDefault()
+            void saveSystemName()
+          }}
+        >
+          <h2 className="text-lg font-semibold">系统名称与副标题</h2>
+          <div className="mt-7 grid gap-8 xl:grid-cols-[minmax(0,1fr)_256px] xl:gap-12">
+            <div className="min-w-0 space-y-6">
+              <div className="grid gap-3 sm:grid-cols-[140px_minmax(0,1fr)] sm:gap-5">
+                <label htmlFor="system-name" className="pt-2 text-sm font-medium">
+                  名称
+                </label>
+                <div>
+                  <Input
+                    id="system-name"
+                    value={systemName}
+                    onChange={(event) => setSystemName(event.target.value)}
+                    maxLength={60}
+                    required
+                    disabled={saving !== null}
+                    aria-describedby="system-name-help"
+                  />
+                  <p id="system-name-help" className="mt-3 text-sm text-muted-foreground">
+                    显示在登录页、侧栏和浏览器标题中，最多 60 个字符。
+                  </p>
+                </div>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-[140px_minmax(0,1fr)] sm:gap-5">
+                <label htmlFor="system-tagline" className="pt-2 text-sm font-medium">
+                  副标题 <span className="font-normal text-muted-foreground">（选填）</span>
+                </label>
+                <div>
+                  <Input
+                    id="system-tagline"
+                    value={systemTagline}
+                    onChange={(event) => setSystemTagline(event.target.value)}
+                    maxLength={60}
+                    disabled={saving !== null}
+                    aria-describedby="system-tagline-help"
+                  />
+                  <p id="system-tagline-help" className="mt-3 text-sm text-muted-foreground">
+                    显示在侧栏名称下方，留空则隐藏，最多 60 个字符。
+                  </p>
+                </div>
               </div>
             </div>
+            <aside aria-label="侧栏预览" className="min-w-0">
+              <h3 className="text-sm font-medium">侧栏预览</h3>
+              <div className="mt-3 w-64 max-w-full rounded-xl border bg-sidebar p-2 text-sidebar-foreground">
+                <div className="flex h-8 min-w-0 items-center gap-2">
+                  <SidebarBrand name={systemName.trim()} tagline={systemTagline.trim() || null} />
+                  <span
+                    className="flex size-8 shrink-0 items-center justify-center text-muted-foreground"
+                    aria-hidden="true"
+                  >
+                    <PanelLeftIcon className="size-4" />
+                  </span>
+                </div>
+              </div>
+              <p className="mt-3 text-sm text-muted-foreground">输入后实时预览，保存后生效。</p>
+            </aside>
           </div>
           <div className="mt-7 flex justify-end">
-            <Button onClick={() => void saveTimezone()}>保存时区</Button>
+            <Button
+              type="submit"
+              disabled={
+                saving !== null ||
+                !brandingChanged ||
+                !nextSettings.system_name ||
+                !schoolSettings.data?.etag
+              }
+              aria-busy={saving === "name"}
+            >
+              保存
+            </Button>
           </div>
-        </section>
+        </form>
       </div>
     </>
   )

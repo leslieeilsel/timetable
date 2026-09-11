@@ -18,6 +18,16 @@ class SchoolSettingsController
         private readonly AuditLogger $audit,
     ) {}
 
+    public function branding(): JsonResponse
+    {
+        $settings = AppSetting::query()->findOrFail(1);
+
+        return response()->json(['data' => [
+            'system_name' => $settings->system_name,
+            'system_tagline' => $settings->system_tagline,
+        ]]);
+    }
+
     public function show(): JsonResponse
     {
         $settings = AppSetting::query()->findOrFail(1);
@@ -28,12 +38,19 @@ class SchoolSettingsController
 
     public function update(Request $request): JsonResponse
     {
-        $data = $request->validate(['timezone' => ['required', 'string', 'timezone:all']]);
+        $data = $request->validate([
+            'system_name' => ['required', 'string', 'max:60'],
+            'system_tagline' => ['sometimes', 'nullable', 'string', 'max:60'],
+            'timezone' => ['prohibited'],
+        ]);
 
         return DB::transaction(function () use ($request, $data): JsonResponse {
             [$actor, $settings] = $this->guard->catalog($request, true);
             $before = $this->data($settings);
-            $settings->timezone = $data['timezone'];
+            $settings->system_name = $data['system_name'];
+            if (array_key_exists('system_tagline', $data)) {
+                $settings->system_tagline = $data['system_tagline'];
+            }
             if ($settings->isDirty()) {
                 $settings->save();
                 $settings->increment('catalog_revision');
@@ -46,11 +63,13 @@ class SchoolSettingsController
         }, 3);
     }
 
-    /** @return array{id: int, timezone: string, catalog_revision: string} */
+    /** @return array{id: int, system_name: string, system_tagline: string|null, timezone: string, catalog_revision: string} */
     private function data(AppSetting $settings): array
     {
         return [
             'id' => $settings->id,
+            'system_name' => $settings->system_name,
+            'system_tagline' => $settings->system_tagline,
             'timezone' => $settings->timezone,
             'catalog_revision' => (string) $settings->getRawOriginal('catalog_revision'),
         ];

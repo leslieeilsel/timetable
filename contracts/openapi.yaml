@@ -18,7 +18,7 @@ tags:
   - name: 用户
     description: 管理员维护本地账号和角色。
   - name: 系统
-    description: 当前学期、学校时区和全局版本。
+    description: 当前学期、系统名称和全局版本；时区固定为 Asia/Shanghai。
   - name: 学年学期
     description: 学年、学期与生命周期。
   - name: 基础资料
@@ -49,6 +49,7 @@ tags:
     description: 进程和数据库就绪状态。
 x-role-permission-matrix:
   unauthenticated:
+    - GET /api/v1/branding
     - GET /api/v1/health
     - POST /api/v1/auth/login
   viewer:
@@ -68,7 +69,7 @@ x-role-permission-matrix:
     exclusions:
       [
         user administration,
-        school timezone,
+        school settings,
         draft deletion,
         historical reopen,
         historical identity correction,
@@ -79,6 +80,28 @@ x-role-permission-matrix:
     - operation: PATCH resource identity
       rule: 已有关闭学期引用时仅 admin 可更正名称或班级身份；停用仍按普通写权限处理。
 paths:
+  /api/v1/branding:
+    get:
+      operationId: getBranding
+      tags: [系统]
+      summary: 获取公开系统名称与副标题
+      security: []
+      responses:
+        "200":
+          description: 仅返回用于登录页、侧栏与应用标题的系统名称和可选副标题。
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [system_name, system_tagline]
+                    properties:
+                      system_name: { type: string, maxLength: 60 }
+                      system_tagline: { type: [string, "null"], maxLength: 60 }
+        "404": { $ref: "#/components/responses/Problem" }
   /api/v1/academic-years:
     get:
       operationId: getacademicYears
@@ -744,7 +767,7 @@ paths:
     get:
       operationId: getschoolSettings
       tags: [系统]
-      summary: show
+      summary: 获取系统设置
       responses:
         "200": { $ref: "#/components/responses/Success" }
         "401": { $ref: "#/components/responses/Problem" }
@@ -756,15 +779,20 @@ paths:
     patch:
       operationId: patchschoolSettings
       tags: [系统]
-      summary: update
+      summary: 更新系统名称与副标题（仅管理员）
       parameters:
         - $ref: "#/components/parameters/IfMatch"
       requestBody:
-        required: false
+        required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/WritePayload"
+              type: object
+              required: [system_name]
+              additionalProperties: false
+              properties:
+                system_name: { type: string, minLength: 1, maxLength: 60 }
+                system_tagline: { type: [string, "null"], maxLength: 60, description: 留空或 null 时隐藏副标题；省略时保留原值。 }
       responses:
         "200": { $ref: "#/components/responses/Success" }
         "401": { $ref: "#/components/responses/Problem" }
