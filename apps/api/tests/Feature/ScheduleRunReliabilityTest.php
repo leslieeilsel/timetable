@@ -371,6 +371,50 @@ it('rejects activating a legacy draft without a catalog revision snapshot', func
     expect(DB::table('timetable_versions')->where('id', $versionId)->value('status'))->toBe('draft');
 });
 
+it('generates synchronized lessons when the primary assignment is placed before its peer', function (): void {
+    Queue::fake();
+    $fixture = scheduleRunReliabilityFixture();
+    $clone = function (string $table, int $id, array $changes): int {
+        $attributes = (array) DB::table($table)->where('id', $id)->sole();
+        unset($attributes['id']);
+
+        return DB::table($table)->insertGetId(array_replace($attributes, $changes));
+    };
+    $teacherId = $clone('teachers', $fixture['teacher_id'], ['employee_no' => 'T-SYNC-002', 'name' => '同步教师']);
+    $roomId = $clone('rooms', $fixture['room_id'], ['name' => '同步教室']);
+    $classId = $clone('school_classes', $fixture['class_id'], ['code' => 'SYNC-002', 'name' => '同步班级']);
+    DB::table('teacher_course')->insert(['teacher_id' => $teacherId, 'course_id' => $fixture['course_id']]);
+    $setting = (array) DB::table('semester_class_settings')->where('school_class_id', $fixture['class_id'])->sole();
+    unset($setting['id']);
+    DB::table('semester_class_settings')->insert(array_replace($setting, ['school_class_id' => $classId, 'fixed_room_id' => $roomId]));
+    $peerId = $clone('teaching_assignments', $fixture['assignment_id'], ['teacher_id' => $teacherId, 'school_class_id' => $classId]);
+    $clone('scheduling_constraints', $fixture['constraint_id'], [
+        'name' => '主关系只可周一首节', 'kind' => 'hard', 'category' => 'availability',
+        'target_type' => 'teaching_assignment', 'target_id' => $fixture['assignment_id'],
+        'scope' => json_encode(['weekdays' => [1], 'item_ids' => [$fixture['item_ids'][0]]], JSON_THROW_ON_ERROR),
+        'requirement' => json_encode(['allowed_only' => true], JSON_THROW_ON_ERROR), 'weight' => null,
+    ]);
+    $clone('scheduling_constraints', $fixture['constraint_id'], [
+        'name' => '关联教师偏好周二', 'target_id' => $teacherId,
+        'scope' => json_encode(['weekdays' => [2]], JSON_THROW_ON_ERROR), 'weight' => 90,
+    ]);
+    $clone('scheduling_constraints', $fixture['constraint_id'], [
+        'name' => '两个班级同步', 'kind' => 'hard', 'category' => 'synchronization',
+        'target_type' => 'teaching_assignment', 'target_id' => $fixture['assignment_id'],
+        'scope' => '[]', 'requirement' => json_encode(['with_assignment_ids' => [$peerId]], JSON_THROW_ON_ERROR), 'weight' => null,
+    ]);
+    $run = createScheduleRunForReliabilityTest($this, $fixture);
+    app(AutoScheduler::class)->generate($run);
+
+    expect($run->fresh()->status->value)->toBe('completed');
+    $candidate = $run->candidates()->sole();
+    $entries = $candidate->entries()->orderBy('teaching_assignment_id')->get();
+    expect($candidate->hard_conflict_count)->toBe(0)
+        ->and($entries)->toHaveCount(2)
+        ->and($entries->pluck('weekday')->all())->toBe([1, 1])
+        ->and($entries->pluck('item_id')->all())->toBe([$fixture['item_ids'][0], $fixture['item_ids'][0]]);
+});
+
 /** @param array<string, mixed> $preservation */
 function scheduleRunPayload(array $preservation = []): array
 {

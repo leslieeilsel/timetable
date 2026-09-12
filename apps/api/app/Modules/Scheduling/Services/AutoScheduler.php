@@ -726,6 +726,10 @@ class AutoScheduler
     /** @param array<string, mixed> $unit */
     private function constraintTargetsUnit(SchedulingConstraint $constraint, array $unit): bool
     {
+        if (in_array($constraint->category->value, ['synchronization', 'mutual_exclusion'], true)) {
+            return in_array((int) $unit['assignment_id'], $this->constraintAssignmentIds($constraint), true);
+        }
+
         if ($constraint->target_type === null || $constraint->target_id === null) {
             return true;
         }
