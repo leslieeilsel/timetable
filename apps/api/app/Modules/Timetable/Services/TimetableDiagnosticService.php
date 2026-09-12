@@ -29,6 +29,37 @@ class TimetableDiagnosticService
     ) {}
 
     /**
+     * Evaluate slot restrictions for both fixed preparation inputs and timetable edits.
+     *
+     * @param  array{assignment_id: int, class_ids: list<int>, grade_ids: list<int>, teaching_group_id: int|null, teacher_ids: list<int>, course_id: int, room_id: int}  $candidate
+     * @param  Collection<int, SchedulingConstraint>  $constraints
+     * @return list<array<string, mixed>>
+     */
+    public function availabilityConflicts(array $candidate, Collection $constraints, int $weekday, int $itemId, int $itemSortOrder): array
+    {
+        $conflicts = [];
+        foreach ($constraints as $constraint) {
+            if ($constraint->kind !== ConstraintKind::Hard
+                || ! in_array($constraint->category->value, ['availability', 'forbidden_slot'], true)
+                || ! $this->targetsCandidate($constraint, $candidate)) {
+                continue;
+            }
+            $matches = $this->slotMatches($constraint->scope, $weekday, $itemId, $itemSortOrder)
+                && $this->slotMatches($constraint->condition ?? [], $weekday, $itemId, $itemSortOrder);
+            $requirement = $constraint->requirement;
+            if ((($requirement['available'] ?? null) === false && $matches)
+                || (($requirement['allowed_only'] ?? false) === true && ! $matches)) {
+                $conflicts[] = [
+                    'type' => 'rule', 'constraint_id' => $constraint->id,
+                    'message' => $constraint->name.'不允许安排在这里。',
+                ];
+            }
+        }
+
+        return $conflicts;
+    }
+
+    /**
      * Check the stored placements against current inputs without treating locks or
      * published status as placement conflicts. Reuse the manual-edit rule evaluator.
      *
@@ -490,7 +521,7 @@ class TimetableDiagnosticService
         ?TimetableEntry $movingEntry,
         ?TimetableVersion $version,
     ): array {
-        $hardConflicts = [];
+        $hardConflicts = $this->availabilityConflicts($candidate, $constraints, $weekday, $itemId, $itemSortOrder);
         if ($version !== null && $version->status !== TimetableVersionStatus::Draft) {
             $hardConflicts[] = ['type' => 'version', 'message' => '当前版本只读，请先创建编辑草稿。'];
         }
@@ -522,16 +553,6 @@ class TimetableDiagnosticService
             }
             $category = $constraint->category->value;
             $requirement = $constraint->requirement;
-            $matches = $this->slotMatches($constraint->scope, $weekday, $itemId, $itemSortOrder)
-                && $this->slotMatches($constraint->condition ?? [], $weekday, $itemId, $itemSortOrder);
-            if (in_array($category, ['availability', 'forbidden_slot'], true)
-                && ((($requirement['available'] ?? null) === false && $matches)
-                    || (($requirement['allowed_only'] ?? false) === true && ! $matches))) {
-                $hardConflicts[] = [
-                    'type' => 'rule', 'constraint_id' => $constraint->id,
-                    'message' => $constraint->name.'不允许安排在这里。',
-                ];
-            }
             if (in_array($category, ['daily_load', 'workload_balance'], true)) {
                 $limit = $this->integerRequirement($requirement, ['max_items_per_day', 'max_per_day']);
                 if ($limit !== null) {
@@ -742,7 +763,7 @@ class TimetableDiagnosticService
     }
 
     /**
-     * @param  array{assignment_id: int, class_ids: list<int>, grade_ids: list<int>, teaching_group_id: int|null, teacher_ids: list<int>, course_id: int, course_name: string, room_id: int, room_name: string, week_pattern: string, active_weeks: list<int>|null, week_mask: int, resources: list<string>, resource_names: array<string, string>}  $candidate
+     * @param  array{assignment_id: int, class_ids: list<int>, grade_ids: list<int>, teaching_group_id: int|null, teacher_ids: list<int>, course_id: int, room_id: int}  $candidate
      */
     private function targetsCandidate(SchedulingConstraint $constraint, array $candidate): bool
     {

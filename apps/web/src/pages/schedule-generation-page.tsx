@@ -256,6 +256,7 @@ export function ScheduleGenerationPage() {
           ) : (
             <RunWorkspace
               run={activeRun.data.data}
+              stale={activeRun.data.meta?.is_stale === true}
               etag={activeRun.data.etag}
               onCancel={() => void cancel()}
               onBack={() => setParams((current) => mergeSearchParams(current, { run: null }))}
@@ -611,12 +612,14 @@ export function ScheduleGenerationPage() {
 
 function RunWorkspace({
   run,
+  stale,
   onCancel,
   onBack,
   onPreview,
   onAdopt,
 }: {
   run: ScheduleRun
+  stale: boolean
   etag: string | null
   onCancel: () => void
   onBack: () => void
@@ -741,6 +744,11 @@ function RunWorkspace({
             <p className="mt-1 text-sm text-muted-foreground">
               硬冲突和未排课程均为 0 才可采用；达到综合质量与关键分项底线后才会标记为推荐。
             </p>
+            {stale && (
+              <p role="status" className="mt-2 text-sm text-amber-700 dark:text-amber-300">
+                排课输入或基础课表已变化，候选方案仅供查看，请新建任务重新生成。
+              </p>
+            )}
           </div>
           <div className="grid gap-4 lg:grid-cols-3">
             {run.candidates?.map((candidate) => (
@@ -748,6 +756,7 @@ function RunWorkspace({
                 key={candidate.id}
                 candidate={candidate}
                 best={candidate.rank === 1}
+                stale={stale}
                 onPreview={() => onPreview(candidate)}
                 onAdopt={onAdopt}
               />
@@ -762,17 +771,20 @@ function RunWorkspace({
 function CandidateCard({
   candidate,
   best,
+  stale,
   onPreview,
   onAdopt,
 }: {
   candidate: ScheduleCandidate
   best: boolean
+  stale: boolean
   onPreview: () => void
   onAdopt: (candidate: ScheduleCandidate, activate: boolean) => void
 }) {
   const score = Number(candidate.quality_score ?? 0)
   const assessment = assessCandidateQuality(candidate)
-  const feasible = candidate.hard_conflict_count === 0 && candidate.unscheduled_count === 0
+  const feasible =
+    !stale && candidate.hard_conflict_count === 0 && candidate.unscheduled_count === 0
   const recommended = best && assessment.eligible
   return (
     <article
@@ -1215,6 +1227,9 @@ function ScopePicker({
       .toLocaleLowerCase("zh-CN")
       .includes(search.trim().toLocaleLowerCase("zh-CN")),
   )
+  const filteredIds = filtered.map((item) => item.id)
+  const allFilteredSelected =
+    filteredIds.length > 0 && filteredIds.every((id) => selected.includes(id))
   return (
     <div className="overflow-hidden rounded-xl border">
       <div className="flex items-center gap-2 border-b p-2">
@@ -1228,11 +1243,16 @@ function ScopePicker({
           type="button"
           size="sm"
           variant="ghost"
+          disabled={filteredIds.length === 0}
           onClick={() =>
-            onChange(selected.length === options.length ? [] : options.map((item) => item.id))
+            onChange(
+              allFilteredSelected
+                ? selected.filter((id) => !filteredIds.includes(id))
+                : [...new Set([...selected, ...filteredIds])],
+            )
           }
         >
-          {selected.length === options.length ? "清空" : "全选"}
+          {allFilteredSelected ? "取消全选" : "全选"}
         </Button>
       </div>
       <div className="grid max-h-56 overflow-y-auto p-2 sm:grid-cols-2">
@@ -1360,7 +1380,7 @@ function scopeOptions(
   if (type === "assignment")
     return assignments.map((item) => ({
       id: item.id,
-      label: `${item.school_class?.name ?? `教学组 #${item.id}`} · ${item.course.name}`,
+      label: `${item.school_class?.name ?? item.teaching_group?.name ?? `教学组 #${item.teaching_group_id}`} · ${item.course.name}`,
       secondary: `${item.teacher.name} · ${item.weekly_items} 节`,
     }))
   return []

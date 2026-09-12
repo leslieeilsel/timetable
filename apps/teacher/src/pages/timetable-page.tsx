@@ -37,7 +37,7 @@ import {
 } from "@/components/ui/menu"
 import { api, apiMessage } from "@/lib/api"
 import { useAuth } from "@/lib/auth"
-import { lessonStartHint, lessonTiming, rowStatus } from "@/lib/timetable"
+import { lessonStartHint, lessonTiming, parseSemesterDate, rowStatus } from "@/lib/timetable"
 import type {
   TeacherClasses,
   TeacherClassTimetable,
@@ -723,10 +723,12 @@ export function TimetablePage() {
 
   function chooseDate(date: string) {
     if (!rangeData) return
-    const target = parseISO(date)
-    const semesterStart = parseISO(rangeData.semester.start_date)
-    const semesterEnd = parseISO(rangeData.semester.end_date)
-    if (isBefore(target, semesterStart) || isAfter(target, semesterEnd)) return
+    const target = parseSemesterDate(
+      date,
+      rangeData.semester.start_date,
+      rangeData.semester.end_date,
+    )
+    if (!target) return
 
     const currentFrom = parseISO(rangeData.from)
     const currentTo = parseISO(rangeData.to)

@@ -53,6 +53,8 @@ class CalendarExceptionController
                 'originalEntry.teachingGroup:id,name', 'originalEntry.item:id,name',
                 'relatedEntry.course:id,name', 'replacementTeacher:id,name',
                 'replacementRoom:id,name', 'replacementItem:id,name',
+                'replacementAssignment.course:id,name', 'replacementAssignment.schoolClass:id,name',
+                'replacementAssignment.teachingGroup:id,name',
                 'creator:id,name',
             ])
             ->when(isset($filters['date_from']), fn ($query) => $query->whereDate('effective_date', '>=', $filters['date_from']))

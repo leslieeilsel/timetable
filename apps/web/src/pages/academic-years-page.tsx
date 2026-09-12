@@ -993,6 +993,9 @@ function SemesterDialog({
   onSaved: () => Promise<void>
 }) {
   const [dates, setDates] = useState({ start_date: "", end_date: "" })
+  useEffect(() => {
+    if (sequence !== null) setDates({ start_date: "", end_date: "" })
+  }, [sequence, yearId])
   const save = async () => {
     if (!sequence || !etag) return
     try {

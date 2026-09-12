@@ -85,8 +85,11 @@ export function LongTermAdjustmentsPage() {
     if (!baseVersionId && currentId) setBaseVersionId(String(currentId))
   }, [baseVersionId, semester.data?.data.current_timetable_version_id])
   useEffect(() => {
-    if (!draftVersionId && draftVersions[0]) setDraftVersionId(String(draftVersions[0].id))
-  }, [draftVersionId, draftVersions])
+    if (creating || versions.isFetching) return
+    if (!draftVersions.some((version) => String(version.id) === draftVersionId)) {
+      setDraftVersionId(draftVersions[0] ? String(draftVersions[0].id) : "")
+    }
+  }, [creating, draftVersionId, draftVersions, versions.isFetching])
   useEffect(() => {
     const current = semester.data?.data
     if (!current) return

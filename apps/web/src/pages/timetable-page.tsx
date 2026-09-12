@@ -30,6 +30,7 @@ import {
   assignmentMatchesResource,
   isTimetableVersionStale,
   pendingItemsForResource,
+  fillPendingScope,
 } from "@/lib/timetable-state"
 import { mergeSearchParams, useHashPreservingSearchParams } from "@/lib/url-state"
 import { cn } from "@/lib/utils"
@@ -337,11 +338,11 @@ export function TimetablePage() {
     )
   }, [resources])
   useEffect(() => {
-    if (!versions.isSuccess) return
+    if (!versions.isSuccess || versions.isFetching) return
     setSelectedVersionId((current) =>
       resolveTimetableVersionSelection(
         availableVersions,
-        current,
+        params.get("version") ?? current,
         semester.data?.data.current_timetable_version_id,
         user?.role,
       ),
@@ -351,6 +352,8 @@ export function TimetablePage() {
     semester.data?.data.current_timetable_version_id,
     user?.role,
     versions.isSuccess,
+    versions.isFetching,
+    params,
   ])
   const selectVersion = (value: string, clearCreated = true) => {
     setSelectedVersionId(value)
@@ -559,6 +562,8 @@ export function TimetablePage() {
     Number(resourceId),
     settings.data?.data ?? [],
   )
+  const fillScope = fillPendingScope(remaining, resourcePendingItems, scheduled, Number(resourceId))
+  const fillLabel = fillScope.type === "all" ? "自动补齐全部待排课程" : "自动补齐当前班级"
   const hardConflictCount = selectedVersion?.hard_conflict_count ?? 0
   const softWarningCount = selectedVersion?.soft_warning_count ?? 0
   const resourceIndex = resources.findIndex((item) => String(item.id) === resourceId)
@@ -613,7 +618,7 @@ export function TimetablePage() {
         method: "POST",
         etag: timetable.data.etag,
         body: JSON.stringify({
-          scope: { type: "class", ids: [Number(resourceId)] },
+          scope: keepCurrent ? fillScope : { type: "class", ids: [Number(resourceId)] },
           preservation: {
             keep_locked: true,
             keep_current: keepCurrent,
@@ -639,7 +644,7 @@ export function TimetablePage() {
   const fillPendingForCurrentClass = () =>
     startClassGeneration({
       keepCurrent: true,
-      successMessage: `已开始自动补齐当前班级的 ${resourcePendingItems} 节待排课程，现有安排保持不动`,
+      successMessage: `已开始${fillLabel}，现有安排保持不动`,
     })
 
   return (
@@ -880,7 +885,17 @@ export function TimetablePage() {
                 <Button
                   size="sm"
                   variant="outline"
-                  disabled={replanStarting || historyBusy}
+                  disabled={
+                    replanStarting ||
+                    historyBusy ||
+                    scheduled === 0 ||
+                    remaining > resourcePendingItems
+                  }
+                  title={
+                    scheduled === 0 || remaining > resourcePendingItems
+                      ? "请先补齐课表，再仅重排当前班级"
+                      : undefined
+                  }
                   onClick={() => void startLocalReplan()}
                 >
                   {replanStarting ? (
@@ -930,7 +945,7 @@ export function TimetablePage() {
                     ) : (
                       <SparklesIcon />
                     )}
-                    自动补齐当前班级
+                    {fillLabel}
                   </Button>
                 ) : (
                   <Button
@@ -961,7 +976,7 @@ export function TimetablePage() {
                 onClick={() => void fillPendingForCurrentClass()}
               >
                 {replanStarting ? <LoaderCircleIcon className="animate-spin" /> : <SparklesIcon />}
-                自动补齐当前班级
+                {fillLabel}
               </Button>
             )}
           </div>

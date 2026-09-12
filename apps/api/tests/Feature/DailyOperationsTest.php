@@ -82,6 +82,27 @@ it('previews and stores a date-only move without mutating the base weekly timeta
         ->assertJsonPath('data.status', 'cancelled');
 });
 
+it('includes the course and target of a makeup lesson in the adjustment list', function (): void {
+    $fixture = dailyOperationsFixture($this->scheduler->id);
+    $assignmentId = DB::table('timetable_entries')->where('id', $fixture['entry_id'])->value('teaching_assignment_id');
+    $etag = $this->getJson("/api/v1/semesters/{$fixture['semester_id']}")->headers->get('ETag');
+
+    $this->withHeader('If-Match', $etag)
+        ->postJson("/api/v1/semesters/{$fixture['semester_id']}/calendar-exceptions", [
+            'effective_date' => '2026-09-07',
+            'type' => 'makeup',
+            'replacement_assignment_id' => $assignmentId,
+            'replacement_item_id' => $fixture['item_ids'][1],
+            'reason' => '补课列表显示测试',
+        ])->assertCreated();
+
+    $this->getJson("/api/v1/semesters/{$fixture['semester_id']}/calendar-exceptions")
+        ->assertOk()
+        ->assertJsonPath('data.0.replacement_assignment.id', $assignmentId)
+        ->assertJsonPath('data.0.replacement_assignment.school_class.id', $fixture['class_id'])
+        ->assertJsonStructure(['data' => [['replacement_assignment' => ['course' => ['id', 'name']]]]]);
+});
+
 it('blocks a temporary adjustment when the target date has a hard resource conflict', function (): void {
     $fixture = dailyOperationsFixture($this->scheduler->id, true);
     $etag = $this->getJson("/api/v1/semesters/{$fixture['semester_id']}")->headers->get('ETag');

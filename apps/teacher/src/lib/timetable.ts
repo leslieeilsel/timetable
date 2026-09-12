@@ -1,8 +1,14 @@
-import { differenceInMinutes, isSameDay, parseISO } from "date-fns"
+import { differenceInMinutes, isSameDay, isValid, parseISO } from "date-fns"
 
 import type { TimetableRow } from "@/lib/types"
 
 export type LessonTiming = "completed" | "ongoing" | "upcoming"
+
+export function parseSemesterDate(value: string, start: string, end: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || value < start || value > end) return null
+  const date = parseISO(value)
+  return isValid(date) ? date : null
+}
 
 export function lessonTiming(row: TimetableRow, now = new Date()): LessonTiming {
   const start = parseISO(`${row.date}T${row.start_time}`)

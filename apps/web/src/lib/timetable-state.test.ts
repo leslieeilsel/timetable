@@ -11,6 +11,7 @@ import type {
 } from "@/lib/types"
 import {
   assignmentMatchesResource,
+  fillPendingScope,
   isTimetableVersionStale,
   pendingItemsForResource,
 } from "./timetable-state"
@@ -43,6 +44,11 @@ const settings: ClassSetting[] = [
 ]
 
 describe("timetable version state", () => {
+  it("fills the whole timetable when an empty or incomplete outside baseline cannot support class-only generation", () => {
+    expect(fillPendingScope(10, 10, 0, 10)).toEqual({ type: "all", ids: [] })
+    expect(fillPendingScope(10, 4, 6, 10)).toEqual({ type: "all", ids: [] })
+    expect(fillPendingScope(4, 4, 12, 10)).toEqual({ type: "class", ids: [10] })
+  })
   it("marks a version stale when the timetable inputs changed afterwards", () => {
     expect(
       isTimetableVersionStale({ input_revision: 20 }, { input_revision: 1 } as TimetableVersion),

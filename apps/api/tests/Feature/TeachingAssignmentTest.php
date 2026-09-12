@@ -47,6 +47,7 @@ it('supports teaching groups, collaborators, consecutive items and specified wee
             'allows_substitution' => false,
         ])->assertCreated()
         ->assertJsonPath('data.teaching_group.id', $groupId)
+        ->assertJsonPath('data.specified_room.type', 'playground')
         ->assertJsonPath('data.items_per_session', 2)
         ->assertJsonPath('data.week_pattern', 'specified')
         ->assertJsonPath('data.active_weeks.1', 3)

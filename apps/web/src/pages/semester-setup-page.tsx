@@ -53,6 +53,7 @@ export function SemesterSetupPage() {
   const client = useQueryClient()
   const [urlParams, setUrlParams] = useHashPreservingSearchParams()
   const [settingOpen, setSettingOpen] = useState(false)
+  const [settingClassId, setSettingClassId] = useState<number | null>(null)
   const [templateOpen, setTemplateOpen] = useState(false)
   const [migratingSetting, setMigratingSetting] = useState<ClassSetting | null>(null)
   const [search, setSearch] = useState(() => urlParams.get("q") ?? "")
@@ -206,7 +207,16 @@ export function SemesterSetupPage() {
         description="先确定参与排课的班级和固定教室，再维护统一作息。"
       />
       <div className="p-5 md:p-7">
-        <Tabs defaultValue="classes">
+        <Tabs
+          value={urlParams.get("section") === "schedule-template" ? "template" : "classes"}
+          onValueChange={(value) =>
+            setUrlParams((current) =>
+              mergeSearchParams(current, {
+                section: value === "template" ? "schedule-template" : null,
+              }),
+            )
+          }
+        >
           <TabsList>
             <TabsTrigger value="classes">班级配置（{settingsTotal}）</TabsTrigger>
             <TabsTrigger value="template">作息模板</TabsTrigger>
@@ -226,7 +236,13 @@ export function SemesterSetupPage() {
                     复制上学期
                   </Button>
                 )}
-                <Button onClick={() => setSettingOpen(true)} disabled={current.status === "closed"}>
+                <Button
+                  onClick={() => {
+                    setSettingClassId(null)
+                    setSettingOpen(true)
+                  }}
+                  disabled={current.status === "closed"}
+                >
                   <PlusIcon />
                   添加班级
                 </Button>
@@ -311,7 +327,15 @@ export function SemesterSetupPage() {
                               <ArrowRightLeftIcon />
                               迁移教室
                             </Button>
-                            <Button variant="ghost" size="sm" onClick={() => setSettingOpen(true)}>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={current.status === "closed"}
+                              onClick={() => {
+                                setSettingClassId(item.school_class_id)
+                                setSettingOpen(true)
+                              }}
+                            >
                               <Settings2Icon />
                               调整
                             </Button>
@@ -411,6 +435,7 @@ export function SemesterSetupPage() {
       </div>
       <ClassSettingDialog
         open={settingOpen}
+        initialClassId={settingClassId}
         semesterId={current.id}
         etag={settings.data?.etag ?? null}
         classes={classes.data?.data ?? []}
@@ -506,6 +531,7 @@ function ClassRoomMigrationDialog({
 
 function ClassSettingDialog({
   open,
+  initialClassId,
   semesterId,
   etag,
   classes,
@@ -516,6 +542,7 @@ function ClassSettingDialog({
   onSaved,
 }: {
   open: boolean
+  initialClassId: number | null
   semesterId: number
   etag: string | null
   classes: SchoolClass[]
@@ -536,20 +563,16 @@ function ClassSettingDialog({
   )
   useEffect(() => {
     if (open) {
-      setClassId(String(available[0]?.id ?? settings[0]?.school_class_id ?? ""))
-      setRoomId("")
-      setTeacherId("")
-      setStatus("active")
+      setClassId(String(initialClassId ?? available[0]?.id ?? settings[0]?.school_class_id ?? ""))
     }
-  }, [available, open, settings])
+  }, [available, initialClassId, open, settings])
   useEffect(() => {
+    if (!open) return
     const existing = settings.find((setting) => setting.school_class_id === Number(classId))
-    if (existing) {
-      setRoomId(String(existing.fixed_room_id ?? ""))
-      setTeacherId(String(existing.homeroom_teacher_id ?? ""))
-      setStatus(existing.status)
-    }
-  }, [classId, settings])
+    setRoomId(String(existing?.fixed_room_id ?? ""))
+    setTeacherId(String(existing?.homeroom_teacher_id ?? ""))
+    setStatus(existing?.status ?? "active")
+  }, [classId, open, settings])
   const save = async () => {
     if (!classId || !etag) return
     try {

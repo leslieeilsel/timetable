@@ -252,12 +252,17 @@ it('rejects adopting a candidate after catalog resources or qualifications chang
     app(AutoScheduler::class)->generate($run);
     $candidate = $run->fresh()->candidates()->firstOrFail();
 
+    $this->getJson("/api/v1/semesters/{$fixture['semester_id']}/schedule-runs/{$run->id}")
+        ->assertOk()->assertJsonPath('meta.is_stale', false);
+
     DB::table('teachers')->where('id', $fixture['teacher_id'])->update(['is_active' => false]);
     DB::table('teacher_course')
         ->where('teacher_id', $fixture['teacher_id'])
         ->where('course_id', $fixture['course_id'])
         ->delete();
     DB::table('app_settings')->where('id', 1)->increment('catalog_revision');
+    $this->getJson("/api/v1/semesters/{$fixture['semester_id']}/schedule-runs/{$run->id}")
+        ->assertOk()->assertJsonPath('meta.is_stale', true);
     $detail = $this->getJson("/api/v1/semesters/{$fixture['semester_id']}/schedule-runs/{$run->id}/candidates/{$candidate->id}")
         ->assertOk()
         ->assertJsonPath('data.is_stale', true);
@@ -311,6 +316,8 @@ it('rejects adoption when the selected base version lock baseline changes', func
         'updated_at' => now(),
     ]);
     DB::table('semesters')->where('id', $fixture['semester_id'])->increment('timetable_revision');
+    $this->getJson("/api/v1/semesters/{$fixture['semester_id']}/schedule-runs/{$run->id}")
+        ->assertOk()->assertJsonPath('meta.is_stale', true);
     $etag = $this->getJson("/api/v1/semesters/{$fixture['semester_id']}")->headers->get('ETag');
 
     $this->withHeader('If-Match', $etag)

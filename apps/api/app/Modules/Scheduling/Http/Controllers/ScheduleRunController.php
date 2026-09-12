@@ -62,7 +62,12 @@ class ScheduleRunController
 
         return response()->json([
             'data' => $run,
-            'meta' => $this->meta($semester, $settings),
+            'meta' => [
+                ...$this->meta($semester, $settings),
+                'is_stale' => ! $run->hasCompleteInputSnapshot()
+                    || $run->revisionDifferences($semester, $settings) !== []
+                    || ! $run->baselineMatches(),
+            ],
         ])->header('ETag', $this->etags->semester($semester, $settings));
     }
 

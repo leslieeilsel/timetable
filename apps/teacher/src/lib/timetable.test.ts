@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { lessonStartHint, lessonTiming, rowStatus } from "@/lib/timetable"
+import { lessonStartHint, lessonTiming, parseSemesterDate, rowStatus } from "@/lib/timetable"
 import type { TimetableRow } from "@/lib/types"
 
 const baseRow: TimetableRow = {
@@ -25,6 +25,23 @@ const baseRow: TimetableRow = {
   is_cancelled: false,
   duty_status: "assigned",
 }
+
+describe("teacher date selection", () => {
+  it.each(["", "2026-09", "2026-02-30", "2025-12-31", "2027-01-01"])(
+    "rejects incomplete, invalid and out-of-semester input %s",
+    (value) => {
+      expect(parseSemesterDate(value, "2026-01-01", "2026-12-31")).toBeNull()
+    },
+  )
+
+  it("accepts valid dates including both semester boundaries", () => {
+    for (const value of ["2026-09-07", "2026-09-12", "2026-10-30"]) {
+      expect(parseSemesterDate(value, "2026-09-07", "2026-10-30")).toEqual(
+        new Date(`${value}T00:00:00`),
+      )
+    }
+  })
+})
 
 describe("teacher timetable row status", () => {
   it("keeps an unchanged lesson unlabelled", () => {

@@ -9,8 +9,10 @@ use App\Enums\ResourceStatus;
 use App\Enums\RoomMode;
 use App\Modules\AcademicCalendar\Models\AppSetting;
 use App\Modules\AcademicCalendar\Models\Semester;
+use App\Modules\Scheduling\Models\SchedulingConstraint;
 use App\Modules\SemesterClassSetting\Models\SemesterClassSetting;
 use App\Modules\TeachingAssignment\Models\TeachingAssignment;
+use App\Modules\Timetable\Services\TimetableDiagnosticService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -19,6 +21,7 @@ class PreparationCheckService
     public function __construct(
         private readonly WeekPatternService $weekPatterns,
         private readonly ConstraintPayloadValidator $constraintPayloads,
+        private readonly TimetableDiagnosticService $diagnostics,
     ) {}
 
     /**
@@ -121,21 +124,21 @@ class PreparationCheckService
             $capacityIssues,
         );
 
-        $fixedIssues = $this->fixedPlacementIssues($semester, $classSettingsByClass);
+        $activeConstraints = $semester->schedulingConstraints()
+            ->where('status', ConstraintStatus::Active->value)
+            ->get();
+        $fixedIssues = $this->fixedPlacementIssues($semester, $classSettingsByClass, $activeConstraints);
         $fixedCount = $semester->fixedPlacements()->where('status', ResourceStatus::Active->value)->count();
         $checks[] = $this->check(
             'fixed_placements',
             '固定安排无冲突',
             $fixedIssues === [] ? 'passed' : 'blocking',
             count($fixedIssues),
-            $fixedIssues === [] ? "已校验 {$fixedCount} 条固定安排。" : '固定安排之间存在班级、教师或教室冲突。',
-            '/scheduling/constraints?section=fixed',
+            $fixedIssues === [] ? "已校验 {$fixedCount} 条固定安排。" : '固定安排存在资源冲突或违反启用的禁排规则。',
+            '/scheduling/constraints?tab=fixed',
             $fixedIssues,
         );
 
-        $activeConstraints = $semester->schedulingConstraints()
-            ->where('status', ConstraintStatus::Active->value)
-            ->get();
         $hardCount = $activeConstraints->where('kind', ConstraintKind::Hard)->count();
         $softCount = $activeConstraints->where('kind', ConstraintKind::Soft)->count();
         $constraintIssues = $this->constraintPayloads->activeIssues($semester, $activeConstraints);
@@ -334,13 +337,14 @@ class PreparationCheckService
 
     /**
      * @param  Collection<int, SemesterClassSetting>  $classSettingsByClass
+     * @param  Collection<int, SchedulingConstraint>  $constraints
      * @return list<array<string, mixed>>
      */
-    private function fixedPlacementIssues(Semester $semester, Collection $classSettingsByClass): array
+    private function fixedPlacementIssues(Semester $semester, Collection $classSettingsByClass, Collection $constraints): array
     {
         $fixed = $semester->fixedPlacements()
             ->where('status', ResourceStatus::Active->value)
-            ->with(['teachingAssignment.semester', 'teachingAssignment.teachingGroup.schoolClasses', 'teachingAssignment.collaborators'])
+            ->with(['teachingAssignment.semester', 'teachingAssignment.schoolClass', 'teachingAssignment.teachingGroup.schoolClasses', 'teachingAssignment.collaborators'])
             ->get();
         $seen = [];
         $issues = [];
@@ -350,6 +354,27 @@ class PreparationCheckService
                 ? [$assignment->school_class_id]
                 : $assignment->teachingGroup?->schoolClasses->pluck('id')->all() ?? [];
             $roomId = $placement->room_id ?? $this->resolvedRoomId($assignment, $classSettingsByClass) ?? 0;
+            $gradeIds = $assignment->schoolClass !== null
+                ? [$assignment->schoolClass->grade_id]
+                : $assignment->teachingGroup?->schoolClasses->pluck('grade_id')->unique()->values()->all() ?? [];
+            $candidate = [
+                'assignment_id' => $assignment->id,
+                'class_ids' => $classIds,
+                'grade_ids' => $gradeIds,
+                'teaching_group_id' => $assignment->teaching_group_id,
+                'teacher_ids' => [$assignment->teacher_id, ...$assignment->collaborators->pluck('id')->all()],
+                'course_id' => $assignment->course_id,
+                'room_id' => $roomId,
+            ];
+            foreach ($this->diagnostics->availabilityConflicts(
+                $candidate,
+                $constraints,
+                $placement->weekday,
+                $placement->item_id,
+                $semester->scheduleTemplate?->items->firstWhere('id', $placement->item_id)->sort_order ?? 0,
+            ) as $conflict) {
+                $issues[] = ['placement_id' => $placement->id, ...$conflict];
+            }
             $resources = ["teacher:{$assignment->teacher_id}", "room:{$roomId}"];
             foreach ($assignment->collaborators as $collaborator) {
                 $resources[] = "teacher:{$collaborator->id}";

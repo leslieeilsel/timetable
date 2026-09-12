@@ -148,6 +148,56 @@ it('detects conflicts between fixed placements', function (): void {
         ->toContain("room:{$fixture['room_id']}", "school_class:{$fixture['class_id']}");
 });
 
+it('blocks fixed placements forbidden by an active hard rule and clears the blocker after moving', function (string $target): void {
+    $fixture = preparationCheckFixture($this->scheduler->id);
+    $now = now();
+    $targetId = match ($target) {
+        'teacher' => $fixture['teacher_id'],
+        'school_class' => $fixture['class_id'],
+        'course' => $fixture['course_id'],
+        'room' => $fixture['room_id'],
+        'teaching_assignment' => $fixture['assignment_id'],
+        'grade' => DB::table('school_classes')->where('id', $fixture['class_id'])->value('grade_id'),
+    };
+    $constraintId = DB::table('scheduling_constraints')->insertGetId([
+        'semester_id' => $fixture['semester_id'],
+        'name' => '周一第一节禁排',
+        'kind' => 'hard',
+        'category' => 'availability',
+        'target_type' => $target,
+        'target_id' => $targetId,
+        'scope' => json_encode(['slots' => [['weekday' => 1, 'item_id' => $fixture['item_ids'][0]]]], JSON_THROW_ON_ERROR),
+        'requirement' => json_encode(['available' => false], JSON_THROW_ON_ERROR),
+        'source' => 'user',
+        'status' => 'active',
+        'created_at' => $now,
+        'updated_at' => $now,
+    ]);
+    $placementId = DB::table('fixed_placements')->insertGetId([
+        'semester_id' => $fixture['semester_id'],
+        'teaching_assignment_id' => $fixture['assignment_id'],
+        'week_pattern' => 'all',
+        'weekday' => 1,
+        'item_id' => $fixture['item_ids'][0],
+        'is_locked' => true,
+        'status' => 'active',
+        'created_at' => $now,
+        'updated_at' => $now,
+    ]);
+
+    $response = $this->getJson("/api/v1/semesters/{$fixture['semester_id']}/preparation-check")
+        ->assertOk()->assertJsonPath('data.ready', false);
+    $check = collect($response->json('data.checks'))->firstWhere('key', 'fixed_placements');
+    expect($check['status'])->toBe('blocking')
+        ->and($check['fix_path'])->toBe('/scheduling/constraints?tab=fixed')
+        ->and($check['items'][0]['placement_id'])->toBe($placementId)
+        ->and($check['items'][0]['constraint_id'])->toBe($constraintId);
+
+    DB::table('fixed_placements')->where('id', $placementId)->update(['weekday' => 2]);
+    $this->getJson("/api/v1/semesters/{$fixture['semester_id']}/preparation-check")
+        ->assertOk()->assertJsonPath('data.ready', true);
+})->with(['teacher', 'school_class', 'course', 'room', 'teaching_assignment', 'grade']);
+
 it('reports missing schedule and class setup as blockers', function (): void {
     $fixture = preparationCheckFixture($this->scheduler->id);
     DB::table('schedule_template_days')->where('semester_id', $fixture['semester_id'])->update(['is_enabled' => false]);

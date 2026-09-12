@@ -610,10 +610,7 @@ export function CourseAssignmentMatrixPage() {
           复制上学期本年级
         </Button>
       )}
-      <Button
-        disabled={current.status === "closed"}
-        onClick={() => setEditor({ schoolClassId: matrixClasses[0]?.school_class_id })}
-      >
+      <Button disabled={current.status === "closed"} onClick={() => setEditor({})}>
         <PlusIcon />
         新增任课关系
       </Button>

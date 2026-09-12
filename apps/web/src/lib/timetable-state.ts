@@ -2,6 +2,17 @@ import type { ClassSetting, Semester, TeachingAssignment, TimetableVersion } fro
 
 export type TimetableResourceView = "class" | "teacher" | "room"
 
+export function fillPendingScope(
+  remaining: number,
+  resourceRemaining: number,
+  scheduled: number,
+  classId: number,
+) {
+  return scheduled === 0 || remaining > resourceRemaining
+    ? { type: "all" as const, ids: [] }
+    : { type: "class" as const, ids: [classId] }
+}
+
 export function isTimetableVersionStale(
   semester: Pick<Semester, "input_revision">,
   version: Pick<TimetableVersion, "input_revision"> | null | undefined,
