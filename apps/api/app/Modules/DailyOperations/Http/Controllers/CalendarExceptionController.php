@@ -109,6 +109,7 @@ class CalendarExceptionController
                 'status' => OperationalStatus::Active,
                 'created_by' => $actor->id,
             ]);
+            $this->assertResultConflictFree($lockedSemester, $exception);
             $lockedSemester->increment('timetable_revision');
             $lockedSemester->refresh();
             $this->audit->record(
@@ -144,6 +145,7 @@ class CalendarExceptionController
             $before = $locked->toArray();
             $locked->status = OperationalStatus::Cancelled;
             $locked->save();
+            $this->assertResultConflictFree($lockedSemester, $locked);
             $lockedSemester->increment('timetable_revision');
             $lockedSemester->refresh();
             $this->audit->record($request, $actor, 'cancel', 'calendar_exception', $locked->id, $before, $locked->toArray());
@@ -153,6 +155,17 @@ class CalendarExceptionController
                 'meta' => $this->meta($lockedSemester, $settings),
             ])->header('ETag', $this->etags->semester($lockedSemester, $settings));
         }, 3);
+    }
+
+    private function assertResultConflictFree(Semester $semester, CalendarException $exception): void
+    {
+        $dates = array_unique([
+            $exception->effective_date->toDateString(),
+            ($exception->replacement_date ?? $exception->effective_date)->toDateString(),
+        ]);
+        foreach ($dates as $date) {
+            $this->daily->assertActualRowsConflictFree($this->daily->forDate($semester, $date)['rows'], $date);
+        }
     }
 
     /** @return array<string, mixed> */

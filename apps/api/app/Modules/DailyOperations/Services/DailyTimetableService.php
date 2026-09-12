@@ -93,7 +93,7 @@ class DailyTimetableService
         $substitutions = Substitution::query()
             ->whereDate('effective_date', $context['date'])
             ->where('status', OperationalStatus::Active->value)
-            ->whereHas('originalEntry', fn ($query) => $query->where('timetable_version_id', $version->id))
+            ->whereIn('original_entry_id', collect($rows)->pluck('original_entry_id')->filter()->unique()->all())
             ->with(['replacementTeacher:id,name,employee_no', 'teacherLeave:id,teacher_id'])
             ->orderBy('id')
             ->get();
@@ -233,7 +233,7 @@ class DailyTimetableService
                 $target['date'],
                 $item,
                 $candidate,
-                [$original->id],
+                $effective['date'] === $target['date'] ? [$original->id] : [],
             );
         } elseif ($type === CalendarExceptionType::Swap && $original !== null && $related !== null) {
             if ($original->weekday !== $related->weekday) {
@@ -348,9 +348,19 @@ class DailyTimetableService
         return $affected;
     }
 
-    /**
-     * @return list<array<string, mixed>>
-     */
+    /** @return array<string, mixed> */
+    public function actualEntryRow(Semester $semester, int $entryId, string $date, ?int $ignoreTeacherId = null): array
+    {
+        $row = collect($this->forDate($semester, $date, $ignoreTeacherId)['rows'])
+            ->first(fn (array $row): bool => $row['original_entry_id'] === $entryId && ! $row['is_cancelled']);
+        if (! is_array($row)) {
+            throw new ApiProblemException('SUBSTITUTION_ENTRY_NOT_AFFECTED', '所选课程在该日期没有实际授课安排', 422);
+        }
+
+        return $row;
+    }
+
+    /** @return list<array<string, mixed>> */
     public function substitutionRecommendations(
         Semester $semester,
         TimetableEntry $entry,
@@ -360,9 +370,9 @@ class DailyTimetableService
         $dateContext = $this->dateContext($semester, $date);
         $version = $this->versionForDate($semester, $dateContext['date']);
         $entry->loadMissing($this->entryRelations());
-        $item = $entry->item;
-        $itemStart = Carbon::parse($date.' '.$item->start_time);
-        $itemEnd = Carbon::parse($date.' '.$item->end_time);
+        $actual = $this->actualEntryRow($semester, $entry->id, $date, $excludedTeacherId);
+        $itemStart = Carbon::parse($date.' '.$actual['start_time']);
+        $itemEnd = Carbon::parse($date.' '.$actual['end_time']);
         $dailyRows = collect($this->forDate($semester, $date)['rows']);
         $gradeIds = $entry->schoolClasses->pluck('grade_id')->map(fn ($id): int => (int) $id)->unique()->values()->all();
         $teachers = Teacher::query()
@@ -383,7 +393,7 @@ class DailyTimetableService
             if ($onLeave) {
                 continue;
             }
-            $occupied = $dailyRows->contains(fn (array $row): bool => ! $row['is_cancelled'] && $row['item_id'] === $entry->item_id
+            $occupied = $dailyRows->contains(fn (array $row): bool => ! $row['is_cancelled'] && $row['item_id'] === $actual['item_id']
                 && in_array($teacher->id, $row['teacher_ids'], true));
             if ($occupied) {
                 continue;
@@ -400,7 +410,7 @@ class DailyTimetableService
                 ->pluck('item_sort_order')
                 ->map(fn ($order): int => (int) $order)
                 ->all();
-            $consecutiveLoad = $this->consecutiveLoadAfterAdding($itemOrders, $item->sort_order);
+            $consecutiveLoad = $this->consecutiveLoadAfterAdding($itemOrders, $actual['item_sort_order']);
             $sameGradeExperience = TeachingAssignment::query()
                 ->where('semester_id', $semester->id)
                 ->where('teacher_id', $teacher->id)
@@ -486,8 +496,8 @@ class DailyTimetableService
             }
             foreach ($resources as $resource) {
                 $key = $row['item_id'].':'.$resource;
-                if (isset($occupied[$key])) {
-                    throw new ApiProblemException('DAILY_TIMETABLE_CONFLICT', '长期调课与已有临时安排产生资源冲突', 409, [
+                if (array_key_exists($key, $occupied)) {
+                    throw new ApiProblemException('DAILY_TIMETABLE_CONFLICT', '实际课表存在班级、教师或教室资源冲突', 409, [
                         'date' => $date,
                         'resource' => $resource,
                         'entry_ids' => [$occupied[$key], $row['original_entry_id']],

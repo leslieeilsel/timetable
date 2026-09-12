@@ -818,6 +818,7 @@ function RuleDialog({
     return () => window.removeEventListener("pointerup", stopDragging)
   }, [dragMode])
   const slotBased = ["unavailable", "avoid", "prefer"].includes(preset)
+  const resourceLimited = ["daily_limit", "consecutive_limit"].includes(preset)
   const relationBased = ["synchronization", "mutual_exclusion"].includes(preset)
   const hardOnly = ["unavailable", "synchronization", "mutual_exclusion"].includes(preset)
   const softOnly = ["avoid", "prefer", "teacher_gaps"].includes(preset)
@@ -873,7 +874,12 @@ function RuleDialog({
           assignmentMatchesTarget(assignment, targetType, targetId),
         ).length
   const nameError = !name.trim() ? "请填写一个便于识别的规则名称" : undefined
-  const targetError = targetType && !targetId ? "请选择一个具体作用对象" : undefined
+  const targetError =
+    resourceLimited && ["course", "teaching_assignment"].includes(targetType)
+      ? "课时上限需要选择教师、班级、教室、年级或教学组"
+      : targetType && !targetId
+        ? "请选择一个具体作用对象"
+        : undefined
   const slotError = slotBased && selectedSlots.length === 0 ? "请至少选择一个生效课节" : undefined
   const relationError =
     relationBased && relatedCount < 1 ? "请至少再选择一条关联任课关系" : undefined
@@ -938,7 +944,10 @@ function RuleDialog({
         : preset === "daily_limit"
           ? { max_items_per_day: limit }
           : preset === "consecutive_limit"
-            ? { max_consecutive_items: limit, resource_type: "teacher" }
+            ? {
+                max_consecutive_items: limit,
+                ...(targetType ? {} : { resource_type: "teacher" }),
+              }
             : preset === "spacing"
               ? { min_gap_days: limit }
               : preset === "synchronization"
@@ -1150,10 +1159,14 @@ function RuleDialog({
                         <option value="">全学期</option>
                         <option value="teacher">教师</option>
                         <option value="school_class">班级</option>
-                        <option value="course">课程</option>
+                        <option value="course" disabled={resourceLimited}>
+                          课程
+                        </option>
                         <option value="room">教室</option>
                         <option value="grade">年级</option>
-                        <option value="teaching_assignment">任课关系</option>
+                        <option value="teaching_assignment" disabled={resourceLimited}>
+                          任课关系
+                        </option>
                         <option value="teaching_group">教学组</option>
                       </SimpleSelect>
                     </Field>

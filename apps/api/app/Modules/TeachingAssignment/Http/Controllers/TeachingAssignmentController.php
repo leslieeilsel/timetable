@@ -175,7 +175,7 @@ class TeachingAssignmentController
                 || $collaboratorIds !== $locked->collaborators->pluck('id')->map(fn ($id) => (int) $id)->all())) {
                 throw new ApiProblemException('ASSIGNMENT_HAS_ENTRIES', '已有课程时不能修改授课对象、教师、周型、连排或教室规则', 409);
             }
-            if (isset($data['weekly_items']) && $data['weekly_items'] < $locked->entries_count) {
+            if (isset($data['weekly_items']) && $data['weekly_items'] < $this->maxScheduledItems($locked)) {
                 throw new ApiProblemException('WEEKLY_ITEMS_BELOW_SCHEDULED', '每周课时不能低于已排课时', 422);
             }
             $merged = array_merge($locked->only([
@@ -289,7 +289,7 @@ class TeachingAssignmentController
                         'assignment_id' => $assignment->id,
                     ]);
                 }
-                if ($assignment->weekly_items < $assignment->entries_count) {
+                if ($assignment->exists && $assignment->weekly_items < $this->maxScheduledItems($assignment)) {
                     throw new ApiProblemException('WEEKLY_ITEMS_BELOW_SCHEDULED', '每周课时不能低于已排课时', 422, [
                         'assignment_id' => $assignment->id,
                     ]);
@@ -687,6 +687,16 @@ class TeachingAssignmentController
             'course:id,name,short_name,is_active', 'teacher:id,name,employee_no,is_active',
             'collaborators:id,name,employee_no,is_active', 'specifiedRoom:id,name,is_active',
         ]);
+    }
+
+    private function maxScheduledItems(TeachingAssignment $assignment): int
+    {
+        $perVersion = $assignment->entries()
+            ->selectRaw('COUNT(*) AS scheduled_items')
+            ->groupBy('timetable_version_id')
+            ->toBase();
+
+        return (int) DB::query()->fromSub($perVersion, 'version_loads')->max('scheduled_items');
     }
 
     private function assertParent(Semester $semester, TeachingAssignment $assignment): void

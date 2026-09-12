@@ -46,32 +46,108 @@
   --font-app: "FZYaSongS-R-GB", "Noto Serif SC", "Songti SC", "STSong", "SimSun", ui-serif, serif;
   --font-data:
     "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  /* HIG type roles adapted to the web; rem respects browser text-size settings.
+     https://developer.apple.com/design/human-interface-guidelines/typography */
+  --text-caption: 0.8125rem;
+  --text-subhead: 0.9375rem;
+  --text-callout: 1rem;
+  --text-body: 1.0625rem;
+  --text-title: 1.375rem;
+  --text-page-title: 1.75rem;
+  --page-inset: 1.25rem;
+  --control-size: 2.75rem;
+  --calendar-row-size: 3rem;
+  --calendar-weekday-size: 1.75rem;
+  --calendar-toolbar-size: 3.5rem;
+  --calendar-top-space: 0.75rem;
+  /* Apple HIG system palette; stronger variants keep small colored text readable. */
+  --apple-red: #ff383c;
+  --apple-orange: #ff8d28;
+  --apple-green: #34c759;
+  --apple-blue: #0088ff;
+  --apple-purple: #cb30e0;
+  --apple-gray: #8e8e93;
+  --apple-gray2: #aeaeb2;
+  --apple-gray4: #d1d1d6;
+  --apple-gray5: #e5e5ea;
+  --apple-gray6: #f2f2f7;
+  --red-text: #e9152d;
+  --orange-text: #a34400;
+  --green-text: #007a2d;
+  --blue-text: #1e6ef4;
+  --purple-text: #b02fc2;
   --background: #ffffff;
-  --foreground: #171814;
+  --foreground: #000000;
   --card: #ffffff;
-  --card-foreground: #171814;
+  --card-foreground: var(--foreground);
   --popover: #ffffff;
-  --popover-foreground: #171814;
-  --primary: #1e1f1c;
+  --popover-foreground: var(--foreground);
+  --primary: var(--blue-text);
   --primary-foreground: #ffffff;
-  --secondary: #f1f1ed;
-  --secondary-foreground: #292a25;
-  --muted: #f2f2ee;
-  --muted-foreground: #66685f;
-  --accent: #f0f0eb;
-  --accent-foreground: #171814;
-  --destructive: #c94c4c;
-  --border: #e3e3dc;
-  --input: #d9dad3;
-  --ring: #77796f;
-  --course-morning: #d47416;
-  --course-afternoon: #3474c5;
+  --secondary: var(--apple-gray6);
+  --secondary-foreground: var(--foreground);
+  --muted: var(--apple-gray6);
+  --muted-foreground: #636366;
+  --subtle-foreground: #6c6c70;
+  --accent: var(--apple-gray5);
+  --accent-foreground: var(--foreground);
+  --destructive: var(--red-text);
+  --border: var(--apple-gray5);
+  --input: var(--apple-gray4);
+  --ring: var(--apple-blue);
+  --selection: var(--foreground);
+  --selection-foreground: var(--background);
+  --today: var(--red-text);
+  --today-foreground: #ffffff;
+  --course-morning: var(--apple-orange);
+  --course-afternoon: var(--apple-blue);
+  --course-morning-text: var(--orange-text);
+  --course-afternoon-text: var(--blue-text);
+  --info-foreground: color-mix(in srgb, var(--blue-text), var(--foreground) 12%);
+  --info-background: color-mix(in srgb, var(--apple-blue) 7%, var(--background));
+  --info-border: color-mix(in srgb, var(--apple-blue) 22%, var(--background));
+  --error-foreground: color-mix(in srgb, var(--red-text), var(--foreground) 12%);
+  --error-background: color-mix(in srgb, var(--apple-red) 8%, var(--background));
+  --shadow-color: rgb(0 0 0 / 10%);
   --resize-dur: 300ms;
   --resize-ease: cubic-bezier(0.22, 1, 0.36, 1);
   --page-slide-ease: cubic-bezier(0.22, 1, 0.36, 1);
   color-scheme: light;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --apple-red: #ff4245;
+    --apple-orange: #ff9230;
+    --apple-green: #30d158;
+    --apple-blue: #0091ff;
+    --apple-purple: #db34f2;
+    --apple-gray2: #636366;
+    --apple-gray4: #3a3a3c;
+    --apple-gray5: #2c2c2e;
+    --apple-gray6: #1c1c1e;
+    --red-text: var(--apple-red);
+    --orange-text: var(--apple-orange);
+    --green-text: var(--apple-green);
+    --blue-text: #5cb8ff;
+    --purple-text: #ea8dff;
+    --background: #000000;
+    --foreground: #ffffff;
+    --card: var(--apple-gray6);
+    --popover: var(--apple-gray6);
+    --primary: var(--apple-blue);
+    --primary-foreground: #000000;
+    --muted-foreground: #aeaeb2;
+    --subtle-foreground: #98989d;
+    --today-foreground: #000000;
+    --info-background: color-mix(in srgb, var(--apple-blue) 14%, var(--background));
+    --info-border: color-mix(in srgb, var(--apple-blue) 30%, var(--background));
+    --error-background: color-mix(in srgb, var(--apple-red) 14%, var(--background));
+    --shadow-color: rgb(0 0 0 / 36%);
+    color-scheme: dark;
+  }
 }
 
 @layer base {
@@ -90,7 +166,7 @@
   }
 
   body {
-    min-width: 320px;
+    min-width: 0;
     min-height: 100svh;
     margin: 0;
     background: var(--background);
@@ -98,6 +174,8 @@
     font-family: var(--font-app);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    font-size: var(--text-body);
+    line-height: 1.5;
   }
 
   button,
@@ -115,7 +193,6 @@
   button {
     cursor: pointer;
   }
-
   button:disabled {
     cursor: default;
   }
@@ -127,6 +204,7 @@
 }
 
 .teacher-shell {
+  container-type: inline-size;
   position: relative;
   width: 100%;
   max-width: 430px;
@@ -144,7 +222,7 @@
 
 .auth-brand {
   text-align: center;
-  font-size: 13px;
+  font-size: var(--text-caption);
   font-weight: 600;
   letter-spacing: 0.04em;
 }
@@ -156,7 +234,7 @@
 
 .auth-content h1 {
   margin: 0;
-  font-size: 27px;
+  font-size: var(--text-page-title);
   font-weight: 700;
   letter-spacing: -0.035em;
   line-height: 1.25;
@@ -165,7 +243,7 @@
 .auth-description {
   margin: 6px 0 30px;
   color: var(--muted-foreground);
-  font-size: 14px;
+  font-size: var(--text-subhead);
   line-height: 1.6;
 }
 
@@ -177,18 +255,18 @@
 .field-label {
   display: block;
   margin: 0 0 8px;
-  font-size: 13px;
+  font-size: var(--text-callout);
   font-weight: 600;
 }
 
 .teacher-input {
   width: 100%;
-  height: 48px;
+  height: auto;
   margin: 0 0 21px;
-  padding: 0 13px;
+  padding: 0.75rem;
   border: 1px solid var(--input);
   border-radius: 6px;
-  background: #fff;
+  background: var(--card);
   color: var(--foreground);
   font-family:
     "PingFang SC",
@@ -197,25 +275,26 @@
     -apple-system,
     BlinkMacSystemFont,
     sans-serif;
-  font-size: 16px;
-  line-height: 48px;
+  font-size: var(--text-body);
+  line-height: 1.5;
   outline: none;
   transition:
     border-color 160ms ease,
     box-shadow 160ms ease;
+  min-height: 3rem;
 }
 
 .teacher-input::placeholder {
-  color: #9a9c94;
+  color: var(--subtle-foreground);
 }
 
 .teacher-input:focus {
-  border-color: #7b7d73;
-  box-shadow: 0 0 0 3px rgb(23 24 20 / 7%);
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring), transparent 84%);
 }
 
 .teacher-input[aria-invalid="true"] {
-  border-color: color-mix(in srgb, var(--destructive), white 44%);
+  border-color: var(--destructive);
 }
 
 .password-field {
@@ -223,7 +302,7 @@
 }
 
 .password-field .teacher-input {
-  padding-right: 46px;
+  padding-right: calc(var(--control-size) + 0.5rem);
 }
 
 .password-toggle {
@@ -231,12 +310,13 @@
   top: 0;
   right: 0;
   display: grid;
-  width: 46px;
-  height: 48px;
+  width: var(--control-size);
+  min-height: 3rem;
+  height: auto;
   place-items: center;
   border: 0;
   background: transparent;
-  color: #787a72;
+  color: var(--muted-foreground);
 }
 
 .password-toggle svg {
@@ -248,16 +328,17 @@
 .primary-action {
   display: inline-flex;
   width: 100%;
-  height: 48px;
+  min-height: 3rem;
+  height: auto;
   align-items: center;
   justify-content: center;
   gap: 8px;
   margin-top: 4px;
   border: 0;
   border-radius: 5px;
-  background: #1d1e1b;
-  color: #fff;
-  font-size: 15px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-size: var(--text-body);
   font-weight: 600;
   transition:
     background 160ms ease,
@@ -266,7 +347,7 @@
 }
 
 .primary-action:hover {
-  background: #2a2b27;
+  background: color-mix(in srgb, var(--primary), var(--foreground) 12%);
 }
 
 .primary-action:active {
@@ -286,8 +367,8 @@
   margin: -6px 0 16px;
   padding: 10px 12px;
   border-radius: 5px;
-  background: #f9eaea;
-  color: #b64343;
+  background: var(--error-background);
+  color: var(--error-foreground);
   font-family:
     "PingFang SC",
     "Microsoft YaHei",
@@ -295,7 +376,7 @@
     -apple-system,
     BlinkMacSystemFont,
     sans-serif;
-  font-size: 13px;
+  font-size: var(--text-caption);
   line-height: 1.5;
 }
 
@@ -303,15 +384,15 @@
   margin: 14px 0 0;
   color: var(--muted-foreground);
   text-align: center;
-  font-size: 12px;
+  font-size: var(--text-caption);
 }
 
 .auth-footer {
   margin-top: auto;
   padding-top: 44px;
-  color: #92948c;
+  color: var(--subtle-foreground);
   text-align: center;
-  font-size: 11px;
+  font-size: var(--text-caption);
 }
 
 .spin {
@@ -333,11 +414,12 @@
   position: relative;
   z-index: 20;
   display: grid;
-  height: calc(58px + env(safe-area-inset-top));
+  height: auto;
   align-items: end;
-  padding: env(safe-area-inset-top) 16px 0;
+  padding: env(safe-area-inset-top) var(--page-inset) 0;
   border-bottom: 1px solid var(--border);
-  background: rgb(255 255 255 / 96%);
+  background: color-mix(in srgb, var(--background), transparent 4%);
+  min-height: calc(3.75rem + env(safe-area-inset-top));
 }
 
 .plain-header {
@@ -348,14 +430,14 @@
 .plain-header strong {
   align-self: center;
   text-align: center;
-  font-size: 15px;
+  font-size: var(--text-body);
   font-weight: 600;
 }
 
 .header-icon-button {
   display: grid;
-  width: 40px;
-  height: 40px;
+  width: var(--control-size);
+  height: var(--control-size);
   place-items: center;
   margin-left: -9px;
   border: 0;
@@ -380,7 +462,7 @@
 .password-intro {
   margin: 0 0 38px;
   color: var(--muted-foreground);
-  font-size: 13px;
+  font-size: var(--text-caption);
 }
 
 .password-control {
@@ -402,7 +484,7 @@
     -apple-system,
     BlinkMacSystemFont,
     sans-serif;
-  font-size: 11px;
+  font-size: var(--text-caption);
 }
 
 .password-submit {
@@ -414,17 +496,36 @@
   margin: 20px auto 0;
   border: 0;
   background: transparent;
-  color: #5f6159;
-  font-size: 13px;
+  color: var(--blue-text);
+  font-size: var(--text-callout);
+  min-height: var(--control-size);
+  padding: 0.5rem 0.75rem;
 }
 
 .schedule-header {
+  background: var(--background);
   position: sticky;
   top: 0;
-  grid-template-columns: 38px minmax(0, 1fr) 38px;
+  grid-template-columns: var(--control-size) minmax(0, 1fr) var(--control-size);
   align-items: center;
-  padding-right: 15px;
-  padding-left: 15px;
+  padding-right: var(--page-inset);
+  padding-left: var(--page-inset);
+}
+
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .schedule-header {
+    background: color-mix(in srgb, var(--background) 72%, transparent);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    backdrop-filter: blur(20px) saturate(180%);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .schedule-header {
+    background: var(--background);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
 }
 
 .header-balance {
@@ -444,16 +545,17 @@
 
 .context-trigger {
   display: inline-flex;
-  height: 40px;
+  height: auto;
   align-items: center;
   gap: 5px;
   padding: 0 8px;
   border: 0;
   border-radius: 6px;
   background: transparent;
-  font-size: 15px;
+  font-size: var(--text-body);
   font-weight: 600;
   outline: none;
+  min-height: var(--control-size);
 }
 
 .context-trigger:hover,
@@ -473,7 +575,7 @@
 .view-tabs button:focus-visible,
 .password-toggle:focus-visible,
 .text-action:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--foreground), transparent 58%);
+  outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
 
@@ -489,7 +591,7 @@
 }
 
 .context-label {
-  font-size: 15px;
+  font-size: var(--text-body);
   font-weight: 600;
 }
 
@@ -509,29 +611,29 @@
 }
 
 .avatar-trigger {
-  width: 34px;
-  height: 34px;
+  width: var(--control-size);
+  height: var(--control-size);
   justify-self: end;
-  border: 1px solid #d9dad4;
-  background: #f1f1ed;
-  color: #43453f;
-  font-size: 13px;
+  border: 1px solid var(--border);
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+  font-size: var(--text-caption);
 }
 
 .avatar-trigger:hover,
 .avatar-trigger[data-popup-open] {
-  border-color: #c5c6be;
-  background: #eaeae5;
+  border-color: var(--input);
+  background: var(--accent);
 }
 
 .teacher-menu {
   min-width: 196px;
   overflow: hidden;
   padding: 5px;
-  border: 1px solid #deded7;
+  border: 1px solid var(--border);
   border-radius: 7px;
   background: var(--popover);
-  box-shadow: 0 10px 28px rgb(27 28 24 / 10%);
+  box-shadow: 0 10px 28px var(--shadow-color);
   opacity: 0;
   transform: translateY(-3px) scale(0.985);
   transform-origin: top center;
@@ -555,17 +657,17 @@
 .teacher-menu-label {
   padding: 7px 10px;
   color: var(--muted-foreground);
-  font-size: 11px;
+  font-size: var(--text-caption);
 }
 
 .teacher-menu-item {
   display: flex;
-  min-height: 42px;
+  min-height: var(--control-size);
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
   border-radius: 5px;
-  font-size: 13px;
+  font-size: var(--text-callout);
   outline: none;
   user-select: none;
 }
@@ -577,7 +679,7 @@
 .teacher-menu-item svg {
   width: 16px;
   height: 16px;
-  color: #696b63;
+  color: var(--muted-foreground);
   stroke-width: 1.6;
 }
 
@@ -597,7 +699,7 @@
 
 .context-check {
   margin-left: auto;
-  color: var(--foreground) !important;
+  color: var(--blue-text) !important;
 }
 
 .account-menu {
@@ -624,31 +726,31 @@
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--foreground);
-  font-size: 13px;
+  font-size: var(--text-caption);
   white-space: nowrap;
 }
 
 .account-summary small {
   margin-top: 2px;
   color: var(--muted-foreground);
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 
 .account-avatar {
   width: 29px;
   height: 29px;
   flex: none;
-  background: #eeeeea;
-  color: #50524b;
-  font-size: 11px;
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+  font-size: var(--text-caption);
 }
 
 .danger-menu-item {
-  color: #bb4040;
+  color: var(--destructive);
 }
 
 .danger-menu-item svg {
-  color: #bb4040;
+  color: var(--destructive);
 }
 
 .t-resize {
@@ -664,40 +766,47 @@
 }
 
 .date-controls {
-  padding: 9px 18px 12px;
+  padding: 0.75rem var(--page-inset) 1rem;
   border-bottom: 1px solid var(--border);
 }
 
 .date-toolbar {
   display: grid;
   min-height: 40px;
-  grid-template-columns: minmax(0, 1fr) 62px;
-  align-items: center;
-  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 0 0.5rem;
 }
 
 .date-toolbar-actions {
   display: flex;
   min-width: 0;
-  align-items: center;
+  align-items: baseline;
+  justify-content: flex-end;
   justify-self: end;
-  gap: 18px;
+  gap: 0.375rem;
 }
 
 .return-today-button {
-  height: 36px;
+  height: auto;
   padding: 0 3px;
   border: 0;
   background: transparent;
-  color: #0f7653;
-  font-family: var(--font-data);
-  font-size: 13px;
+  color: var(--blue-text);
+  font-family: inherit;
+  font-size: var(--text-subhead);
   font-weight: 700;
   white-space: nowrap;
+  min-height: var(--control-size);
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.5rem;
 }
 
 .return-today-button:hover {
-  color: #095f42;
+  color: color-mix(in srgb, var(--blue-text), var(--foreground) 16%);
 }
 
 .date-range-control {
@@ -718,19 +827,51 @@
 }
 
 .date-range-control.with-week-navigation .date-picker-label strong {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
   padding-top: 0;
+  text-align: center;
+  line-height: 1.5rem;
+}
+
+.week-date-range {
+  display: flex;
+  max-width: 100%;
+  flex-wrap: wrap;
+  justify-content: center;
+  font-size: var(--text-subhead);
+}
+
+.week-date-range > span {
+  white-space: nowrap;
+}
+
+.week-number-label {
+  color: var(--muted-foreground);
+  font-family: var(--font-data);
+  font-size: var(--text-caption);
+  font-weight: 400;
+  line-height: 1.125rem;
+  white-space: nowrap;
+}
+
+.date-controls.week-mode .date-toolbar,
+.date-controls.week-mode .date-toolbar-actions {
+  align-items: center;
 }
 
 .week-nav-button {
   display: grid;
-  width: 40px;
-  height: 40px;
+  width: var(--control-size);
+  height: var(--control-size);
   flex: none;
   place-items: center;
   border: 0;
   border-radius: 50%;
   background: transparent;
-  color: #666860;
+  color: var(--muted-foreground);
   outline: none;
 }
 
@@ -752,7 +893,7 @@
   position: relative;
   display: inline-flex;
   min-width: 0;
-  min-height: 40px;
+  min-height: var(--control-size);
   align-items: center;
   overflow: hidden;
 }
@@ -760,7 +901,7 @@
 .date-picker-label strong {
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 15px;
+  font-size: var(--text-callout);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.015em;
@@ -778,41 +919,45 @@
 
 .view-tabs {
   display: flex;
-  height: 31px;
+  height: var(--control-size);
   flex: none;
-  align-items: flex-start;
-  gap: 18px;
+  align-items: baseline;
+  gap: 0;
 }
 
 .view-tabs button {
   position: relative;
-  width: 22px;
-  height: 31px;
-  padding: 0 0 9px;
+  width: var(--control-size);
+  height: var(--control-size);
+  padding: 0;
   border: 0;
   background: transparent;
-  color: #85877e;
-  font-size: 14px;
+  color: var(--muted-foreground);
+  font-size: var(--text-subhead);
   font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.5rem;
 }
 
 .view-tabs button::after {
   position: absolute;
-  right: 2px;
+  right: 0.75rem;
   bottom: 0;
-  left: 2px;
+  left: 0.75rem;
   height: 2px;
   background: transparent;
   content: "";
 }
 
 .view-tabs button.active {
-  color: var(--foreground);
+  color: var(--blue-text);
   font-weight: 700;
 }
 
 .view-tabs button.active::after {
-  background: var(--foreground);
+  background: var(--apple-blue);
 }
 
 .calendar-viewport {
@@ -822,25 +967,26 @@
 }
 
 .calendar-viewport[data-calendar-state="week"] {
-  height: 122px;
+  height: calc(
+    var(--calendar-top-space) + var(--calendar-toolbar-size) + var(--calendar-weekday-size) + 2 *
+      var(--calendar-row-size)
+  );
 }
 
 .calendar-viewport[data-calendar-state="month"] {
-  height: calc(86px + var(--month-row-count) * 44px);
+  height: calc(
+    var(--calendar-top-space) + var(--calendar-toolbar-size) + var(--calendar-weekday-size) +
+      var(--month-row-count) * var(--calendar-row-size)
+  );
 }
 
 .calendar-view {
-  padding-top: 10px;
+  padding-top: var(--calendar-top-space);
 }
 
 .month-toolbar-clip {
-  height: 0;
+  height: var(--calendar-toolbar-size);
   overflow: hidden;
-  transition: height var(--resize-dur) var(--resize-ease);
-}
-
-.calendar-viewport[data-calendar-state="month"] .month-toolbar-clip {
-  height: 52px;
 }
 
 .calendar-swipe-window {
@@ -856,12 +1002,12 @@
 }
 
 .month-swipe-window {
-  height: 88px;
+  height: calc(2 * var(--calendar-row-size));
   transition: height var(--resize-dur) var(--resize-ease);
 }
 
 .calendar-viewport[data-calendar-state="month"] .month-swipe-window {
-  height: calc(var(--month-row-count) * 44px);
+  height: calc(var(--month-row-count) * var(--calendar-row-size));
 }
 
 .calendar-swipe-track {
@@ -879,8 +1025,8 @@
 
 .month-days {
   align-content: start;
-  grid-auto-rows: 44px;
-  transform: translateY(calc(var(--compact-row) * -44px));
+  grid-auto-rows: var(--calendar-row-size);
+  transform: translateY(calc(var(--compact-row) * -1 * var(--calendar-row-size)));
 }
 
 .calendar-viewport[data-resizing="true"] .month-days {
@@ -888,13 +1034,13 @@
 }
 
 .calendar-viewport[data-calendar-state="month"] .month-days {
-  transform: translateY(calc(var(--month-row) * -44px));
+  transform: translateY(calc(var(--month-row) * -1 * var(--calendar-row-size)));
 }
 
 .month-calendar-toolbar {
   display: grid;
-  height: 52px;
-  grid-template-columns: 40px 1fr 40px;
+  height: var(--calendar-toolbar-size);
+  grid-template-columns: var(--control-size) 1fr var(--control-size);
   align-items: center;
 }
 
@@ -906,24 +1052,24 @@
 
 .month-calendar-heading > strong {
   text-align: center;
-  font-size: 15px;
+  font-size: var(--text-callout);
   font-weight: 700;
 }
 
 .month-title-flip {
   display: inline-flex;
   min-width: 112px;
-  height: 22px;
+  height: 1.5em;
   align-items: center;
   justify-content: center;
-  line-height: 22px;
+  line-height: 1.5;
   font-variant-numeric: tabular-nums;
 }
 
 .month-title-part {
   position: relative;
   display: grid;
-  height: 22px;
+  height: 1.5em;
   perspective: 180px;
   overflow: clip;
 }
@@ -997,7 +1143,7 @@
     -apple-system,
     BlinkMacSystemFont,
     sans-serif;
-  font-size: 11px;
+  font-size: var(--text-caption);
   font-weight: 400;
 }
 
@@ -1014,23 +1160,23 @@
   background: currentColor;
 }
 
-.course-marker-legend .morning {
-  color: var(--course-morning);
+.course-marker-legend .morning i {
+  background: var(--course-morning);
 }
 
-.course-marker-legend .afternoon {
-  color: var(--course-afternoon);
+.course-marker-legend .afternoon i {
+  background: var(--course-afternoon);
 }
 
 .month-calendar-toolbar button {
   display: grid;
-  width: 40px;
-  height: 40px;
+  width: var(--control-size);
+  height: var(--control-size);
   place-items: center;
   border: 0;
   border-radius: 50%;
   background: transparent;
-  color: #666860;
+  color: var(--muted-foreground);
   outline: none;
 }
 
@@ -1056,22 +1202,34 @@
 }
 
 .month-weekdays {
-  height: 24px;
+  height: var(--calendar-weekday-size);
   align-items: center;
-  color: var(--muted-foreground);
+  color: var(--foreground);
   text-align: center;
-  font-size: 12px;
+  font-size: var(--text-caption);
   font-weight: 600;
 }
 
+.month-weekdays > span:first-child,
+.month-weekdays > span:last-child {
+  color: var(--subtle-foreground);
+}
+
+.month-day.weekend {
+  color: var(--subtle-foreground);
+}
+
 .month-day {
+  min-width: 0;
+  /* Reserve space below every date so course markers clear the selection circle. */
+  padding: 0 0 0.5rem;
   position: relative;
   display: grid;
-  height: 44px;
+  height: var(--calendar-row-size);
   place-items: center;
   border: 0;
   background: transparent;
-  color: #55574f;
+  color: var(--foreground);
   outline: none;
   touch-action: pan-y;
 }
@@ -1079,8 +1237,9 @@
 .month-day strong {
   position: relative;
   display: grid;
-  width: 30px;
-  height: 30px;
+  width: min(2.125rem, 100%);
+  height: auto;
+  aspect-ratio: 1;
   place-items: center;
   border-radius: 50%;
   font-family:
@@ -1090,8 +1249,11 @@
     -apple-system,
     BlinkMacSystemFont,
     sans-serif;
-  font-size: 14px;
+  font-size: var(--text-body);
   font-weight: 600;
+  /* Center the numeral ink, compensating for the CJK font baseline. */
+  line-height: 1;
+  padding-top: 0.08em;
 }
 
 .month-day:hover:not(:disabled):not(.selected) strong {
@@ -1099,14 +1261,14 @@
 }
 
 .month-day.selected strong {
-  background: var(--foreground);
-  color: #fff;
+  background: var(--selection);
+  color: var(--selection-foreground);
   font-weight: 700;
 }
 
 .month-day.selected:hover strong {
-  background: var(--foreground);
-  color: #fff;
+  background: var(--selection);
+  color: var(--selection-foreground);
 }
 
 .course-markers {
@@ -1136,6 +1298,11 @@
   background: currentColor;
 }
 
+.course-marker-group i.multiple {
+  width: 10px;
+  border-radius: 999px;
+}
+
 .course-marker-group.morning {
   color: var(--course-morning);
 }
@@ -1145,13 +1312,18 @@
 }
 
 .month-day.today:not(.selected) strong {
-  box-shadow: inset 0 0 0 1px #b8bab2;
-  color: var(--foreground);
+  box-shadow: inset 0 0 0 1px var(--apple-red);
+  color: var(--today);
   font-weight: 600;
 }
 
+.month-day.today.selected strong {
+  background: var(--today);
+  color: var(--today-foreground);
+}
+
 .month-day.outside-month {
-  color: #a0a29a;
+  color: var(--subtle-foreground);
 }
 
 .month-day:disabled {
@@ -1162,7 +1334,7 @@
 .month-day:focus-visible strong {
   box-shadow:
     0 0 0 2px var(--background),
-    0 0 0 3px #8f9188;
+    0 0 0 3px var(--ring);
 }
 
 .calendar-handle {
@@ -1170,10 +1342,10 @@
   display: flex;
   width: 44px;
   min-width: 44px;
-  height: 36px;
+  height: var(--control-size);
   align-items: center;
   justify-content: center;
-  margin: -2px auto -14px;
+  margin: 0 auto -0.75rem;
   padding: 0;
   border: 0;
   border-radius: 0;
@@ -1202,7 +1374,7 @@
 }
 
 .calendar-handle:active::before {
-  background: #e8e8e2;
+  background: var(--accent);
 }
 
 .calendar-handle svg {
@@ -1229,7 +1401,7 @@
   padding: 1px 0 7px;
   border: 0;
   background: transparent;
-  color: #74766d;
+  color: var(--muted-foreground);
   outline: none;
 }
 
@@ -1238,7 +1410,7 @@
 }
 
 .date-button > span {
-  font-size: 12px;
+  font-size: var(--text-caption);
   font-weight: 600;
 }
 
@@ -1255,8 +1427,11 @@
     -apple-system,
     BlinkMacSystemFont,
     sans-serif;
-  font-size: 14px;
+  font-size: var(--text-body);
   font-weight: 600;
+  /* Center the numeral ink, compensating for the CJK font baseline. */
+  line-height: 1;
+  padding-top: 0.08em;
 }
 
 .date-button.active {
@@ -1264,15 +1439,15 @@
 }
 
 .date-button.active > strong {
-  background: var(--foreground);
-  color: #fff;
+  background: var(--selection);
+  color: var(--selection-foreground);
   font-weight: 700;
 }
 
 .date-button:focus-visible > strong {
   box-shadow:
     0 0 0 2px var(--background),
-    0 0 0 3px #8f9188;
+    0 0 0 3px var(--ring);
 }
 
 .date-button:disabled {
@@ -1282,7 +1457,7 @@
 
 .schedule-content {
   position: relative;
-  padding: 17px 18px max(48px, env(safe-area-inset-bottom));
+  padding: 1.5rem var(--page-inset) max(3rem, env(safe-area-inset-bottom));
 }
 
 .schedule-content.week-mode {
@@ -1295,7 +1470,7 @@
   right: 19px;
   width: 14px;
   height: 14px;
-  color: #8c8e86;
+  color: var(--subtle-foreground);
   stroke-width: 1.7;
 }
 
@@ -1306,12 +1481,12 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 10px;
-  margin-bottom: 4px;
+  margin-bottom: 0.75rem;
 }
 
 .schedule-summary > strong,
 .week-summary > strong {
-  font-size: 16px;
+  font-size: var(--text-body);
   font-weight: 600;
 }
 
@@ -1324,7 +1499,7 @@
     -apple-system,
     BlinkMacSystemFont,
     sans-serif;
-  font-size: 16px;
+  font-size: var(--text-body);
   font-weight: 700;
 }
 
@@ -1333,28 +1508,28 @@
 }
 
 .lesson-period-group + .lesson-period-group {
-  margin-top: 18px;
+  margin-top: 1.75rem;
 }
 
 .lesson-period-group.morning {
   --period-color: var(--course-morning);
-  --period-heading-color: #91500e;
+  --period-heading-color: var(--course-morning-text);
 }
 
 .lesson-period-group.afternoon {
   --period-color: var(--course-afternoon);
-  --period-heading-color: #245c9c;
+  --period-heading-color: var(--course-afternoon-text);
 }
 
 .lesson-period-heading {
   display: flex;
   margin: 0;
-  padding: 4px 8px 2px;
+  padding: 0.25rem 0.5rem 0.5rem;
   align-items: center;
   justify-content: space-between;
   color: var(--period-heading-color);
   font-family: var(--font-data);
-  font-size: 14px;
+  font-size: var(--text-subhead);
   font-weight: 600;
   line-height: 1.4;
 }
@@ -1392,12 +1567,12 @@
   --lesson-primary-row: 1;
   --lesson-secondary-row: 2;
   min-height: 0;
-  grid-template-columns: 100px minmax(0, 1fr);
-  grid-template-rows: 24px 20px;
+  grid-template-columns: 7.25rem minmax(0, 1fr);
+  grid-template-rows: auto auto;
   align-items: baseline;
-  column-gap: 16px;
-  row-gap: 3px;
-  padding: 10px 8px;
+  column-gap: 1rem;
+  row-gap: 0.375rem;
+  padding: 1rem 0.5rem;
 }
 
 .lesson-row:not(.compact) .lesson-time,
@@ -1410,7 +1585,7 @@
   grid-row: var(--lesson-primary-row);
   align-self: baseline;
   padding-top: 0;
-  line-height: 24px;
+  line-height: 1.5;
 }
 
 .lesson-row:not(.compact) time,
@@ -1427,18 +1602,19 @@
 .lesson-row:not(.compact) .lesson-main > span {
   grid-row: var(--lesson-secondary-row);
   align-self: baseline;
-  line-height: 20px;
+  line-height: 1.5;
 }
 
 .lesson-row:not(.compact) .status-tag {
-  grid-column: 3;
-  grid-row: var(--lesson-primary-row) / span 2;
+  grid-column: 2;
+  grid-row: auto;
+  justify-self: start;
 }
 
 .lesson-row.attention:not(.compact) {
   --lesson-primary-row: 2;
   --lesson-secondary-row: 3;
-  grid-template-rows: auto 24px 20px;
+  grid-template-rows: auto auto auto;
 }
 
 .lesson-row.attention:not(.compact) .lesson-attention {
@@ -1447,8 +1623,8 @@
 }
 
 .lesson-row.attention {
-  border-bottom-color: #d8e5dd;
-  background: #f0f5f2;
+  border-bottom-color: var(--info-border);
+  background: var(--info-background);
 }
 
 .lesson-row time {
@@ -1461,10 +1637,10 @@
     -apple-system,
     BlinkMacSystemFont,
     sans-serif;
-  font-size: 15px;
+  font-size: var(--text-callout);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
+  letter-spacing: normal;
   white-space: nowrap;
 }
 
@@ -1491,12 +1667,13 @@
   min-width: 0;
   grid-column: 1 / -1;
   align-items: baseline;
-  color: #0f7653;
+  color: var(--info-foreground);
   font-family: var(--font-data);
-  font-size: 13px;
+  font-size: var(--text-caption);
   font-weight: 700;
-  line-height: 1.25;
-  white-space: nowrap;
+  line-height: 1.5;
+  white-space: normal;
+  flex-wrap: wrap;
 }
 
 .lesson-attention b {
@@ -1506,23 +1683,24 @@
 
 .lesson-attention span {
   overflow: hidden;
-  color: #376e59;
+  color: var(--info-foreground);
   text-overflow: ellipsis;
 }
 
 .lesson-attention span::before {
   margin: 0 6px;
-  color: #83a091;
+  color: var(--info-foreground);
   content: "·";
 }
 
 .lesson-main strong {
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 17px;
+  font-size: var(--text-body);
   font-weight: 700;
   line-height: 1.35;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .lesson-main > span {
@@ -1530,9 +1708,10 @@
   color: var(--muted-foreground);
   text-overflow: ellipsis;
   font-family: var(--font-data);
-  font-size: 14px;
+  font-size: var(--text-subhead);
   line-height: 1.4;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .lesson-row.inactive {
@@ -1545,14 +1724,14 @@
 }
 
 .lesson-row.completed:not(.inactive) {
-  color: #73766d;
+  color: var(--muted-foreground);
 }
 
 .lesson-ended {
   width: fit-content;
-  color: #666b60;
+  color: var(--muted-foreground);
   font-family: var(--font-data);
-  font-size: 11px;
+  font-size: var(--text-caption);
   font-weight: 500;
   line-height: 1.2;
 }
@@ -1573,26 +1752,26 @@
     -apple-system,
     BlinkMacSystemFont,
     sans-serif;
-  font-size: 11px;
+  font-size: var(--text-caption);
   font-weight: 500;
   line-height: 1;
   white-space: nowrap;
 }
 
 .status-tag.temporary {
-  color: #dc7d31;
+  color: var(--orange-text);
 }
 
 .status-tag.substitute {
-  color: #2a9569;
+  color: var(--green-text);
 }
 
 .status-tag.adjusted {
-  color: #7662ae;
+  color: var(--purple-text);
 }
 
 .status-tag.cancelled {
-  color: #d45151;
+  color: var(--destructive);
 }
 
 .week-summary {
@@ -1603,7 +1782,7 @@
 
 .week-summary > span {
   color: var(--muted-foreground);
-  font-size: 12px;
+  font-size: var(--text-caption);
 }
 
 .week-groups {
@@ -1623,14 +1802,14 @@
 .week-group-title {
   display: flex;
   width: calc(100% + 16px);
-  min-height: 42px;
+  min-height: var(--control-size);
   align-items: center;
   justify-content: space-between;
   margin: 0 -8px 4px;
   padding: 9px 8px;
   border: 0;
   border-radius: 4px;
-  background: #eeefe9;
+  background: var(--secondary);
   color: inherit;
   outline: none;
   text-align: left;
@@ -1640,7 +1819,7 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: 16px;
+  font-size: var(--text-body);
   font-weight: 700;
 }
 
@@ -1653,15 +1832,15 @@
     -apple-system,
     BlinkMacSystemFont,
     sans-serif;
-  font-size: 12px;
+  font-size: var(--text-caption);
 }
 
 .week-group-title .week-today-label {
   padding: 3px 7px;
   border-radius: 3px;
-  background: #345942;
-  color: #fff;
-  font-size: 12px;
+  background: var(--today);
+  color: var(--today-foreground);
+  font-size: var(--text-caption);
   font-weight: 600;
   line-height: 1.4;
 }
@@ -1684,12 +1863,12 @@
 
 .lesson-row.compact {
   min-height: 59px;
-  grid-template-columns: 64px minmax(80px, 0.65fr) minmax(0, 1.35fr);
-  grid-template-rows: 20px 16px;
+  grid-template-columns: 4rem minmax(0, 0.65fr) minmax(0, 1.35fr);
+  grid-template-rows: auto auto;
   align-items: baseline;
   column-gap: 12px;
   row-gap: 3px;
-  padding: 10px 8px;
+  padding: 0.875rem 0.5rem;
 }
 
 .lesson-row.compact .lesson-time,
@@ -1702,8 +1881,8 @@
   grid-row: 1;
   align-self: baseline;
   padding-top: 0;
-  font-size: 14px;
-  line-height: 20px;
+  font-size: var(--text-subhead);
+  line-height: 1.5;
   text-align: left;
 }
 
@@ -1711,23 +1890,23 @@
   grid-column: 1;
   grid-row: 2;
   align-self: baseline;
-  line-height: 16px;
+  line-height: 1.4;
 }
 
 .lesson-row.compact .lesson-main strong {
   grid-column: 2;
   grid-row: 1;
   align-self: baseline;
-  font-size: 15px;
-  line-height: 20px;
+  font-size: var(--text-callout);
+  line-height: 1.5;
 }
 
 .lesson-row.compact .lesson-main > span {
   grid-column: 3;
   grid-row: 1;
   align-self: baseline;
-  font-size: 13px;
-  line-height: 20px;
+  font-size: var(--text-caption);
+  line-height: 1.5;
 }
 
 .lesson-row.compact .status-tag {
@@ -1742,7 +1921,7 @@
   padding: 11px 0;
   border-top: 1px solid var(--border);
   color: var(--muted-foreground);
-  font-size: 11px;
+  font-size: var(--text-caption);
 }
 
 .empty-state {
@@ -1751,7 +1930,7 @@
 
 .empty-state h2 {
   margin: 0;
-  font-size: 20px;
+  font-size: var(--text-title);
   font-weight: 700;
   letter-spacing: -0.025em;
 }
@@ -1759,7 +1938,7 @@
 .empty-state > p {
   margin: 7px 0 0;
   color: var(--muted-foreground);
-  font-size: 12px;
+  font-size: var(--text-subhead);
 }
 
 .next-upcoming {
@@ -1772,7 +1951,7 @@
 
 .next-upcoming > span {
   color: var(--muted-foreground);
-  font-size: 11px;
+  font-size: var(--text-caption);
 }
 
 .next-upcoming > strong {
@@ -1784,19 +1963,19 @@
     -apple-system,
     BlinkMacSystemFont,
     sans-serif;
-  font-size: 13px;
+  font-size: var(--text-caption);
   font-weight: 600;
 }
 
 .next-upcoming > b {
   margin-top: 5px;
-  font-size: 15px;
+  font-size: var(--text-callout);
 }
 
 .next-upcoming > small {
   margin-top: 4px;
   color: var(--muted-foreground);
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 
 .error-state {
@@ -1817,13 +1996,13 @@
 
 .error-state h2 {
   margin: 14px 0 0;
-  font-size: 17px;
+  font-size: var(--text-body);
 }
 
 .error-state p {
   margin: 6px 0 0;
   color: var(--muted-foreground);
-  font-size: 12px;
+  font-size: var(--text-caption);
 }
 
 .error-state button {
@@ -1832,7 +2011,8 @@
   border: 1px solid var(--border);
   border-radius: 5px;
   background: transparent;
-  font-size: 12px;
+  font-size: var(--text-callout);
+  min-height: var(--control-size);
 }
 
 .loading-shell {
@@ -1845,7 +2025,7 @@
 .loading-dates span,
 .loading-rows span {
   border-radius: 5px;
-  background: #ecece7;
+  background: var(--muted);
   animation: loading-pulse 1.35s ease-in-out infinite alternate;
 }
 
@@ -1890,7 +2070,7 @@
 .loading-rows span {
   height: 76px;
   border-radius: 0;
-  border-bottom: 1px solid #deded8;
+  border-bottom: 1px solid var(--border);
 }
 
 @keyframes loading-pulse {
@@ -1902,15 +2082,100 @@
   }
 }
 
+/* Container rem units also respond to enlarged text, unlike viewport breakpoints. */
+@container (max-width: 22rem) {
+  .schedule-header {
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 0.5rem;
+  }
+
+  .header-balance {
+    display: none;
+  }
+
+  .context-trigger,
+  .context-label {
+    justify-self: start;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .date-range-control {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .date-picker-label strong {
+    white-space: normal;
+    line-height: 1.5;
+  }
+
+  .date-toolbar-actions {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: stretch;
+  }
+
+  .return-today-button {
+    margin-right: auto;
+  }
+
+  .lesson-row:not(.compact) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .lesson-row:not(.compact) .lesson-time {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.5rem;
+  }
+
+  .lesson-row:not(.compact) .lesson-main {
+    display: flex;
+  }
+
+  .lesson-row:not(.compact) .status-tag {
+    grid-column: 1;
+  }
+
+  .lesson-row.compact {
+    grid-template-columns: 4rem minmax(0, 1fr);
+  }
+
+  .lesson-row.compact .lesson-main > span {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .lesson-row.compact .status-tag {
+    grid-column: 2;
+    grid-row: 3;
+  }
+}
+
 @media (min-width: 700px) {
   .teacher-shell {
-    border-right: 1px solid #e4e4df;
-    border-left: 1px solid #e4e4df;
-    box-shadow: 0 0 34px rgb(35 36 31 / 5%);
+    container-type: inline-size;
+    border-right: 1px solid var(--border);
+    border-left: 1px solid var(--border);
+    box-shadow: 0 0 34px var(--shadow-color);
+  }
+}
+
+@media (max-width: 699px) {
+  html {
+    scrollbar-gutter: auto;
   }
 }
 
 @media (max-width: 360px) {
+  :root {
+    --page-inset: 1rem;
+  }
+
   .auth-shell {
     padding-right: 22px;
     padding-left: 22px;
@@ -1923,16 +2188,8 @@
 
   .date-controls,
   .schedule-content {
-    padding-right: 15px;
-    padding-left: 15px;
-  }
-
-  .date-toolbar-actions {
-    gap: 10px;
-  }
-
-  .return-today-button {
-    font-size: 12px;
+    padding-right: var(--page-inset);
+    padding-left: var(--page-inset);
   }
 
   .lesson-row {
@@ -1940,18 +2197,18 @@
   }
 
   .lesson-row.compact {
-    grid-template-columns: 64px minmax(0, 1fr);
+    grid-template-columns: 4rem minmax(0, 1fr);
   }
 
   .lesson-row.compact .lesson-main > span {
     grid-column: 2;
     grid-row: 2;
-    font-size: 12px;
-    line-height: 16px;
+    font-size: var(--text-caption);
+    line-height: 1.4;
   }
 
   .lesson-row.compact:has(.status-tag) {
-    grid-template-rows: 20px 16px auto;
+    grid-template-rows: auto auto auto;
   }
 
   .lesson-row.compact .status-tag {

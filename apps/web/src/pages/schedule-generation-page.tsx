@@ -586,8 +586,6 @@ export function ScheduleGenerationPage() {
         candidate={preview}
         semesterId={semesterId ?? 0}
         runId={activeRun.data?.data.id ?? 0}
-        assignments={assignments.data?.data ?? []}
-        classSettings={classSettings.data?.data ?? []}
         onClose={() => setPreview(null)}
       />
       <AdoptDialog
@@ -877,21 +875,38 @@ function CandidatePreview({
   candidate,
   semesterId,
   runId,
-  assignments,
-  classSettings,
   onClose,
 }: {
   open: boolean
   candidate: ScheduleCandidate | null
   semesterId: number
   runId: number
-  assignments: TeachingAssignment[]
-  classSettings: ClassSetting[]
   onClose: () => void
 }) {
   const [view, setView] = useState<TimetableView>("class")
   const [resourceId, setResourceId] = useState("")
   const [full, setFull] = useState(false)
+  const assignmentsQuery = useQuery({
+    queryKey: ["teaching-assignments", semesterId, "confirmed"],
+    queryFn: () =>
+      apiAllPages<TeachingAssignment>(
+        `/api/v1/semesters/${semesterId}/teaching-assignments?status=confirmed`,
+      ),
+    enabled: open,
+  })
+  const classSettingsQuery = useQuery({
+    queryKey: ["class-settings", semesterId],
+    queryFn: () => apiAllPages<ClassSetting>(`/api/v1/semesters/${semesterId}/class-settings`),
+    enabled: open,
+  })
+  const assignments = useMemo(
+    () => assignmentsQuery.data?.data ?? [],
+    [assignmentsQuery.data?.data],
+  )
+  const classSettings = useMemo(
+    () => classSettingsQuery.data?.data ?? [],
+    [classSettingsQuery.data?.data],
+  )
   const rooms = useQuery({
     queryKey: ["rooms"],
     queryFn: () => apiAllPages<Room>("/api/v1/rooms"),
@@ -919,6 +934,8 @@ function CandidatePreview({
     return (rooms.data?.data ?? []).map((room) => ({ id: room.id, name: room.name }))
   }, [assignments, classSettings, rooms.data?.data, view])
   const resourceIndex = resources.findIndex((resource) => String(resource.id) === resourceId)
+  const resourceQuery =
+    view === "class" ? classSettingsQuery : view === "teacher" ? assignmentsQuery : rooms
   useEffect(() => {
     if (open) {
       setView("class")
@@ -1030,7 +1047,11 @@ function CandidatePreview({
         </div>
         <div className="grid min-h-0 flex-1 p-6">
           <div className="min-h-0 overflow-auto pr-1">
-            {!resourceId ? (
+            {resourceQuery.isLoading || (resources.length > 0 && !resourceId) ? (
+              <LoadingState />
+            ) : resourceQuery.isError ? (
+              <ErrorState retry={() => void resourceQuery.refetch()} />
+            ) : !resourceId ? (
               <EmptyList title="没有可查看的资源" description="请先配置班级、任课关系或教室。" />
             ) : detail.isLoading || template.isLoading ? (
               <LoadingState />

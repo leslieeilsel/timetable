@@ -174,7 +174,7 @@ class TeacherLeaveController
             'entry_id' => ['required', 'integer'],
             'date' => ['required', 'date_format:Y-m-d'],
         ]);
-        $entry = $this->entryForDate($semester, (int) $data['entry_id'], $data['date']);
+        $entry = $this->semesterEntry($semester, (int) $data['entry_id']);
         $this->assertAffected($semester, $leave, $entry, $data['date']);
         $settings = AppSetting::query()->findOrFail(1);
 
@@ -222,7 +222,7 @@ class TeacherLeaveController
                     ]);
                 }
                 $seen[$pair] = true;
-                $entry = $this->entryForDate($lockedSemester, (int) $item['entry_id'], $item['date']);
+                $entry = $this->semesterEntry($lockedSemester, (int) $item['entry_id']);
                 $this->assertAffected($lockedSemester, $lockedLeave, $entry, $item['date']);
                 $entry->loadMissing('teachingAssignment');
                 if (! $entry->teachingAssignment->allows_substitution) {
@@ -333,13 +333,11 @@ class TeacherLeaveController
         return [$startsAt, $endsAt];
     }
 
-    private function entryForDate(Semester $semester, int $entryId, string $date): TimetableEntry
+    private function semesterEntry(Semester $semester, int $entryId): TimetableEntry
     {
-        $version = $this->daily->versionForDate($semester, $date);
-
         return TimetableEntry::query()->with([
             'teacher', 'teachers', 'course', 'item', 'schoolClasses', 'teachingAssignment',
-        ])->where('timetable_version_id', $version->id)->findOrFail($entryId);
+        ])->where('semester_id', $semester->id)->findOrFail($entryId);
     }
 
     private function assertAffected(
@@ -348,14 +346,11 @@ class TeacherLeaveController
         TimetableEntry $entry,
         string $date,
     ): void {
-        $start = Carbon::parse($date.' '.$entry->item->start_time);
-        $end = Carbon::parse($date.' '.$entry->item->end_time);
-        $actual = collect($this->daily->forDate($semester, $date, $leave->teacher_id)['rows'])
-            ->first(fn (array $row): bool => $row['original_entry_id'] === $entry->id
-                && ! $row['is_cancelled']
-                && in_array($leave->teacher_id, $row['teacher_ids'], true));
+        $actual = $this->daily->actualEntryRow($semester, $entry->id, $date, $leave->teacher_id);
+        $start = Carbon::parse($date.' '.$actual['start_time']);
+        $end = Carbon::parse($date.' '.$actual['end_time']);
         if ($start->greaterThanOrEqualTo($leave->ends_at) || $end->lessThanOrEqualTo($leave->starts_at)
-            || ! is_array($actual)) {
+            || ! in_array($leave->teacher_id, $actual['teacher_ids'], true)) {
             throw new ApiProblemException('SUBSTITUTION_ENTRY_NOT_AFFECTED', '所选课程不在该教师请假影响范围内', 422);
         }
     }

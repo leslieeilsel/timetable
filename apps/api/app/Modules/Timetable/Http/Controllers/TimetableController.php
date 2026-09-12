@@ -612,17 +612,19 @@ class TimetableController
         $synchronizationIssues = $version === null
             ? []
             : $this->synchronization->versionAlignmentIssues($semester, $version);
+        $hardConflicts = $version === null ? [] : $this->diagnostics->versionConflicts($semester, $version);
         $incomplete = $semester->teachingAssignments()->where('status', AssignmentStatus::Confirmed->value)
             ->withCount(['entries' => fn ($query) => $query->where('timetable_version_id', $versionId)])->get()
             ->filter(fn (TeachingAssignment $assignment) => $assignment->entries_count !== $assignment->weekly_items)->values();
 
         return response()->json(['data' => [
-            'valid' => $draftCount === 0 && $incomplete->isEmpty() && $synchronizationIssues === [],
+            'valid' => $draftCount === 0 && $incomplete->isEmpty() && $synchronizationIssues === [] && $hardConflicts === [],
             'draft_assignment_count' => $draftCount,
             'incomplete_assignments' => $incomplete->map(fn (TeachingAssignment $assignment) => [
                 'id' => $assignment->id, 'required' => $assignment->weekly_items, 'scheduled' => $assignment->entries_count,
             ]),
             'synchronization_issues' => $synchronizationIssues,
+            'hard_conflicts' => $hardConflicts,
         ], 'meta' => $this->meta($semester, $settings, $version)])
             ->header('ETag', $this->etags->semester($semester, $settings));
     }

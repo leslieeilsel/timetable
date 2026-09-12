@@ -33,6 +33,6 @@ php apps/api/artisan timetable:create-admin
 vp run dev
 ```
 
-管理端地址为 `http://localhost:5173`，教师端地址为 `http://localhost:5174`。
+管理端地址为 `http://localhost:5173`，教师端地址为 `http://localhost:5175`。
 开发端口被占用时启动会直接报错，请使用已运行的实例，或停止占用端口的旧实例后重新启动。
-如需自定义端口，请同时更新 `apps/api/.env` 中的 `SANCTUM_STATEFUL_DOMAINS`，加入实际访问的主机名和端口；后端已缓存配置时，还需运行 `php apps/api/artisan config:clear`。
+如需自定义教师端端口，请设置 `TEACHER_WEB_PORT`，并同时更新 `apps/api/.env` 中的 `SANCTUM_STATEFUL_DOMAINS`，加入实际访问的主机名和端口；后端已缓存配置时，还需运行 `php apps/api/artisan config:clear`。

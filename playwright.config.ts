@@ -2,6 +2,7 @@ import { defineConfig, devices } from "@playwright/test"
 
 const e2ePassword = process.env.E2E_ADMIN_PASSWORD ?? "E2eTemporary1234"
 const e2eWebPort = process.env.E2E_WEB_PORT ?? "5174"
+const e2eTeacherPort = process.env.E2E_TEACHER_PORT ?? "5175"
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -27,6 +28,13 @@ export default defineConfig({
       command:
         `VITE_API_TARGET=http://127.0.0.1:8001 vp run @timetable/web#dev -- --host=localhost --port=${e2eWebPort}`,
       url: `http://localhost:${e2eWebPort}/login`,
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+    },
+    {
+      command:
+        `VITE_API_TARGET=http://127.0.0.1:8001 vp run @timetable/teacher#dev -- --host=localhost --port=${e2eTeacherPort}`,
+      url: `http://localhost:${e2eTeacherPort}/login`,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
     },

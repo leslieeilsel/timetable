@@ -2,12 +2,17 @@
 
 namespace App\Modules\Timetable\Services;
 
+use App\Enums\AssignmentStatus;
 use App\Enums\ConstraintKind;
 use App\Enums\ConstraintStatus;
 use App\Enums\ConstraintTargetType;
+use App\Enums\ResourceStatus;
 use App\Enums\TimetableVersionStatus;
 use App\Modules\AcademicCalendar\Models\Semester;
 use App\Modules\Resources\Models\Room;
+use App\Modules\Resources\Models\SchoolClass;
+use App\Modules\Resources\Models\Teacher;
+use App\Modules\Scheduling\Models\FixedPlacement;
 use App\Modules\Scheduling\Models\SchedulingConstraint;
 use App\Modules\Scheduling\Services\WeekPatternService;
 use App\Modules\TeachingAssignment\Models\TeachingAssignment;
@@ -22,6 +27,101 @@ class TimetableDiagnosticService
         private readonly RoomResolver $rooms,
         private readonly WeekPatternService $weekPatterns,
     ) {}
+
+    /**
+     * Check the stored placements against current inputs without treating locks or
+     * published status as placement conflicts. Reuse the manual-edit rule evaluator.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function versionConflicts(Semester $semester, TimetableVersion $version): array
+    {
+        $template = $semester->scheduleTemplate()->with(['days', 'items'])->first();
+        if ($template === null) {
+            return [['type' => 'slot', 'message' => '当前学期未配置作息模板。']];
+        }
+        $days = $template->days->where('is_enabled', true)->pluck('weekday')->all();
+        $itemIds = $template->items->where('is_active', true)->where('allows_course', true)
+            ->where('counts_as_course', true)->pluck('id')->all();
+        $activeClassIds = $semester->classSettings()->where('status', ResourceStatus::Active->value)
+            ->pluck('school_class_id')->all();
+        $entries = $version->entries()->with([
+            'schoolClasses.grade', 'teachers.courses', 'actualRoom', 'item', 'course',
+            'teachingAssignment.semester', 'teachingAssignment.schoolClass.grade',
+            'teachingAssignment.teachingGroup.schoolClasses.grade', 'teachingAssignment.teacher',
+            'teachingAssignment.collaborators', 'teachingAssignment.course', 'teachingAssignment.specifiedRoom',
+        ])->get();
+        $constraints = $semester->schedulingConstraints()->where('status', ConstraintStatus::Active->value)
+            ->where('kind', ConstraintKind::Hard->value)->get();
+        $snapshot = $this->existingEntries($semester, $entries, []);
+        $byResource = [];
+        $byAssignment = [];
+        foreach ($snapshot as $row) {
+            $byAssignment[$row['assignment_id']][$row['id']] = $row;
+            foreach ($row['resources'] as $resource) {
+                $byResource[$resource][$row['id']] = $row;
+            }
+        }
+        $conflicts = [];
+        foreach ($entries as $entry) {
+            $identity = ['entry_id' => $entry->id, 'assignment_id' => $entry->teaching_assignment_id];
+            if (! in_array($entry->weekday, $days, true) || ! in_array($entry->item_id, $itemIds, true)) {
+                $conflicts[] = [...$identity, 'type' => 'slot', 'message' => '课程所在星期或课节已不可排课。'];
+            }
+            if ($entry->teachingAssignment->status !== AssignmentStatus::Confirmed
+                || ! $entry->course->is_active || ! $entry->actualRoom->is_active
+                || $entry->schoolClasses->isEmpty() || $entry->teachers->isEmpty()
+                || $entry->schoolClasses->contains(fn (SchoolClass $class): bool => $class->status !== ResourceStatus::Active
+                    || ! $class->grade->is_active || ! in_array($class->id, $activeClassIds, true))
+                || $entry->teachers->contains(fn (Teacher $teacher): bool => ! $teacher->is_active
+                    || ! $teacher->courses->contains('id', $entry->course_id))) {
+                $conflicts[] = [...$identity, 'type' => 'resource', 'message' => '课程引用的任课关系、班级、教师、课程或教室已不可用。'];
+            }
+            $candidate = $this->candidate($semester, $entry->teachingAssignment, $entry);
+            $relevant = $byAssignment[$entry->teaching_assignment_id] ?? [];
+            foreach ($candidate['resources'] as $resource) {
+                $relevant += $byResource[$resource] ?? [];
+            }
+            foreach ($constraints as $constraint) {
+                if (in_array($constraint->category->value, ['synchronization', 'mutual_exclusion'], true)
+                    && $this->targetsCandidate($constraint, $candidate)) {
+                    foreach ($this->relatedAssignmentIds($constraint, $entry->teaching_assignment_id) as $relatedId) {
+                        $relevant += $byAssignment[$relatedId] ?? [];
+                    }
+                }
+            }
+            unset($relevant[$entry->id]);
+            $result = $this->evaluate(
+                $semester,
+                $candidate,
+                $constraints,
+                array_values($relevant),
+                $entry->weekday,
+                $entry->item_id,
+                $entry->item->sort_order,
+                null,
+                null,
+            );
+            foreach ($result['hard_conflicts'] as $conflict) {
+                $conflicts[] = [...$identity, ...$conflict];
+            }
+        }
+        $fixedPlacements = FixedPlacement::query()->where('semester_id', $semester->id)
+            ->where('status', ResourceStatus::Active->value)->get();
+        foreach ($fixedPlacements as $fixed) {
+            $mask = $this->weekPatterns->mask($semester, $fixed->week_pattern, $fixed->active_weeks);
+            $matches = $entries->contains(fn (TimetableEntry $entry): bool => $entry->teaching_assignment_id === $fixed->teaching_assignment_id
+                && $entry->weekday === $fixed->weekday && $entry->item_id === $fixed->item_id
+                && ($fixed->room_id === null || $entry->actual_room_id === $fixed->room_id)
+                && $this->weekPatterns->mask($semester, $entry->week_pattern, $entry->active_weeks) === $mask);
+            if (! $matches) {
+                $conflicts[] = ['type' => 'fixed_placement', 'fixed_placement_id' => $fixed->id,
+                    'assignment_id' => $fixed->teaching_assignment_id, 'message' => '课表没有满足当前启用的固定安排。'];
+            }
+        }
+
+        return $conflicts;
+    }
 
     /**
      * @param  list<int>  $additionalExceptEntryIds
@@ -276,7 +376,7 @@ class TimetableDiagnosticService
      *   week_mask: int, resources: list<string>, resource_names: array<string, string>
      * }
      */
-    private function candidate(Semester $semester, TeachingAssignment $assignment): array
+    private function candidate(Semester $semester, TeachingAssignment $assignment, ?TimetableEntry $placedEntry = null): array
     {
         $assignment->loadMissing([
             'semester', 'schoolClass.grade', 'teachingGroup.schoolClasses.grade', 'teacher', 'collaborators',
@@ -292,10 +392,12 @@ class TimetableDiagnosticService
         $gradeIds = $assignment->school_class_id !== null
             ? [$assignment->schoolClass->grade_id]
             : $assignment->teachingGroup?->schoolClasses->pluck('grade_id')->map(fn ($id): int => (int) $id)->unique()->values()->all() ?? [];
-        $roomId = $this->rooms->resolve($assignment);
-        $roomName = $assignment->specified_room_id !== null
+        $roomId = $placedEntry === null ? $this->rooms->resolve($assignment) : $placedEntry->actual_room_id;
+        $roomName = $placedEntry?->actualRoom->name ?? ($assignment->specified_room_id !== null
             ? $assignment->specifiedRoom->name
-            : (Room::query()->whereKey($roomId)->value('name') ?? "教室 #{$roomId}");
+            : (Room::query()->whereKey($roomId)->value('name') ?? "教室 #{$roomId}"));
+        $weekPattern = $placedEntry === null ? $assignment->week_pattern : $placedEntry->week_pattern;
+        $activeWeeks = $placedEntry === null ? $assignment->active_weeks : $placedEntry->active_weeks;
         $resources = ["room:{$roomId}"];
         $resourceNames = ["room:{$roomId}" => $roomName];
         foreach ($classIds as $classId) {
@@ -323,9 +425,9 @@ class TimetableDiagnosticService
             'course_name' => $assignment->course->name,
             'room_id' => $roomId,
             'room_name' => $roomName,
-            'week_pattern' => $assignment->week_pattern->value,
-            'active_weeks' => $assignment->week_pattern->value === 'specified' ? $assignment->active_weeks : null,
-            'week_mask' => $this->weekPatterns->mask($semester, $assignment->week_pattern, $assignment->active_weeks),
+            'week_pattern' => $weekPattern->value,
+            'active_weeks' => $weekPattern->value === 'specified' ? $activeWeeks : null,
+            'week_mask' => $this->weekPatterns->mask($semester, $weekPattern, $activeWeeks),
             'resources' => array_values(array_unique($resources)),
             'resource_names' => $resourceNames,
         ];

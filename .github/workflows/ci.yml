@@ -20,6 +20,9 @@ jobs:
       - run: vp run @timetable/web#check
       - run: vp run @timetable/web#test -- run
       - run: vp run @timetable/web#build
+      - run: vp run @timetable/teacher#check
+      - run: vp run @timetable/teacher#test -- run
+      - run: vp run @timetable/teacher#build
 
   api-sqlite:
     runs-on: ubuntu-latest
@@ -74,6 +77,8 @@ jobs:
       - run: composer --working-dir=apps/api install --no-interaction --prefer-dist
       - run: php apps/api/artisan migrate:fresh --force
       - run: composer --working-dir=apps/api test:mysql
+      - run: php vendor/bin/pest tests/Feature/PrelaunchRegressionTest.php
+        working-directory: apps/api
 
   contract:
     runs-on: ubuntu-latest

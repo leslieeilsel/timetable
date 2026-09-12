@@ -24,6 +24,7 @@ class TimetableVersionService
     public function __construct(
         private readonly WeekPatternService $weekPatterns,
         private readonly TimetableSynchronizationService $synchronization,
+        private readonly TimetableDiagnosticService $diagnostics,
     ) {}
 
     public function resolveForRead(
@@ -283,6 +284,13 @@ class TimetableVersionService
             ]);
         }
         $this->synchronization->assertVersionAligned($semester, $version);
+        $conflicts = $this->diagnostics->versionConflicts($semester, $version);
+        if ($conflicts !== []) {
+            throw new ApiProblemException('VERSION_HAS_HARD_CONFLICTS', '课表不满足当前资源、固定安排或硬规则，不能发布', 409, [
+                'hard_conflict_count' => count($conflicts),
+                'hard_conflicts' => array_slice($conflicts, 0, 50),
+            ]);
+        }
 
         $incomplete = $semester->teachingAssignments()
             ->where('status', AssignmentStatus::Confirmed->value)

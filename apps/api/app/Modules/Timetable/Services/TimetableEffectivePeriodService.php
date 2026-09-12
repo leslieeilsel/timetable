@@ -149,11 +149,13 @@ class TimetableEffectivePeriodService
             if ($effectiveIsInside) {
                 $affectedDates[] = $effectiveDate;
             }
-            if ($replacementDate !== null
+            $replacementIsInside = $replacementDate !== null
                 && $replacementDate >= $from->toDateString()
-                && $replacementDate <= $to->toDateString()) {
+                && $replacementDate <= $to->toDateString();
+            // Rebinding the source can change the moved lesson outside this period too.
+            if ($replacementDate !== null && ($effectiveIsInside || $replacementIsInside)) {
                 $affectedDates[] = $replacementDate;
-                if (! $effectiveIsInside) {
+                if ($effectiveIsInside !== $replacementIsInside) {
                     $crossPeriodExceptions++;
                 }
             }

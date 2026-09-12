@@ -191,7 +191,15 @@ class SchoolClassController
                 continue;
             }
             if (count($values) !== 3) {
-                $rows[] = ['row' => $rowNumber, 'valid' => false, 'errors' => [['code' => 'CSV_COLUMN_COUNT', 'message' => '列数必须为3']]];
+                $rows[] = [
+                    'row' => $rowNumber,
+                    'grade_id' => null,
+                    'grade_name' => '',
+                    'class_name' => '',
+                    'class_code' => null,
+                    'valid' => false,
+                    'errors' => [['code' => 'CSV_COLUMN_COUNT', 'message' => '列数必须为3']],
+                ];
 
                 continue;
             }
@@ -226,7 +234,8 @@ class SchoolClassController
         }
         fclose($stream);
 
-        $nameGroups = collect($rows)->groupBy('class_name')->filter(fn ($group) => $group->count() > 1);
+        $nameGroups = collect($rows)->filter(fn ($row) => $row['class_name'] !== '')
+            ->groupBy('class_name')->filter(fn ($group) => $group->count() > 1);
         $codeGroups = collect($rows)->filter(fn ($row) => $row['class_code'] !== null)->groupBy('class_code')->filter(fn ($group) => $group->count() > 1);
         foreach ($rows as &$row) {
             if ($nameGroups->has($row['class_name'])) {

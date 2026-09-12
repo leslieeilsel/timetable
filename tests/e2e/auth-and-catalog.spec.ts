@@ -79,8 +79,15 @@ test("管理员首次改密、会话恢复、维护资料并安全退出", async
   const sidebarContainer = page.locator('[data-slot="sidebar-container"]')
   await expect(sidebarHeader).toHaveCount(1)
   await expect(sidebarLogo).toHaveCount(1)
-  await expect(sidebarHeader).toContainText("教务排课中心")
-  await expect(sidebarHeader).toContainText("学校教务工作台")
+  const brandingResponse = await page.request.get("/api/v1/branding")
+  expect(brandingResponse.ok()).toBe(true)
+  const { data: branding } = await brandingResponse.json()
+  await expect(sidebarHeader).toContainText(branding.system_name)
+  if (branding.system_tagline) {
+    await expect(sidebarHeader).toContainText(branding.system_tagline)
+  } else {
+    await expect(sidebarHeader).toHaveText(branding.system_name)
+  }
   await expect(sidebarGap).toHaveCount(0)
   await expect(sidebarContainer).toHaveCount(0)
   await expect(desktopSidebar).toHaveCSS("position", "relative")

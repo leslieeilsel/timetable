@@ -47,7 +47,8 @@ import type {
 } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
-const weekdayShort = ["一", "二", "三", "四", "五", "六", "日"]
+const weekdayShort = ["日", "一", "二", "三", "四", "五", "六"]
+const calendarWeekStartsOn = 0 as const
 type ScheduleMode = "day" | "week"
 type SwipeDirection = -1 | 1
 type DateRange = { from: string; to: string }
@@ -489,8 +490,8 @@ function weekRangeForDate(target: Date, semesterStart: string, semesterEnd: stri
   const start = parseISO(semesterStart)
   const end = parseISO(semesterEnd)
   const boundedTarget = isBefore(target, start) ? start : isAfter(target, end) ? end : target
-  const calendarFrom = startOfWeek(boundedTarget, { weekStartsOn: 1 })
-  const calendarTo = endOfWeek(boundedTarget, { weekStartsOn: 1 })
+  const calendarFrom = startOfWeek(boundedTarget, { weekStartsOn: calendarWeekStartsOn })
+  const calendarTo = endOfWeek(boundedTarget, { weekStartsOn: calendarWeekStartsOn })
 
   return {
     from: dateString(isBefore(calendarFrom, start) ? start : calendarFrom),
@@ -528,6 +529,25 @@ export function TimetablePage() {
       document.removeEventListener("visibilitychange", onVisibilityChange)
     }
   }, [])
+  useEffect(() => {
+    const refreshTimetables = () => {
+      if (document.visibilityState !== "visible") return
+      void queryClient.invalidateQueries(
+        { predicate: (query) => String(query.queryKey[0]).startsWith("teacher-") },
+        { cancelRefetch: false },
+      )
+    }
+    const timer = window.setInterval(refreshTimetables, 60_000)
+    document.addEventListener("visibilitychange", refreshTimetables)
+    window.addEventListener("focus", refreshTimetables)
+    window.addEventListener("online", refreshTimetables)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener("visibilitychange", refreshTimetables)
+      window.removeEventListener("focus", refreshTimetables)
+      window.removeEventListener("online", refreshTimetables)
+    }
+  }, [queryClient])
   const [context, setContext] = useState("mine")
   const [mode, setMode] = useState<ScheduleMode>("day")
   const [range, setRange] = useState<DateRange | null>(null)
@@ -957,6 +977,7 @@ const CalendarMonthPanels = memo(function CalendarMonthPanels({
               "month-day",
               value === selected && "selected",
               value === today && "today",
+              (date.getDay() === 0 || date.getDay() === 6) && "weekend",
               !isSameMonth(date, calendarMonth.month) && "outside-month",
             )}
             aria-label={`${value === today ? "今天，" : ""}${dateLabel}${rows ? (lessonSummary ? `，${lessonSummary}` : "，无课") : ""}`}
@@ -1078,7 +1099,7 @@ function DateControls({
   const [calendarResizing, setCalendarResizing] = useState(false)
   const [visibleMonth, setVisibleMonth] = useState(() => startOfMonth(parseISO(selected)))
   const [compactStart, setCompactStart] = useState(() =>
-    dateString(startOfWeek(parseISO(selected), { weekStartsOn: 1 })),
+    dateString(startOfWeek(parseISO(selected), { weekStartsOn: calendarWeekStartsOn })),
   )
   const lastSelected = useRef(selected)
   const [, refreshScheduleMarkers] = useState(0)
@@ -1110,13 +1131,16 @@ function DateControls({
     if (
       !isSameMonth(date, visibleMonth) &&
       (!monthCalendarOpen ||
-        isBefore(date, startOfWeek(startOfMonth(visibleMonth), { weekStartsOn: 1 })) ||
-        isAfter(date, endOfWeek(endOfMonth(visibleMonth), { weekStartsOn: 1 })))
+        isBefore(
+          date,
+          startOfWeek(startOfMonth(visibleMonth), { weekStartsOn: calendarWeekStartsOn }),
+        ) ||
+        isAfter(date, endOfWeek(endOfMonth(visibleMonth), { weekStartsOn: calendarWeekStartsOn })))
     ) {
       setVisibleMonth(startOfMonth(date))
     }
     if (isBefore(date, start) || isAfter(date, addDays(start, 13))) {
-      setCompactStart(dateString(startOfWeek(date, { weekStartsOn: 1 })))
+      setCompactStart(dateString(startOfWeek(date, { weekStartsOn: calendarWeekStartsOn })))
     }
   }, [compactStart, monthCalendarOpen, selected, visibleMonth])
 
@@ -1130,10 +1154,7 @@ function DateControls({
     rangeWeekNumbers.length > 1
       ? `第${rangeWeekNumbers[0]}—${rangeWeekNumbers.at(-1)}周`
       : `第${rangeWeekNumbers[0] ?? weekNumber ?? "—"}周`
-  const dateLabel =
-    mode === "week"
-      ? `${format(parseISO(from), "M月d日")}—${format(parseISO(to), "M月d日")} · ${rangeWeekLabel}`
-      : `${format(parseISO(selected), "M月d日 EEE", { locale: zhCN })} · 第${weekNumber ?? "—"}周`
+  const dateLabel = `${format(parseISO(selected), "M月d日 EEE", { locale: zhCN })} · 第${weekNumber ?? "—"}周`
   const previousWeekDisabled = !isAfter(parseISO(from), parseISO(semesterStart))
   const nextWeekDisabled = !isBefore(parseISO(to), parseISO(semesterEnd))
   const calendarMonths = useMemo(
@@ -1145,8 +1166,8 @@ function DateControls({
           : offset === 0
             ? visibleMonth
             : startOfMonth(anchor)
-        const monthStart = startOfWeek(startOfMonth(month), { weekStartsOn: 1 })
-        const monthEnd = endOfWeek(endOfMonth(month), { weekStartsOn: 1 })
+        const monthStart = startOfWeek(startOfMonth(month), { weekStartsOn: calendarWeekStartsOn })
+        const monthEnd = endOfWeek(endOfMonth(month), { weekStartsOn: calendarWeekStartsOn })
         const panelStart = monthCalendarOpen && offset !== 0 ? monthStart : anchor
         // Keep both compact weeks in this same grid, including a trailing week across months.
         const gridStart = isBefore(panelStart, monthStart) ? panelStart : monthStart
@@ -1201,7 +1222,7 @@ function DateControls({
         setCompactStart(
           dateString(
             startOfWeek(isSameMonth(parseISO(selected), month) ? parseISO(selected) : month, {
-              weekStartsOn: 1,
+              weekStartsOn: calendarWeekStartsOn,
             }),
           ),
         )
@@ -1257,7 +1278,7 @@ function DateControls({
         : today
     setMonthCalendarOpen(false)
     setVisibleMonth(startOfMonth(parseISO(date)))
-    setCompactStart(dateString(startOfWeek(parseISO(date), { weekStartsOn: 1 })))
+    setCompactStart(dateString(startOfWeek(parseISO(date), { weekStartsOn: calendarWeekStartsOn })))
     onSelectDate(date)
     onModeChange(nextMode)
   }
@@ -1269,7 +1290,7 @@ function DateControls({
 
   function returnToToday() {
     setVisibleMonth(startOfMonth(todayDate))
-    setCompactStart(dateString(startOfWeek(todayDate, { weekStartsOn: 1 })))
+    setCompactStart(dateString(startOfWeek(todayDate, { weekStartsOn: calendarWeekStartsOn })))
     onSelectDate(today)
     onModeChange("day")
   }
@@ -1293,7 +1314,19 @@ function DateControls({
             </button>
           ) : null}
           <label className="date-picker-label">
-            <strong>{dateLabel}</strong>
+            <strong>
+              {mode === "week" ? (
+                <>
+                  <span className="week-date-range">
+                    <span>{format(parseISO(from), "M月d日")}</span>
+                    <span>—{format(parseISO(to), "M月d日")}</span>
+                  </span>
+                  <span className="week-number-label">{rangeWeekLabel}</span>
+                </>
+              ) : (
+                dateLabel
+              )}
+            </strong>
             <input
               type="date"
               value={selected}
@@ -1365,16 +1398,12 @@ function DateControls({
           aria-hidden={calendarState === "closed"}
           inert={calendarState === "closed"}
         >
-          <div
-            className="month-toolbar-clip"
-            aria-hidden={!monthCalendarOpen}
-            inert={!monthCalendarOpen}
-          >
+          <div className="month-toolbar-clip">
             <div className="month-calendar-toolbar">
               <button
                 type="button"
-                aria-label="查看上个月"
-                disabled={previousMonthDisabled}
+                aria-label={monthCalendarOpen ? "查看上个月" : "查看上一周日期"}
+                disabled={monthCalendarOpen ? previousMonthDisabled : compactPreviousDisabled}
                 onClick={() => calendarPager.go(-1)}
               >
                 <ChevronLeft />
@@ -1396,8 +1425,8 @@ function DateControls({
               </div>
               <button
                 type="button"
-                aria-label="查看下个月"
-                disabled={nextMonthDisabled}
+                aria-label={monthCalendarOpen ? "查看下个月" : "查看下一周日期"}
+                disabled={monthCalendarOpen ? nextMonthDisabled : compactNextDisabled}
                 onClick={() => calendarPager.go(1)}
               >
                 <ChevronRight />
@@ -1461,16 +1490,12 @@ function CourseMarkers({ rows }: { rows: TimetableRow[] }) {
     <span className="course-markers" aria-hidden="true">
       {morning.length ? (
         <span className="course-marker-group morning">
-          {morning.map((row) => (
-            <i key={row.key} />
-          ))}
+          <i className={morning.length > 1 ? "multiple" : undefined} />
         </span>
       ) : null}
       {afternoon.length ? (
         <span className="course-marker-group afternoon">
-          {afternoon.map((row) => (
-            <i key={row.key} />
-          ))}
+          <i className={afternoon.length > 1 ? "multiple" : undefined} />
         </span>
       ) : null}
     </span>
