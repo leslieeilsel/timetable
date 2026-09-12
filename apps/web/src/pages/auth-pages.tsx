@@ -14,7 +14,7 @@ const authInputClassName =
   "h-12 rounded-md border-input bg-background px-4 py-0 text-[15px] text-foreground shadow-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-0 focus-visible:shadow-[0_0_0_2px_var(--background),0_0_0_4px_var(--ring)] md:text-[15px]"
 
 const authButtonClassName =
-  "h-12 w-full rounded-md bg-primary text-[15px] font-medium text-primary-foreground shadow-none hover:bg-primary/85 focus-visible:ring-0 focus-visible:shadow-[0_0_0_2px_var(--background),0_0_0_4px_var(--ring)] active:translate-y-0"
+  "h-12 w-full rounded-md bg-primary text-[15px] font-medium text-primary-foreground shadow-none hover:bg-primary/85 focus-visible:ring-0 focus-visible:shadow-[0_0_0_2px_var(--background),0_0_0_4px_var(--ring)]"
 
 export function LoginPage() {
   const systemName = useSystemName()

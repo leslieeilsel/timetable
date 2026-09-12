@@ -337,12 +337,18 @@ export function DailyAdjustmentsPage() {
                 </span>
                 <span className="text-muted-foreground">实际课程 {visibleRows.length} 节</span>
                 {daily.data.data.summary.temporary > 0 && (
-                  <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-800">
+                  <Badge
+                    variant="outline"
+                    className="border-[var(--timetable-notice-border)] bg-[var(--timetable-notice-background)] text-[var(--timetable-notice-foreground)]"
+                  >
                     临时变化 {daily.data.data.summary.temporary}
                   </Badge>
                 )}
                 {daily.data.data.summary.substitutions > 0 && (
-                  <Badge variant="outline" className="border-blue-300 bg-blue-50 text-blue-800">
+                  <Badge
+                    variant="outline"
+                    className="border-[var(--timetable-blue-border)] bg-[var(--timetable-blue-background)] text-foreground"
+                  >
                     代课 {daily.data.data.summary.substitutions}
                   </Badge>
                 )}
@@ -556,7 +562,7 @@ function DailyRowCard({ row }: { row: DailyTimetableRow }) {
         row.is_cancelled
           ? "border-dashed bg-muted/30 text-muted-foreground"
           : temporary
-            ? "border-amber-200 bg-amber-50/55"
+            ? "border-[var(--timetable-amber-border)] bg-[var(--timetable-amber-background)]"
             : "bg-background",
       )}
     >
@@ -946,19 +952,23 @@ function ExceptionPreviewPanel({ preview }: { preview: CalendarExceptionPreview 
     <div
       className={cn(
         "overflow-hidden rounded-xl border",
-        preview.allowed ? "border-emerald-200" : "border-rose-200",
+        preview.allowed
+          ? "border-[var(--timetable-success-border)]"
+          : "border-[var(--timetable-rose-border)]",
       )}
     >
       <div
         className={cn(
           "flex items-start gap-3 px-4 py-3",
-          preview.allowed ? "bg-emerald-50 text-emerald-950" : "bg-rose-50 text-rose-950",
+          preview.allowed
+            ? "bg-[var(--timetable-success-background)] text-foreground"
+            : "bg-[var(--timetable-rose-background)] text-foreground",
         )}
       >
         {preview.allowed ? (
-          <CheckCircle2Icon className="mt-0.5 size-5 shrink-0 text-emerald-600" />
+          <CheckCircle2Icon className="mt-0.5 size-5 shrink-0 text-[var(--timetable-success-accent)]" />
         ) : (
-          <CircleXIcon className="mt-0.5 size-5 shrink-0 text-rose-600" />
+          <CircleXIcon className="mt-0.5 size-5 shrink-0 text-destructive" />
         )}
         <div>
           <p className="font-medium">{preview.allowed ? "可以保存" : "需要先处理冲突"}</p>
@@ -968,7 +978,7 @@ function ExceptionPreviewPanel({ preview }: { preview: CalendarExceptionPreview 
       {preview.conflicts.length > 0 && (
         <div className="space-y-2 border-t px-4 py-3">
           {preview.conflicts.map((conflict, index) => (
-            <p key={`${conflict.type}-${index}`} className="flex gap-2 text-sm text-rose-700">
+            <p key={`${conflict.type}-${index}`} className="flex gap-2 text-sm text-destructive">
               <AlertTriangleIcon className="mt-0.5 size-4 shrink-0" />
               {conflict.message}
             </p>

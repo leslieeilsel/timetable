@@ -6,6 +6,7 @@
 /artifacts/
 /output/
 /docs/design/
+/docs/reviews/
 /.impeccable/
 /apps/api/storage/e2e.sqlite
 /apps/web/dist/

@@ -342,16 +342,11 @@
   font-weight: 600;
   transition:
     background 160ms ease,
-    transform 80ms ease,
     opacity 160ms ease;
 }
 
 .primary-action:hover {
   background: color-mix(in srgb, var(--primary), var(--foreground) 12%);
-}
-
-.primary-action:active {
-  transform: translateY(1px);
 }
 
 .primary-action:disabled {
