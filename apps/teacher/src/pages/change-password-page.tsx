@@ -94,7 +94,7 @@ export function ChangePasswordPage() {
               onToggle={() => toggle("new")}
               onChange={setPassword}
             />
-            <p className="password-hint">至少 12 位，包含字母和数字</p>
+            <p className="password-hint">至少 12 位，包含大小写字母和数字</p>
             <PasswordInput
               id="confirmation"
               label="确认新密码"
