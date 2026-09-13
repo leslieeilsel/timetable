@@ -62,7 +62,13 @@ test("管理员首次改密、会话恢复、维护资料并安全退出", async
   await page.getByRole("button", { name: "切换基础资料页面" }).click()
   const breadcrumbMenu = page.locator('[data-slot="dropdown-menu-content"]:visible')
   await expect(breadcrumbMenu).toBeVisible()
-  await expect(breadcrumbMenu.getByRole("menuitem")).toHaveCount(4)
+  await expect(breadcrumbMenu.getByRole("menuitem")).toHaveText([
+    "教师",
+    "课程",
+    "教室",
+    "年级",
+    "年级与班级",
+  ])
   await expect(breadcrumbMenu.getByRole("menuitem", { name: "课程", exact: true })).toHaveAttribute(
     "aria-current",
     "page",
