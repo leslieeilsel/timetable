@@ -15,7 +15,7 @@ export default function App() {
       <Route
         path="/login"
         element={
-          user ? (
+          user?.role === "teacher" ? (
             <Navigate to={user.must_change_password ? "/change-password" : "/"} replace />
           ) : (
             <LoginPage />
@@ -39,10 +39,10 @@ export default function App() {
         element={
           !user ? (
             <Navigate to="/login" replace />
-          ) : user.must_change_password ? (
-            <Navigate to="/change-password" replace />
           ) : user.role !== "teacher" ? (
             <Navigate to="/login" replace />
+          ) : user.must_change_password ? (
+            <Navigate to="/change-password" replace />
           ) : (
             <TimetablePage />
           )

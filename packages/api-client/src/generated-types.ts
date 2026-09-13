@@ -1065,6 +1065,95 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/semesters/{semester}/long-term-changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 按对象关键词、生效状态和日期交集分页查询长期调整事项
+         * @description 返回每项调整的分段前后快照及 messages（老师姓名、published/cancelled 事件、read_at 查看时间）。消息按调整隔离，仅读取回执，不标记已读。
+         */
+        get: operations["listLongTermChanges"];
+        put?: never;
+        /** 分段应用指定课程的每周调整，原子发布课表与老师消息 */
+        post: operations["publishLongTermChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/long-term-changes/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 检查整个生效区间并返回前后安排，回滚全部预览写入 */
+        post: operations["previewLongTermChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/long-term-changes/{change}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 从指定日期恢复本次改动，保留历史和其他安排 */
+        post: operations["restoreLongTermChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/long-term-changes/{change}/restore/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 检查取消或按日期恢复后的安排，不保存修改 */
+        post: operations["previewLongTermChangeRestore"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/long-term-changes/source": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 根据开始日期自动读取正式周课表与资源占用，用于选择和调整课程 */
+        get: operations["getLongTermChangeSource"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/semesters/{semester}/long-term-adjustments": {
         parameters: {
             query?: never;
@@ -1392,6 +1481,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/semesters/{semester}/calendar-exceptions/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 按日期、课节和班级查询目标课程及冲突原因 */
+        get: operations["getTemporaryAdjustmentOptions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teacher/me/change-messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 查询本人当前学期的临时调课站内消息 */
+        get: operations["getTeacherChangeMessages"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teacher/me/change-messages/{message}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 幂等记录本人打开消息详情的时间 */
+        post: operations["markTeacherChangeMessageRead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/semesters/{semester}/calendar-exceptions/preview": {
         parameters: {
             query?: never;
@@ -1710,6 +1850,33 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        LongTermChangeWrite: {
+            source_version_id: number;
+            /**
+             * Format: date
+             * @description 不早于今天且位于当前学期内
+             */
+            effective_from: string;
+            /** Format: date */
+            effective_to: string;
+            reason: string;
+            /** @default true */
+            notify_teachers: boolean;
+            changes: {
+                entry_id: number;
+                weekday?: number;
+                item_id?: number;
+                teacher_id?: number;
+                actual_room_id?: number;
+            }[];
+        };
+        LongTermChangeRestore: {
+            /**
+             * Format: date
+             * @description 从该日期恢复，不能早于今天或原开始日期
+             */
+            effective_from: string;
+        };
         /** @description 各操作的字段由对应业务端点校验；客户端生成的 paths 类型保留端点与并发头约束。 */
         WritePayload: {
             [key: string]: unknown;
@@ -1744,7 +1911,10 @@ export interface components {
         CalendarExceptionWrite: {
             /** Format: date */
             effective_date: string;
-            /** Format: date */
+            /**
+             * Format: date
+             * @description 交换目标课程的实际日期；移动或补课的目标日期。省略时使用 effective_date。
+             */
             replacement_date?: string | null;
             type: components["schemas"]["CalendarExceptionType"];
             original_entry_id?: number | null;
@@ -1755,6 +1925,11 @@ export interface components {
             replacement_item_id?: number | null;
             title?: string | null;
             reason: string;
+            /**
+             * @description 与发布事务一起生成受影响教师的站内消息；不代表教师已查看。
+             * @default true
+             */
+            notify_teachers: boolean;
         };
         TeacherLeaveWrite: {
             teacher_id: number;
@@ -4018,6 +4193,170 @@ export interface operations {
             428: components["responses"]["Problem"];
         };
     };
+    listLongTermChanges: {
+        parameters: {
+            query?: {
+                q?: string;
+                status?: "all" | "upcoming" | "active" | "ended" | "restored";
+                page?: number;
+                date_from?: string;
+                date_to?: string;
+            };
+            header?: never;
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+        };
+    };
+    publishLongTermChange: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LongTermChangeWrite"];
+            };
+        };
+        responses: {
+            201: components["responses"]["Created"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+        };
+    };
+    previewLongTermChange: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LongTermChangeWrite"];
+            };
+        };
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+        };
+    };
+    restoreLongTermChange: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+                change: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LongTermChangeRestore"];
+            };
+        };
+        responses: {
+            201: components["responses"]["Created"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+        };
+    };
+    previewLongTermChangeRestore: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+                change: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LongTermChangeRestore"];
+            };
+        };
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+        };
+    };
+    getLongTermChangeSource: {
+        parameters: {
+            query: {
+                date: string;
+            };
+            header?: never;
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+        };
+    };
     getSemesterLongTermAdjustments: {
         parameters: {
             query?: never;
@@ -4558,6 +4897,8 @@ export interface operations {
             query?: {
                 page?: components["parameters"]["Page"];
                 per_page?: components["parameters"]["PerPage"];
+                /** @description 按老师、班级、课程或调整原因查找，包含交换两端的课程。 */
+                q?: string;
                 date_from?: string;
                 date_to?: string;
                 type?: components["schemas"]["CalendarExceptionType"];
@@ -4602,6 +4943,72 @@ export interface operations {
             412: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
             428: components["responses"]["Problem"];
+        };
+    };
+    getTemporaryAdjustmentOptions: {
+        parameters: {
+            query: {
+                /** @description 按目标课节筛选，在完整范围内筛选后再分页；课程按日期和上课时间排列，包含冲突原因 */
+                target_item_id?: number;
+                /** @description 指定目标班级，优先于 scope；按完整合班成员匹配，在分页前筛选 */
+                target_class_id?: number;
+                effective_date: string;
+                original_entry_id: number;
+                type: "swap" | "move" | "teacher_change";
+                from: string;
+                to: string;
+                scope?: "class" | "school";
+                /** @description 在完整目标范围内搜索后再分页 */
+                q?: string;
+                page?: components["parameters"]["Page"];
+                per_page?: number;
+            };
+            header?: never;
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    getTeacherChangeMessages: {
+        parameters: {
+            query?: {
+                page?: components["parameters"]["Page"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    markTeacherChangeMessageRead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                message: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
         };
     };
     previewSemesterCalendarException: {

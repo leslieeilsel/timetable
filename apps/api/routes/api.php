@@ -4,6 +4,7 @@ use App\Modules\AcademicCalendar\Http\Controllers\AcademicCalendarController;
 use App\Modules\AcademicCalendar\Http\Controllers\ContextController;
 use App\Modules\AcademicCalendar\Http\Controllers\SchoolSettingsController;
 use App\Modules\DailyOperations\Http\Controllers\CalendarExceptionController;
+use App\Modules\DailyOperations\Http\Controllers\TeacherChangeMessageController;
 use App\Modules\DailyOperations\Http\Controllers\TeacherLeaveController;
 use App\Modules\Identity\Http\Controllers\AuthController;
 use App\Modules\Identity\Http\Controllers\MeController;
@@ -21,6 +22,7 @@ use App\Modules\SemesterClassSetting\Http\Controllers\SemesterClassSettingContro
 use App\Modules\TeachingAssignment\Http\Controllers\TeachingAssignmentController;
 use App\Modules\TeachingAssignment\Http\Controllers\TeachingGroupController;
 use App\Modules\Timetable\Http\Controllers\LongTermAdjustmentController;
+use App\Modules\Timetable\Http\Controllers\LongTermChangeController;
 use App\Modules\Timetable\Http\Controllers\MyTimetableController;
 use App\Modules\Timetable\Http\Controllers\TimetableController;
 use App\Modules\Timetable\Http\Controllers\TimetableVersionController;
@@ -54,6 +56,8 @@ Route::prefix('v1')->group(function (): void {
         Route::post('/auth/logout', [AuthController::class, 'logout'])->name('auth.logout');
         Route::post('/auth/change-password', [AuthController::class, 'changePassword'])->name('auth.change-password');
         Route::get('/teacher/me/timetable', MyTimetableController::class)->middleware('role.teacher');
+        Route::get('/teacher/me/change-messages', [TeacherChangeMessageController::class, 'index'])->middleware('role.teacher');
+        Route::post('/teacher/me/change-messages/{message}/read', [TeacherChangeMessageController::class, 'read'])->middleware('role.teacher');
         Route::get('/teacher/me/classes', [MyTimetableController::class, 'classes'])->middleware('role.teacher');
         Route::get('/teacher/me/classes/{schoolClass}/timetable', [MyTimetableController::class, 'classTimetable'])->middleware('role.teacher');
 
@@ -166,6 +170,12 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/semesters/{semester}/long-term-adjustments', [LongTermAdjustmentController::class, 'index']);
             Route::post('/semesters/{semester}/long-term-adjustments/preview', [LongTermAdjustmentController::class, 'preview']);
             Route::post('/semesters/{semester}/long-term-adjustments', [LongTermAdjustmentController::class, 'store']);
+            Route::get('/semesters/{semester}/long-term-changes', [LongTermChangeController::class, 'index']);
+            Route::get('/semesters/{semester}/long-term-changes/source', [LongTermChangeController::class, 'source']);
+            Route::post('/semesters/{semester}/long-term-changes/preview', [LongTermChangeController::class, 'preview']);
+            Route::post('/semesters/{semester}/long-term-changes', [LongTermChangeController::class, 'store']);
+            Route::post('/semesters/{semester}/long-term-changes/{change}/restore/preview', [LongTermChangeController::class, 'restorePreview']);
+            Route::post('/semesters/{semester}/long-term-changes/{change}/restore', [LongTermChangeController::class, 'restore']);
 
             Route::get('/semesters/{semester}/timetable', [TimetableController::class, 'index']);
             Route::post('/semesters/{semester}/timetable/diagnose', [TimetableController::class, 'diagnose']);
@@ -185,6 +195,7 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/semesters/{semester}/daily-timetable', [CalendarExceptionController::class, 'timetable']);
             Route::get('/semesters/{semester}/calendar-exceptions', [CalendarExceptionController::class, 'index']);
             Route::post('/semesters/{semester}/calendar-exceptions/preview', [CalendarExceptionController::class, 'preview']);
+            Route::get('/semesters/{semester}/calendar-exceptions/options', [CalendarExceptionController::class, 'options']);
             Route::post('/semesters/{semester}/calendar-exceptions', [CalendarExceptionController::class, 'store']);
             Route::post('/semesters/{semester}/calendar-exceptions/{exception}/cancel', [CalendarExceptionController::class, 'cancel']);
             Route::get('/semesters/{semester}/teacher-leaves', [TeacherLeaveController::class, 'index']);

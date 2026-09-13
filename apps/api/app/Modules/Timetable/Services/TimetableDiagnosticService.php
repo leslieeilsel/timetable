@@ -416,10 +416,15 @@ class TimetableDiagnosticService
         $classIds = $assignment->school_class_id !== null
             ? [$assignment->school_class_id]
             : $assignment->teachingGroup?->schoolClasses->pluck('id')->map(fn ($id): int => (int) $id)->all() ?? [];
-        $teacherIds = array_values(array_unique([
-            $assignment->teacher_id,
-            ...$assignment->collaborators->pluck('id')->map(fn ($id): int => (int) $id)->all(),
-        ]));
+        // Published period entries may have a different teacher from the original
+        // assignment. Diagnose the same effective resources shown in the timetable.
+        $effectiveTeachers = $placedEntry?->teachers;
+        $teacherIds = $effectiveTeachers === null
+            ? array_values(array_unique([
+                $assignment->teacher_id,
+                ...$assignment->collaborators->pluck('id')->map(fn ($id): int => (int) $id)->all(),
+            ]))
+            : $effectiveTeachers->pluck('id')->map(fn ($id): int => (int) $id)->all();
         $gradeIds = $assignment->school_class_id !== null
             ? [$assignment->schoolClass->grade_id]
             : $assignment->teachingGroup?->schoolClasses->pluck('grade_id')->map(fn ($id): int => (int) $id)->unique()->values()->all() ?? [];
@@ -440,9 +445,11 @@ class TimetableDiagnosticService
         }
         foreach ($teacherIds as $teacherId) {
             $resources[] = "teacher:{$teacherId}";
-            $teacherName = $teacherId === $assignment->teacher_id
-                ? $assignment->teacher->name
-                : $assignment->collaborators->firstWhere('id', $teacherId)->name;
+            $teacherName = $effectiveTeachers !== null
+                ? $effectiveTeachers->firstWhere('id', $teacherId)->name
+                : ($teacherId === $assignment->teacher_id
+                    ? $assignment->teacher->name
+                    : $assignment->collaborators->firstWhere('id', $teacherId)->name);
             $resourceNames["teacher:{$teacherId}"] = $teacherName;
         }
 

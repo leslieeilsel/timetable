@@ -1890,6 +1890,138 @@ paths:
         "412": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
         "428": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/long-term-changes:
+    get:
+      operationId: listLongTermChanges
+      summary: 按对象关键词、生效状态和日期交集分页查询长期调整事项
+      description: 返回每项调整的分段前后快照及 messages（老师姓名、published/cancelled 事件、read_at 查看时间）。消息按调整隔离，仅读取回执，不标记已读。
+      tags: [课表版本]
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - { name: q, in: query, schema: { type: string, maxLength: 100 } }
+        - {
+            name: status,
+            in: query,
+            schema: { type: string, enum: [all, upcoming, active, ended, restored] },
+          }
+        - { name: page, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: date_from, in: query, schema: { type: string, format: date } }
+        - { name: date_to, in: query, schema: { type: string, format: date } }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "412": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: publishLongTermChange
+      summary: 分段应用指定课程的每周调整，原子发布课表与老师消息
+      tags: [课表版本]
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LongTermChangeWrite" }
+      responses:
+        "201": { $ref: "#/components/responses/Created" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "412": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/long-term-changes/preview:
+    post:
+      operationId: previewLongTermChange
+      summary: 检查整个生效区间并返回前后安排，回滚全部预览写入
+      tags: [课表版本]
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LongTermChangeWrite" }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "412": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/long-term-changes/{change}/restore:
+    post:
+      operationId: restoreLongTermChange
+      summary: 从指定日期恢复本次改动，保留历史和其他安排
+      tags: [课表版本]
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - { name: change, in: path, required: true, schema: { type: integer, minimum: 1 } }
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LongTermChangeRestore" }
+      responses:
+        "201": { $ref: "#/components/responses/Created" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "412": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/long-term-changes/{change}/restore/preview:
+    post:
+      operationId: previewLongTermChangeRestore
+      summary: 检查取消或按日期恢复后的安排，不保存修改
+      tags: [课表版本]
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - { name: change, in: path, required: true, schema: { type: integer, minimum: 1 } }
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LongTermChangeRestore" }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "412": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/long-term-changes/source:
+    get:
+      operationId: getLongTermChangeSource
+      summary: 根据开始日期自动读取正式周课表与资源占用，用于选择和调整课程
+      tags: [课表版本]
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - { name: date, in: query, required: true, schema: { type: string, format: date } }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "412": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
   /api/v1/semesters/{semester}/long-term-adjustments:
     get:
       operationId: getSemesterLongTermAdjustments
@@ -2397,6 +2529,10 @@ paths:
         - $ref: "#/components/parameters/SemesterPath"
         - $ref: "#/components/parameters/Page"
         - $ref: "#/components/parameters/PerPage"
+        - name: q
+          in: query
+          description: 按老师、班级、课程或调整原因查找，包含交换两端的课程。
+          schema: { type: string, maxLength: 100 }
         - name: date_from
           in: query
           schema: { type: string, format: date }
@@ -2434,6 +2570,91 @@ paths:
         "412": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
         "428": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/calendar-exceptions/options:
+    get:
+      operationId: getTemporaryAdjustmentOptions
+      tags: [日常运行]
+      summary: 按日期、课节和班级查询目标课程及冲突原因
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - {
+            name: target_item_id,
+            in: query,
+            description: 按目标课节筛选，在完整范围内筛选后再分页；课程按日期和上课时间排列，包含冲突原因,
+            schema: { type: integer, minimum: 1 },
+          }
+        - {
+            name: target_class_id,
+            in: query,
+            description: 指定目标班级，优先于 scope；按完整合班成员匹配，在分页前筛选,
+            schema: { type: integer, minimum: 1 },
+          }
+        - {
+            name: effective_date,
+            in: query,
+            required: true,
+            schema: { type: string, format: date },
+          }
+        - {
+            name: original_entry_id,
+            in: query,
+            required: true,
+            schema: { type: integer, minimum: 1 },
+          }
+        - {
+            name: type,
+            in: query,
+            required: true,
+            schema: { type: string, enum: [swap, move, teacher_change] },
+          }
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date } }
+        - {
+            name: scope,
+            in: query,
+            schema: { type: string, enum: [class, school], default: class },
+          }
+        - {
+            name: q,
+            in: query,
+            description: 在完整目标范围内搜索后再分页,
+            schema: { type: string, maxLength: 100 },
+          }
+        - $ref: "#/components/parameters/Page"
+        - {
+            name: per_page,
+            in: query,
+            schema: { type: integer, minimum: 1, maximum: 60, default: 40 },
+          }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /api/v1/teacher/me/change-messages:
+    get:
+      operationId: getTeacherChangeMessages
+      tags: [日常运行]
+      summary: 查询本人当前学期的临时调课站内消息
+      parameters:
+        - $ref: "#/components/parameters/Page"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /api/v1/teacher/me/change-messages/{message}/read:
+    post:
+      operationId: markTeacherChangeMessageRead
+      tags: [日常运行]
+      summary: 幂等记录本人打开消息详情的时间
+      parameters:
+        - { name: message, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
   /api/v1/semesters/{semester}/calendar-exceptions/preview:
     post:
       operationId: previewSemesterCalendarException
@@ -3092,6 +3313,34 @@ components:
         type: string
         minLength: 3
   schemas:
+    LongTermChangeWrite:
+      type: object
+      required: [source_version_id, effective_from, effective_to, reason, changes]
+      properties:
+        source_version_id: { type: integer, minimum: 1 }
+        effective_from: { type: string, format: date, description: 不早于今天且位于当前学期内 }
+        effective_to: { type: string, format: date }
+        reason: { type: string, minLength: 2, maxLength: 500 }
+        notify_teachers: { type: boolean, default: true }
+        changes:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items:
+            type: object
+            required: [entry_id]
+            properties:
+              entry_id: { type: integer, minimum: 1 }
+              weekday: { type: integer, minimum: 1, maximum: 7 }
+              item_id: { type: integer, minimum: 1 }
+              teacher_id: { type: integer, minimum: 1 }
+              actual_room_id: { type: integer, minimum: 1 }
+    LongTermChangeRestore:
+      type: object
+      required: [effective_from]
+      properties:
+        effective_from:
+          { type: string, format: date, description: 从该日期恢复，不能早于今天或原开始日期 }
     WritePayload:
       type: object
       additionalProperties: true
@@ -3144,7 +3393,12 @@ components:
       required: [effective_date, type, reason]
       properties:
         effective_date: { type: string, format: date }
-        replacement_date: { type: [string, "null"], format: date }
+        replacement_date:
+          {
+            type: [string, "null"],
+            format: date,
+            description: "交换目标课程的实际日期；移动或补课的目标日期。省略时使用 effective_date。",
+          }
         type: { $ref: "#/components/schemas/CalendarExceptionType" }
         original_entry_id: { type: [integer, "null"], minimum: 1 }
         related_entry_id: { type: [integer, "null"], minimum: 1 }
@@ -3154,6 +3408,12 @@ components:
         replacement_item_id: { type: [integer, "null"], minimum: 1 }
         title: { type: [string, "null"], maxLength: 120 }
         reason: { type: string, minLength: 2, maxLength: 1000 }
+        notify_teachers:
+          {
+            type: boolean,
+            default: true,
+            description: "与发布事务一起生成受影响教师的站内消息；不代表教师已查看。",
+          }
     TeacherLeaveWrite:
       type: object
       additionalProperties: false

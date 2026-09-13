@@ -81,6 +81,11 @@ class DailyTimetableService
             $effective = $exception->effective_date->toDateString() === $context['date'];
             $replacementDate = $exception->replacement_date?->toDateString()
                 ?? $exception->effective_date->toDateString();
+            if ($exception->type === CalendarExceptionType::Swap && $replacementDate !== $exception->effective_date->toDateString()) {
+                $this->applyCrossDateSwap($rows, $exception, $context, $version);
+
+                continue;
+            }
             if ($effective && $exception->timetable_version_id === $version->id) {
                 $this->applyEffectiveException($rows, $exception, $items, $context);
             }
@@ -143,22 +148,25 @@ class DailyTimetableService
 
     /**
      * @param  array<string, mixed>  $data
+     * @param  array<string, array{rows: list<array<string, mixed>>}>  $timetables
      * @return array<string, mixed>
      */
-    public function previewException(Semester $semester, array $data): array
+    public function previewException(Semester $semester, array $data, array $timetables = []): array
     {
         $type = $data['type'] instanceof CalendarExceptionType
             ? $data['type']
             : CalendarExceptionType::from($data['type']);
+        $data['type'] = $type->value;
         $effective = $this->dateContext($semester, (string) $data['effective_date']);
         $version = $this->versionForDate($semester, $effective['date']);
         $targetDate = (string) ($data['replacement_date'] ?? $data['effective_date']);
         $target = $this->dateContext($semester, $targetDate);
+        $targetVersion = $this->versionForDate($semester, $targetDate);
         $original = isset($data['original_entry_id'])
             ? $this->entryForVersion($version, (int) $data['original_entry_id'])
             : null;
         $related = isset($data['related_entry_id'])
-            ? $this->entryForVersion($version, (int) $data['related_entry_id'])
+            ? $this->entryForVersion($targetVersion, (int) $data['related_entry_id'])
             : null;
         $assignment = isset($data['replacement_assignment_id'])
             ? TeachingAssignment::query()->with($this->assignmentRelations())
@@ -183,33 +191,22 @@ class DailyTimetableService
                 );
             }
         }
-        foreach (array_filter([$original, $related]) as $activeEntry) {
-            $actualEntry = collect($this->forDate($semester, $effective['date'])['rows'])
+        $timetables[$effective['date']] ??= $this->forDate($semester, $effective['date']);
+        $timetables[$target['date']] ??= $this->forDate($semester, $target['date']);
+        foreach ([[$original, $effective['date']], [$related, $target['date']]] as [$activeEntry, $entryDate]) {
+            if ($activeEntry === null) {
+                continue;
+            }
+            $actualEntry = collect($timetables[$entryDate]['rows'])
                 ->first(fn (array $row): bool => $row['original_entry_id'] === $activeEntry->id && ! $row['is_cancelled']);
             if (! is_array($actualEntry)) {
                 throw new ApiProblemException('DAILY_ORIGINAL_NOT_ACTIVE', '所选课程在该日期并未实际发生', 422, [
                     'entry_id' => $activeEntry->id,
                 ]);
             }
-        }
-        $entryIds = array_values(array_filter([
-            $original?->id,
-            $related?->id,
-        ], fn (?int $id): bool => $id !== null));
-        if ($entryIds !== []) {
-            $existingException = CalendarException::query()
-                ->where('semester_id', $semester->id)
-                ->where('timetable_version_id', $version->id)
-                ->where('status', OperationalStatus::Active->value)
-                ->whereDate('effective_date', $effective['date'])
-                ->where(function ($query) use ($entryIds): void {
-                    $query->whereIn('original_entry_id', $entryIds)
-                        ->orWhereIn('related_entry_id', $entryIds);
-                })
-                ->first();
-            if ($existingException !== null) {
+            if ($actualEntry['exception_id'] !== null || $actualEntry['substitution_id'] !== null) {
                 throw new ApiProblemException('DAILY_EXCEPTION_ALREADY_EXISTS', '所选课程在该日期已有临时调整，请先取消原调整', 409, [
-                    'exception_id' => $existingException->id,
+                    'exception_id' => $actualEntry['exception_id'],
                 ]);
             }
         }
@@ -223,7 +220,7 @@ class DailyTimetableService
             if ($related->id === $original?->id) {
                 throw new ApiProblemException('DAILY_RELATED_ENTRY_INVALID', '交换目标不能与原课程相同', 422);
             }
-            $affected[] = $this->entryImpact($related, $effective['date']);
+            $affected[] = $this->entryImpact($related, $target['date']);
         }
         if ($type === CalendarExceptionType::Move && $original !== null) {
             $item = $this->targetItem($semester, (int) $data['replacement_item_id']);
@@ -234,29 +231,35 @@ class DailyTimetableService
                 $item,
                 $candidate,
                 $effective['date'] === $target['date'] ? [$original->id] : [],
+                $timetables[$target['date']]['rows'],
             );
-        } elseif ($type === CalendarExceptionType::Swap && $original !== null && $related !== null) {
-            if ($original->weekday !== $related->weekday) {
-                throw new ApiProblemException('DAILY_SWAP_DATE_MISMATCH', '当前仅支持同一天内两节课程交换', 422);
+            if ($effective['date'] === $target['date'] && $original->item_id === $item->id) {
+                $conflicts[] = ['type' => 'unchanged', 'message' => '目标与原上课时间相同，请选择其他课节。'];
             }
+        } elseif ($type === CalendarExceptionType::Swap && $original !== null && $related !== null) {
             $firstItem = $this->targetItem($semester, $related->item_id);
             $secondItem = $this->targetItem($semester, $original->item_id);
             $conflicts = [
                 ...$this->candidateConflicts(
                     $semester,
-                    $effective['date'],
+                    $target['date'],
                     $firstItem,
                     $this->candidateFromEntry($original, $data),
-                    [$original->id, $related->id],
+                    $effective['date'] === $target['date'] ? [$original->id, $related->id] : [$related->id],
+                    $timetables[$target['date']]['rows'],
                 ),
                 ...$this->candidateConflicts(
                     $semester,
                     $effective['date'],
                     $secondItem,
                     $this->candidateFromEntry($related, []),
-                    [$original->id, $related->id],
+                    $effective['date'] === $target['date'] ? [$original->id, $related->id] : [$original->id],
+                    $timetables[$effective['date']]['rows'],
                 ),
             ];
+            if ($effective['date'] === $target['date'] && $original->item_id === $related->item_id) {
+                $conflicts[] = ['type' => 'unchanged', 'message' => '两节课的上课时间相同，无需交换。'];
+            }
         } elseif (in_array($type, [CalendarExceptionType::TeacherChange, CalendarExceptionType::RoomChange], true)
             && $original !== null) {
             $item = $this->targetItem($semester, $original->item_id);
@@ -266,6 +269,7 @@ class DailyTimetableService
                 $item,
                 $this->candidateFromEntry($original, $data),
                 [$original->id],
+                $timetables[$effective['date']]['rows'],
             );
         } elseif ($type === CalendarExceptionType::Makeup && $assignment !== null) {
             $item = $this->targetItem($semester, (int) $data['replacement_item_id']);
@@ -275,6 +279,7 @@ class DailyTimetableService
                 $item,
                 $this->candidateFromAssignment($assignment, $data),
                 [],
+                $timetables[$target['date']]['rows'],
             );
             $affected[] = [
                 'entry_id' => null,
@@ -299,6 +304,10 @@ class DailyTimetableService
             ->values()
             ->all();
         $allowed = $conflicts === [];
+        $changes = $this->exceptionChanges($original, $related, $assignment, $semester, $data);
+        $teacherIds = collect($changes)->flatMap(fn (array $change): array => [
+            ...($change['before']['teacher_ids'] ?? []), ...($change['after']['teacher_ids'] ?? []),
+        ])->unique()->values()->all();
 
         return [
             'allowed' => $allowed,
@@ -312,7 +321,204 @@ class DailyTimetableService
             'affected' => $affected,
             'notifications' => $notifications,
             'version_id' => $version->id,
+            'changes' => $changes,
+            'recipients' => Teacher::query()->whereIn('id', $teacherIds)->get(['id', 'name', 'employee_no'])->toArray(),
         ];
+    }
+
+    /**
+     * A bounded, independent target scope. Preview and publish use the same conflict rules.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array{data: list<array<string, mixed>>, meta: array<string, mixed>}
+     */
+    public function options(Semester $semester, array $data): array
+    {
+        $source = $this->forDate($semester, $data['effective_date']);
+        $original = collect($source['rows'])->firstWhere('original_entry_id', (int) $data['original_entry_id']);
+        if (! is_array($original) || $original['is_cancelled']) {
+            throw new ApiProblemException('DAILY_ORIGINAL_NOT_ACTIVE', '原课程已变动，请刷新课表后重新选择', 422);
+        }
+        $from = Carbon::parse($data['from']);
+        $to = Carbon::parse($data['to']);
+        if ($from->greaterThan($to) || $from->diffInDays($to) > 6) {
+            throw new ApiProblemException('DAILY_OPTIONS_RANGE_INVALID', '每次查找最多 7 天，请切换周次继续查找', 422);
+        }
+        $timetables = [$data['effective_date'] => $source];
+        $payloads = [];
+        $base = ['type' => $data['type'], 'effective_date' => $data['effective_date'], 'original_entry_id' => $data['original_entry_id'], 'reason' => '候选方案检查'];
+        if ($data['type'] === 'teacher_change') {
+            foreach (Teacher::query()->where('is_active', true)->whereKeyNot($original['primary_teacher_id'])
+                ->whereHas('courses', fn ($query) => $query->whereKey($original['course_id']))->orderBy('name')->get(['id', 'name']) as $teacher) {
+                $payloads[] = ['payload' => [...$base, 'replacement_teacher_id' => $teacher->id], 'teacher' => $teacher->toArray(), 'date' => $data['effective_date'], 'reasons' => ['具备'.$original['course_name'].'授课资格']];
+            }
+        } else {
+            $items = $semester->scheduleTemplate()->firstOrFail()->items()->where('is_active', true)->where('allows_course', true)->orderBy('sort_order')->get();
+            for ($cursor = $from->copy(); $cursor->lessThanOrEqualTo($to); $cursor->addDay()) {
+                $date = $cursor->toDateString();
+                $timetables[$date] ??= $this->forDate($semester, $date);
+                if ($data['type'] === 'swap') {
+                    foreach ($timetables[$date]['rows'] as $row) {
+                        if ($row['is_cancelled'] || $row['original_entry_id'] === null || $row['original_entry_id'] === $original['original_entry_id']) {
+                            continue;
+                        }
+                        $sameClass = array_intersect($row['class_ids'], $original['class_ids']) !== [];
+                        if (isset($data['target_class_id'])
+                            ? ! in_array((int) $data['target_class_id'], $row['class_ids'], true)
+                            : (($data['scope'] ?? 'class') === 'class' && ! $sameClass)) {
+                            continue;
+                        }
+                        $payloads[] = ['payload' => [...$base, 'replacement_date' => $date, 'related_entry_id' => $row['original_entry_id']], 'row' => $row, 'date' => $date, 'reasons' => array_values(array_filter([$sameClass ? '同班课程' : null, $row['room_id'] === $original['room_id'] ? '教室相同' : null]))];
+                    }
+                } else {
+                    foreach ($items as $item) {
+                        if ($date === $original['date'] && $item->id === $original['item_id']) {
+                            continue;
+                        }
+                        $payloads[] = ['payload' => [...$base, 'replacement_date' => $date, 'replacement_item_id' => $item->id], 'item' => $item->only(['id', 'name', 'start_time', 'end_time']), 'date' => $date, 'reasons' => ['教师、班级与教室一起移动']];
+                    }
+                }
+            }
+        }
+        // Search the complete scope before pagination so later dates remain reachable.
+        $search = trim($data['q'] ?? '');
+        if ($search !== '') {
+            $payloads = array_values(array_filter($payloads, fn (array $candidate): bool => mb_stripos(implode(' ', [
+                $candidate['row']['course_name'] ?? '', $candidate['row']['target_name'] ?? '',
+                implode(' ', $candidate['row']['teacher_names'] ?? []), $candidate['row']['room_name'] ?? '',
+                $candidate['teacher']['name'] ?? '', $candidate['row']['item_name'] ?? $candidate['item']['name'] ?? '', $candidate['date'],
+            ]), $search) !== false));
+        }
+        if (isset($data['target_item_id'])) {
+            $payloads = array_values(array_filter($payloads, fn (array $candidate): bool => (int) ($candidate['row']['item_id'] ?? $candidate['item']['id'] ?? 0) === (int) $data['target_item_id']));
+        }
+        // Keep lessons in timetable order, including conflicts, so a known target is easy to find.
+        usort($payloads, fn (array $a, array $b): int => [$a['date'], $a['row']['start_time'] ?? $a['item']['start_time'] ?? '', $a['row']['target_name'] ?? $a['teacher']['name'] ?? '', $a['row']['original_entry_id'] ?? $a['item']['id'] ?? $a['teacher']['id']]
+            <=> [$b['date'], $b['row']['start_time'] ?? $b['item']['start_time'] ?? '', $b['row']['target_name'] ?? $b['teacher']['name'] ?? '', $b['row']['original_entry_id'] ?? $b['item']['id'] ?? $b['teacher']['id']]);
+        $total = count($payloads);
+        $perPage = (int) ($data['per_page'] ?? 40);
+        $lastPage = max(1, (int) ceil($total / $perPage));
+        $page = min((int) ($data['page'] ?? 1), $lastPage);
+        $options = [];
+        foreach (array_slice($payloads, ($page - 1) * $perPage, $perPage) as $candidate) {
+            try {
+                $preview = $this->previewException($semester, $candidate['payload'], $timetables);
+                $candidate['allowed'] = $preview['allowed'];
+                $candidate['conflicts'] = $preview['conflicts'];
+                if ($preview['allowed']) {
+                    $candidate['reasons'][] = '班级、教师、教室及请假检查通过';
+                }
+            } catch (ApiProblemException $error) {
+                $candidate['allowed'] = false;
+                $candidate['conflicts'] = [['type' => $error->problemCode, 'message' => $error->getMessage()]];
+            }
+            $candidate['key'] = implode(':', [$data['type'], $candidate['date'], $candidate['payload']['related_entry_id'] ?? $candidate['payload']['replacement_item_id'] ?? $candidate['payload']['replacement_teacher_id']]);
+            $options[] = $candidate;
+        }
+
+        return ['data' => $options, 'meta' => ['pagination' => [
+            'page' => $page, 'per_page' => $perPage, 'total' => $total, 'last_page' => $lastPage,
+        ]]];
+    }
+
+    /** @return list<array{before: array<string, mixed>|null, after: array<string, mixed>|null}> */
+    public function withdrawalChanges(Semester $semester, CalendarException $exception): array
+    {
+        $exception->load([
+            'originalEntry' => fn ($query) => $query->with($this->entryRelations()),
+            'relatedEntry' => fn ($query) => $query->with($this->entryRelations()),
+            'replacementAssignment' => fn ($query) => $query->with($this->assignmentRelations()),
+        ]);
+        $changes = $this->exceptionChanges($exception->originalEntry, $exception->relatedEntry, $exception->replacementAssignment, $semester, [
+            ...$exception->toArray(),
+            'effective_date' => $exception->effective_date->toDateString(),
+            'replacement_date' => ($exception->replacement_date ?? $exception->effective_date)->toDateString(),
+        ]);
+
+        return array_map(fn (array $change): array => ['before' => $change['after'], 'after' => $change['before']], $changes);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return list<array{before: array<string, mixed>|null, after: array<string, mixed>|null}>
+     */
+    private function exceptionChanges(?TimetableEntry $original, ?TimetableEntry $related, ?TeachingAssignment $assignment, Semester $semester, array $data): array
+    {
+        $effective = $this->dateContext($semester, $data['effective_date']);
+        $target = $this->dateContext($semester, $data['replacement_date'] ?? $data['effective_date']);
+        $before = $original === null ? null : $this->entryRow($original, $effective['date'], $effective['week_number']);
+        $after = $before;
+        if ($data['type'] === 'makeup' && $assignment !== null) {
+            $after = $this->assignmentRow($assignment, $this->targetItem($semester, (int) $data['replacement_item_id']), $target);
+            $this->applyReplacementResources($after, isset($data['replacement_teacher_id']) ? Teacher::query()->findOrFail((int) $data['replacement_teacher_id']) : null, isset($data['replacement_room_id']) ? Room::query()->findOrFail((int) $data['replacement_room_id']) : null);
+
+            return [['before' => null, 'after' => $after]];
+        }
+        if ($after === null) {
+            return [];
+        }
+        if ($data['type'] === 'cancel') {
+            $after = null;
+        } elseif ($data['type'] === 'swap' && $related !== null) {
+            $otherBefore = $this->entryRow($related, $target['date'], $target['week_number']);
+            $otherAfter = $otherBefore;
+            $after['date'] = $target['date'];
+            $after['week_number'] = $target['week_number'];
+            $this->setRowItem($after, $related->item);
+            $otherAfter['date'] = $effective['date'];
+            $otherAfter['week_number'] = $effective['week_number'];
+            $this->setRowItem($otherAfter, $original->item);
+
+            return [['before' => $before, 'after' => $after], ['before' => $otherBefore, 'after' => $otherAfter]];
+        } elseif ($data['type'] === 'move') {
+            $after['date'] = $target['date'];
+            $after['week_number'] = $target['week_number'];
+            $this->setRowItem($after, $this->targetItem($semester, (int) $data['replacement_item_id']));
+            $this->applyReplacementResources($after, isset($data['replacement_teacher_id']) ? Teacher::query()->findOrFail((int) $data['replacement_teacher_id']) : null, isset($data['replacement_room_id']) ? Room::query()->findOrFail((int) $data['replacement_room_id']) : null);
+        } elseif ($data['type'] === 'teacher_change') {
+            $teacher = Teacher::query()->findOrFail((int) $data['replacement_teacher_id']);
+            $this->replacePrimaryTeacher($after, $teacher->id, $teacher->name);
+        } elseif ($data['type'] === 'room_change') {
+            $room = Room::query()->findOrFail((int) $data['replacement_room_id']);
+            $after['room_id'] = $room->id;
+            $after['room_name'] = $room->name;
+        } elseif ($data['type'] === 'activity') {
+            $after['title'] = $data['title'];
+            $after['is_cancelled'] = true;
+        }
+
+        return [['before' => $before, 'after' => $after]];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @param  array{date: string, weekday: int, week_number: int}  $context
+     */
+    private function applyCrossDateSwap(array &$rows, CalendarException $exception, array $context, TimetableVersion $version): void
+    {
+        $isSource = $exception->effective_date->toDateString() === $context['date'];
+        $outgoing = $isSource ? $exception->originalEntry : $exception->relatedEntry;
+        $incoming = $isSource ? $exception->relatedEntry : $exception->originalEntry;
+        if ($outgoing === null || $incoming === null || $outgoing->timetable_version_id !== $version->id) {
+            return;
+        }
+        $index = $this->rowIndex($rows, $outgoing->id);
+        if ($index === null) {
+            return;
+        }
+        $rows[$index]['is_cancelled'] = true;
+        $rows[$index]['status'] = 'moved_out';
+        $rows[$index]['exception_type'] = 'swap';
+        $rows[$index]['exception_id'] = $exception->id;
+        $rows[$index]['note'] = $exception->reason;
+        $row = $this->entryRow($incoming, $context['date'], $context['week_number']);
+        $this->setRowItem($row, $outgoing->item);
+        $row['key'] = 'exception-'.$exception->id.'-swap-'.$incoming->id;
+        $row['status'] = 'swap';
+        $row['exception_type'] = 'swap';
+        $row['exception_id'] = $exception->id;
+        $row['note'] = $exception->reason;
+        $rows[] = $row;
     }
 
     /**
@@ -681,13 +887,7 @@ class DailyTimetableService
             && $exception->originalEntry !== null && $exception->replacementItem !== null) {
             $row = $this->entryRow($exception->originalEntry, $context['date'], $context['week_number']);
             $this->setRowItem($row, $exception->replacementItem);
-            if ($exception->replacementTeacher !== null) {
-                $this->replacePrimaryTeacher($row, $exception->replacement_teacher_id, $exception->replacementTeacher->name);
-            }
-            if ($exception->replacementRoom !== null) {
-                $row['room_id'] = $exception->replacement_room_id;
-                $row['room_name'] = $exception->replacementRoom->name;
-            }
+            $this->applyReplacementResources($row, $exception->replacementTeacher, $exception->replacementRoom);
             $row['key'] = 'exception-'.$exception->id.'-move';
             $row['status'] = 'moved_in';
             $row['exception_type'] = 'move';
@@ -701,12 +901,25 @@ class DailyTimetableService
                 $exception->replacementItem,
                 $context,
             );
+            $this->applyReplacementResources($row, $exception->replacementTeacher, $exception->replacementRoom);
             $row['key'] = 'exception-'.$exception->id.'-makeup';
             $row['status'] = 'makeup';
             $row['exception_type'] = 'makeup';
             $row['exception_id'] = $exception->id;
             $row['note'] = $exception->reason;
             $rows[] = $row;
+        }
+    }
+
+    /** @param array<string, mixed> $row */
+    private function applyReplacementResources(array &$row, ?Teacher $teacher, ?Room $room): void
+    {
+        if ($teacher !== null) {
+            $this->replacePrimaryTeacher($row, $teacher->id, $teacher->name);
+        }
+        if ($room !== null) {
+            $row['room_id'] = $room->id;
+            $row['room_name'] = $room->name;
         }
     }
 
@@ -992,6 +1205,7 @@ class DailyTimetableService
     /**
      * @param  array{class_ids: list<int>, teacher_ids: list<int>, room_id: int}  $candidate
      * @param  list<int>  $excludedEntryIds
+     * @param  list<array<string, mixed>>|null  $actualRows
      * @return list<array{type: string, message: string, existing_entry_id?: int}>
      */
     private function candidateConflicts(
@@ -1000,9 +1214,10 @@ class DailyTimetableService
         Item $item,
         array $candidate,
         array $excludedEntryIds,
+        ?array $actualRows = null,
     ): array {
         $conflicts = [];
-        $rows = $this->forDate($semester, $date)['rows'];
+        $rows = $actualRows ?? $this->forDate($semester, $date)['rows'];
         foreach ($rows as $row) {
             if ($row['is_cancelled'] || $row['item_id'] !== $item->id
                 || in_array($row['original_entry_id'], $excludedEntryIds, true)) {

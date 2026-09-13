@@ -24,7 +24,17 @@ import {
   LogOut,
   RefreshCw,
 } from "lucide-react"
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import {
+  lazy,
+  memo,
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import { useNavigate } from "react-router"
 
 import {
@@ -46,6 +56,9 @@ import type {
   TimetableRow,
 } from "@/lib/types"
 import { cn } from "@/lib/utils"
+const ChangeMessages = lazy(() =>
+  import("@/components/change-messages").then((module) => ({ default: module.ChangeMessages })),
+)
 
 const weekdayShort = ["日", "一", "二", "三", "四", "五", "六"]
 const calendarWeekStartsOn = 0 as const
@@ -772,7 +785,15 @@ export function TimetablePage() {
     <main className="teacher-page">
       <div className="teacher-shell timetable-shell">
         <header className="schedule-header">
-          <span className="header-balance" aria-hidden="true" />
+          <Suspense fallback={<span className="change-message-trigger" aria-hidden="true" />}>
+            <ChangeMessages
+              teacherId={user?.teacher?.id ?? 0}
+              onDate={(date) => {
+                setContext("mine")
+                openDay(date)
+              }}
+            />
+          </Suspense>
           {availableClasses.length ? (
             <Menu>
               <MenuTrigger

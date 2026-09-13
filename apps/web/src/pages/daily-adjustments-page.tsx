@@ -1,44 +1,45 @@
-import { useEffect, useRef, useState, type FormEvent } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import {
-  AlertTriangleIcon,
-  BellRingIcon,
-  CalendarClockIcon,
-  CheckCircle2Icon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  CircleXIcon,
-  PlusIcon,
-  RefreshCwIcon,
-  SearchIcon,
-} from "lucide-react"
+import { Link } from "react-router"
+import { CalendarClock, MoreHorizontal } from "lucide-react"
 import { toast } from "sonner"
-import { api, apiAllPages, apiMessage } from "@/lib/api"
+import { api, apiAllPages } from "@/lib/api"
+import { useAuth } from "@/lib/auth"
 import { useResolvedSemesterId } from "@/lib/semester"
+import { enumParam, useHashPreservingSearchParams } from "@/lib/url-state"
+import {
+  clampDate,
+  localDate,
+  newAdjustment,
+  validDate,
+  type AdjustmentForm,
+} from "@/lib/daily-adjustments"
 import type {
-  CalendarException,
-  CalendarExceptionPreview,
-  CalendarExceptionType,
-  DailyTimetable,
+  ClassSetting,
   DailyTimetableRow,
-  Item,
-  PaginationMeta,
   Room,
   ScheduleTemplate,
   Semester,
   Teacher,
   TeachingAssignment,
 } from "@/lib/types"
-import { DatePicker } from "@/components/date-picker"
-import { EmptyList, ErrorState, Field, LoadingState, PageHeader } from "@/components/page"
-import { ListToolbar, ToolbarSelect } from "@/components/list-toolbar"
-import { AssignmentPicker, RoomPicker, TeacherPicker } from "@/components/resource-picker"
-import { SimpleSelect } from "@/components/simple-select"
-import { StatusBadge } from "@/components/status-badge"
-import { TablePagination } from "@/components/table-pagination"
-import { Badge } from "@/components/ui/badge"
+import { AdjustmentPanel } from "@/components/daily-adjustments/adjustment-panel"
+import { AdjustmentHistory } from "@/components/daily-adjustments/adjustment-history"
+import { AdjustmentSourcePicker } from "@/components/daily-adjustments/source-picker"
+import { ErrorState, LoadingState } from "@/components/page"
+import {
+  AdjustmentPageHeader,
+  AdjustmentDraftNotice,
+  adjustmentPageClass,
+  adjustmentContentClass,
+} from "@/components/adjustments/workbench"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   Dialog,
   DialogContent,
@@ -47,157 +48,102 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import { cn } from "@/lib/utils"
-import {
-  enumParam,
-  mergeSearchParams,
-  positiveIntegerParam,
-  useHashPreservingSearchParams,
-} from "@/lib/url-state"
 
-const weekdayNames = ["", "周一", "周二", "周三", "周四", "周五", "周六", "周日"]
-const typeLabels: Record<CalendarExceptionType, string> = {
-  move: "移动课节",
-  swap: "交换两节课",
-  teacher_change: "临时换教师",
-  room_change: "临时换教室",
-  cancel: "停课",
-  makeup: "补课",
-  activity: "临时活动",
+type Editor = {
+  id: number
+  source: DailyTimetableRow | null
+  form: AdjustmentForm
+  published?: boolean
 }
-const rowStatusLabels: Record<DailyTimetableRow["status"], string> = {
-  base: "正常",
-  moved_out: "已移出",
-  moved_in: "临时调入",
-  swap: "已交换",
-  teacher_change: "临时换教师",
-  room_change: "临时换教室",
-  cancel: "停课",
-  makeup: "补课",
-  activity: "活动占用",
-  substitution: "代课",
+function readDraft(key: string): Editor | null {
+  try {
+    const value = JSON.parse(localStorage.getItem(key) ?? "null")
+    return value?.id && validDate(value.form?.effective_date) ? value : null
+  } catch {
+    return null
+  }
 }
-const exceptionTypes = [
-  "all",
-  "move",
-  "swap",
-  "teacher_change",
-  "room_change",
-  "cancel",
-  "makeup",
-  "activity",
-] as const
-const exceptionStatuses = ["all", "active", "cancelled"] as const
+function storeDraft(key: string, value: Editor | null) {
+  try {
+    if (value) localStorage.setItem(key, JSON.stringify(value))
+    else localStorage.removeItem(key)
+    return true
+  } catch {
+    toast.error("浏览器存储不可用，草稿未保存，请保持页面打开")
+    return false
+  }
+}
+function hasChanges(editor: Editor) {
+  return Boolean(
+    editor.form.reason ||
+    editor.form.title ||
+    editor.form.related_entry_id ||
+    editor.form.replacement_teacher_id ||
+    editor.form.replacement_room_id ||
+    editor.form.replacement_assignment_id ||
+    editor.form.replacement_item_id ||
+    (editor.source && editor.form.type !== "swap"),
+  )
+}
 
 export function DailyAdjustmentsPage() {
   const { semesterId, context } = useResolvedSemesterId()
+  const { user } = useAuth()
   const client = useQueryClient()
-  const [urlParams, setUrlParams] = useHashPreservingSearchParams()
-  const [date, setDate] = useState(() => dateParam(urlParams, "date", todayString()))
-  const [dailySearch, setDailySearch] = useState(() => urlParams.get("q") ?? "")
-  const [page, setPage] = useState(() => positiveIntegerParam(urlParams, "page", 1))
-  const [pageSize, setPageSize] = useState(() =>
-    positiveIntegerParam(urlParams, "per_page", 20, [20, 50, 100]),
-  )
-  const [typeFilter, setTypeFilter] = useState(() =>
-    enumParam(urlParams, "type", exceptionTypes, "all"),
-  )
-  const [statusFilter, setStatusFilter] = useState(() =>
-    enumParam(urlParams, "status", exceptionStatuses, "all"),
-  )
-  const [dateFrom, setDateFrom] = useState(() => dateParam(urlParams, "from", ""))
-  const [dateTo, setDateTo] = useState(() => dateParam(urlParams, "to", ""))
-  const [editorOpen, setEditorOpen] = useState(false)
-
+  const [params, setParams] = useHashPreservingSearchParams()
+  const stage = enumParam(params, "step", ["records", "source"], "records")
+  const [editor, setEditor] = useState<Editor | null>(null)
+  const [draft, setDraft] = useState<Editor | null>(null)
+  const [editorBusy, setEditorBusy] = useState(false)
+  const [closePrompt, setClosePrompt] = useState(false)
+  const closeDestination = useRef<"records" | "source">("records")
+  const storageKey = `daily-adjustments:${user?.id ?? "guest"}:${semesterId ?? "none"}:draft`
+  const onExit = useRef({ editor, storageKey })
+  onExit.current = { editor, storageKey }
+  useEffect(() => {
+    const persist = () => {
+      const value = onExit.current
+      if (value.editor && !value.editor.published && hasChanges(value.editor))
+        storeDraft(value.storageKey, value.editor)
+    }
+    window.addEventListener("beforeunload", persist)
+    return () => {
+      persist()
+      window.removeEventListener("beforeunload", persist)
+    }
+  }, [])
+  useEffect(() => {
+    setDraft(readDraft(storageKey))
+    setEditor(null)
+    setEditorBusy(false)
+    setClosePrompt(false)
+  }, [storageKey])
   const semester = useQuery({
     queryKey: ["semester", semesterId],
     queryFn: () => api<Semester>(`/api/v1/semesters/${semesterId}`),
     enabled: semesterId !== null,
   })
   const current = semester.data?.data
-  useEffect(() => {
-    if (!current) return
-    setDate((value) => clampDate(value, current.start_date, current.end_date))
-  }, [current])
-  const didMountFilters = useRef(false)
-  useEffect(() => {
-    if (!didMountFilters.current) {
-      didMountFilters.current = true
-      return
-    }
-    setPage(1)
-  }, [typeFilter, statusFilter, dateFrom, dateTo])
-  useEffect(() => {
-    setUrlParams(
-      (current) =>
-        mergeSearchParams(current, {
-          date,
-          q: dailySearch.trim() || null,
-          type: typeFilter === "all" ? null : typeFilter,
-          status: statusFilter === "all" ? null : statusFilter,
-          from: dateFrom || null,
-          to: dateTo || null,
-          page: page === 1 ? null : page,
-          per_page: pageSize === 20 ? null : pageSize,
-        }),
-      { replace: true },
-    )
-  }, [dailySearch, date, dateFrom, dateTo, page, pageSize, setUrlParams, statusFilter, typeFilter])
-
-  const dateInRange = Boolean(current && date >= current.start_date && date <= current.end_date)
-  const today = todayString()
-  const todayInSemester = Boolean(
-    current && today >= current.start_date && today <= current.end_date,
-  )
-  const daily = useQuery({
-    queryKey: ["daily-timetable", semesterId, date],
-    queryFn: () =>
-      api<DailyTimetable>(`/api/v1/semesters/${semesterId}/daily-timetable?date=${date}`),
-    enabled: semesterId !== null && dateInRange,
-  })
-  const exceptions = useQuery({
-    queryKey: [
-      "calendar-exceptions",
-      semesterId,
-      page,
-      pageSize,
-      typeFilter,
-      statusFilter,
-      dateFrom,
-      dateTo,
-    ],
-    queryFn: () => {
-      const query = new URLSearchParams({ page: String(page), per_page: String(pageSize) })
-      if (typeFilter !== "all") query.set("type", typeFilter)
-      if (statusFilter !== "all") query.set("status", statusFilter)
-      if (dateFrom) query.set("date_from", dateFrom)
-      if (dateTo) query.set("date_to", dateTo)
-      return api<CalendarException[]>(
-        `/api/v1/semesters/${semesterId}/calendar-exceptions?${query}`,
-      )
-    },
-    enabled: semesterId !== null,
-  })
+  const working = stage === "source" || Boolean(editor)
   const template = useQuery({
     queryKey: ["schedule-template", semesterId],
     queryFn: () => api<ScheduleTemplate>(`/api/v1/semesters/${semesterId}/schedule-template`),
-    enabled: semesterId !== null,
+    enabled: semesterId !== null && working,
+  })
+  const settings = useQuery({
+    queryKey: ["class-settings", semesterId, "daily-operations"],
+    queryFn: () => apiAllPages<ClassSetting>(`/api/v1/semesters/${semesterId}/class-settings`),
+    enabled: semesterId !== null && working,
   })
   const teachers = useQuery({
     queryKey: ["teachers", "all", "daily-operations"],
     queryFn: () => apiAllPages<Teacher>("/api/v1/teachers"),
+    enabled: working,
   })
   const rooms = useQuery({
     queryKey: ["rooms", "all", "daily-operations"],
     queryFn: () => apiAllPages<Room>("/api/v1/rooms"),
+    enabled: working,
   })
   const assignments = useQuery({
     queryKey: ["teaching-assignments", semesterId, "confirmed", "daily-operations"],
@@ -205,951 +151,202 @@ export function DailyAdjustmentsPage() {
       apiAllPages<TeachingAssignment>(
         `/api/v1/semesters/${semesterId}/teaching-assignments?status=confirmed`,
       ),
-    enabled: semesterId !== null,
+    enabled: semesterId !== null && editor?.form.type === "makeup",
   })
-  const pagination = paginationOf(exceptions.data?.meta)
-  const lastPage = pagination?.last_page
-  useEffect(() => {
-    if (lastPage && page > Math.max(1, lastPage)) {
-      setPage(Math.max(1, lastPage))
-    }
-  }, [lastPage, page])
-
+  const canEdit = Boolean(
+    current?.status === "open" && (user?.role === "admin" || user?.role === "scheduler"),
+  )
   const refresh = async () => {
     await Promise.all([
       client.invalidateQueries({ queryKey: ["daily-timetable", semesterId] }),
       client.invalidateQueries({ queryKey: ["calendar-exceptions", semesterId] }),
+      client.invalidateQueries({ queryKey: ["adjustment-options", semesterId] }),
       client.invalidateQueries({ queryKey: ["context"] }),
     ])
   }
-  const cancel = async (item: CalendarException) => {
-    if (!exceptions.data?.etag) return
-    try {
-      await api(`/api/v1/semesters/${semesterId}/calendar-exceptions/${item.id}/cancel`, {
-        method: "POST",
-        etag: exceptions.data.etag,
-      })
-      toast.success("临时调整已取消，指定日期已恢复基础安排")
-      await refresh()
-    } catch (error) {
-      toast.error(apiMessage(error))
+  const navigate = (next: "records" | "source") =>
+    setParams((previous) => {
+      const nextParams = new URLSearchParams(previous)
+      if (next === "records") nextParams.delete("step")
+      else nextParams.set("step", next)
+      return nextParams
+    })
+  const saveDraft = () => {
+    if (!editor || editor.published || !storeDraft(storageKey, editor)) return false
+    setDraft(editor)
+    toast.success("方案已暂存，尚未发布")
+    return true
+  }
+  const clearOwnDraft = () => {
+    if (readDraft(storageKey)?.id === editor?.id) {
+      if (storeDraft(storageKey, null)) setDraft(null)
     }
   }
-
-  if (!semesterId && !context.isLoading)
-    return (
-      <>
-        <PageHeader title="临时调课" />
-        <EmptyList title="尚未设置当前学期" description="请先设置当前开放学期。" />
-      </>
-    )
-
-  const rows = daily.data?.data.rows ?? []
-  const normalizedSearch = dailySearch.trim().toLocaleLowerCase("zh-CN")
-  const visibleRows = normalizedSearch
-    ? rows.filter((row) =>
-        [row.course_name, row.target_name, row.teacher_names.join(" "), row.room_name]
-          .join(" ")
-          .toLocaleLowerCase("zh-CN")
-          .includes(normalizedSearch),
-      )
-    : rows
-  const groupedRows = groupDailyRows(visibleRows)
-  const dateIsNormalized = Boolean(
-    current && date === clampDate(date, current.start_date, current.end_date),
-  )
-  const primaryPanelSettled =
-    semester.isError || Boolean(current && dateIsNormalized && !daily.isLoading)
+  const finishClose = () => {
+    setEditor(null)
+    setEditorBusy(false)
+    setClosePrompt(false)
+    navigate(closeDestination.current)
+  }
+  const close = (destination: "records" | "source" = "records") => {
+    if (editorBusy) return
+    closeDestination.current = destination
+    if (editor && !editor.published && hasChanges(editor)) setClosePrompt(true)
+    else finishClose()
+  }
+  const start = (source: DailyTimetableRow | null, date: string, itemId?: number) => {
+    if (!canEdit) return
+    setEditor({ id: Date.now(), source, form: newAdjustment(date, source ?? undefined, itemId) })
+  }
+  if (!semesterId && !context.isLoading) return <p className="p-6">请先选择学期。</p>
+  if (semester.isLoading || (!current && !semester.isError)) return <LoadingState />
+  if (semester.isError || !current) return <ErrorState retry={() => void semester.refetch()} />
+  const resourcesFailed =
+    [template, settings, teachers, rooms].some((query) => query.isError) ||
+    (editor?.form.type === "makeup" && assignments.isError)
+  const resourcesLoading =
+    [template, settings, teachers, rooms].some((query) => query.isLoading) ||
+    (editor?.form.type === "makeup" && assignments.isLoading)
   return (
     <>
-      <PageHeader title="临时调课" description="所有修改仅作用于指定日期，不改基础周课表。" />
-      <div className="space-y-4 p-4 md:p-7">
-        <section className="surface-panel overflow-hidden">
-          <div className="flex flex-col gap-3 border-b px-4 py-3 lg:flex-row lg:items-center">
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="outline"
-                size="icon-sm"
-                aria-label="前一天"
-                disabled={!current || date <= current.start_date}
-                onClick={() => setDate(addDays(date, -1))}
-              >
-                <ChevronLeftIcon />
-              </Button>
-              <DatePicker
-                label="查看日期"
-                surface="filter"
-                className="w-40"
-                min={current?.start_date}
-                max={current?.end_date}
-                value={date}
-                onValueChange={setDate}
-                required
-              />
-              <Button
-                variant="outline"
-                size="icon-sm"
-                aria-label="后一天"
-                disabled={!current || date >= current.end_date}
-                onClick={() => setDate(addDays(date, 1))}
-              >
-                <ChevronRightIcon />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={!current || !todayInSemester || date === today}
-                title={!todayInSemester ? "今天不在本学期日期内" : undefined}
-                onClick={() => setDate(today)}
-              >
-                今天
-              </Button>
-              <Button disabled={!daily.data} onClick={() => setEditorOpen(true)}>
-                <PlusIcon />
-                新建临时调整
-              </Button>
-              {!todayInSemester && current && (
-                <span className="text-xs text-muted-foreground">今天不在本学期日期内</span>
-              )}
-            </div>
-            <label className="relative block w-full lg:ml-auto lg:max-w-80">
-              <SearchIcon className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                surface="filter"
-                value={dailySearch}
-                onChange={(event) => setDailySearch(event.target.value)}
-                placeholder="筛选班级、课程、教师或教室"
-                aria-label="筛选实际课表"
-                className="pl-10"
-              />
-            </label>
-          </div>
-          {daily.isLoading ? (
-            <LoadingState label="正在计算该日期的实际课表…" />
-          ) : daily.isError || !daily.data ? (
-            <ErrorState retry={() => void daily.refetch()} />
-          ) : (
-            <>
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b bg-muted/30 px-4 py-3 text-sm">
-                <span className="font-medium">
-                  {dateLabel(daily.data.data.date)} · 第 {daily.data.data.week_number} 周 ·{" "}
-                  {weekdayNames[daily.data.data.weekday]}
-                </span>
-                <span className="text-muted-foreground">实际课程 {visibleRows.length} 节</span>
-                {daily.data.data.summary.temporary > 0 && (
-                  <Badge
-                    variant="outline"
-                    className="border-[var(--timetable-notice-border)] bg-[var(--timetable-notice-background)] text-[var(--timetable-notice-foreground)]"
-                  >
-                    临时变化 {daily.data.data.summary.temporary}
-                  </Badge>
-                )}
-                {daily.data.data.summary.substitutions > 0 && (
-                  <Badge
-                    variant="outline"
-                    className="border-[var(--timetable-blue-border)] bg-[var(--timetable-blue-background)] text-foreground"
-                  >
-                    代课 {daily.data.data.summary.substitutions}
-                  </Badge>
-                )}
-                <span className="ml-auto text-xs text-muted-foreground">
-                  基于“{daily.data.data.version.name}”叠加日期例外
-                </span>
-              </div>
-              {groupedRows.length === 0 ? (
-                <EmptyList
-                  title={rows.length === 0 ? "当天没有课程" : "没有匹配的课程"}
-                  description={
-                    rows.length === 0
-                      ? "该日期可能是休息日，或没有符合周次规则的课程。"
-                      : "清空筛选词后可查看当天全部课程。"
-                  }
-                />
-              ) : (
-                <div className="divide-y">
-                  {groupedRows.map((group) => (
-                    <div
-                      key={group.itemId}
-                      className="grid gap-2 px-4 py-3 md:grid-cols-[8.5rem_minmax(0,1fr)]"
-                    >
-                      <div>
-                        <p className="font-medium">{group.name}</p>
-                        <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">
-                          {shortTime(group.start)}–{shortTime(group.end)}
-                        </p>
-                      </div>
-                      <div className="grid gap-2 xl:grid-cols-2">
-                        {group.rows.map((row) => (
-                          <DailyRowCard key={row.key} row={row} />
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-        </section>
-
-        {primaryPanelSettled && (
-          <section className="surface-panel overflow-hidden">
-            <ListToolbar
-              summary={
-                <span>共 {pagination?.total ?? exceptions.data?.data.length ?? 0} 条临时调整</span>
-              }
+      <div className={adjustmentPageClass}>
+        {!working ? (
+          <>
+            <AdjustmentPageHeader
+              title="临时调课"
+              description="调整指定日期的课程，查看每次调整的执行情况。"
+              onNew={canEdit ? () => navigate("source") : undefined}
             >
-              <ToolbarSelect
-                value={typeFilter}
-                onChange={(value) => setTypeFilter(value as (typeof exceptionTypes)[number])}
-                label="调整类型"
-              >
-                <option value="all">全部类型</option>
-                {Object.entries(typeLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </ToolbarSelect>
-              <ToolbarSelect
-                value={statusFilter}
-                onChange={(value) => setStatusFilter(value as (typeof exceptionStatuses)[number])}
-                label="调整状态"
-              >
-                <option value="all">全部状态</option>
-                <option value="active">生效中</option>
-                <option value="cancelled">已取消</option>
-              </ToolbarSelect>
-              <DatePicker
-                label="开始日期"
-                surface="filter"
-                className="w-40"
-                value={dateFrom}
-                onValueChange={setDateFrom}
-              />
-              <span className="text-sm text-muted-foreground">至</span>
-              <DatePicker
-                label="结束日期"
-                surface="filter"
-                className="w-40"
-                value={dateTo}
-                onValueChange={setDateTo}
-              />
-            </ListToolbar>
-            {exceptions.isLoading ? (
-              <LoadingState />
-            ) : exceptions.isError ? (
-              <ErrorState retry={() => void exceptions.refetch()} />
-            ) : !exceptions.data?.data.length ? (
-              <EmptyList
-                title="没有匹配的临时调整"
-                description="当天无需变化时，不必创建任何记录；基础周课表会直接生效。"
-              />
-            ) : (
-              <>
-                <Table responsive>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>生效日期</TableHead>
-                      <TableHead>类型</TableHead>
-                      <TableHead>课程与对象</TableHead>
-                      <TableHead>变化</TableHead>
-                      <TableHead>原因</TableHead>
-                      <TableHead>状态</TableHead>
-                      <TableHead className="text-right">操作</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {exceptions.data.data.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell data-label="生效日期" className="whitespace-nowrap">
-                          <p className="font-medium">{dateLabel(item.effective_date)}</p>
-                          {item.replacement_date &&
-                            item.replacement_date !== item.effective_date && (
-                              <p className="mt-0.5 text-xs text-muted-foreground">
-                                调至 {dateLabel(item.replacement_date)}
-                              </p>
-                            )}
-                        </TableCell>
-                        <TableCell data-label="类型">{typeLabels[item.type]}</TableCell>
-                        <TableCell data-label="课程与对象">
-                          <p className="font-medium">
-                            {item.original_entry?.course?.name ??
-                              item.replacement_assignment?.course?.name ??
-                              item.title ??
-                              "临时安排"}
-                          </p>
-                          <p className="mt-0.5 text-xs text-muted-foreground">
-                            {entryTarget(item.original_entry) ??
-                              assignmentTarget(item.replacement_assignment) ??
-                              "—"}
-                          </p>
-                        </TableCell>
-                        <TableCell data-label="变化" className="max-w-60 text-muted-foreground">
-                          {exceptionChange(item)}
-                        </TableCell>
-                        <TableCell
-                          data-label="原因"
-                          className="max-w-64 truncate"
-                          title={item.reason}
-                        >
-                          {item.reason}
-                        </TableCell>
-                        <TableCell data-label="状态">
-                          <StatusBadge value={item.status} />
-                        </TableCell>
-                        <TableCell data-label="操作" className="text-right">
-                          {item.status === "active" ? (
-                            <Button variant="ghost" size="sm" onClick={() => void cancel(item)}>
-                              取消调整
-                            </Button>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                {pagination && (
-                  <TablePagination
-                    page={pagination.page}
-                    pageSize={pagination.per_page}
-                    totalItems={pagination.total}
-                    totalPages={pagination.last_page}
-                    onPageChange={setPage}
-                    onPageSizeChange={(value) => {
-                      setPageSize(value)
-                      setPage(1)
-                    }}
-                  />
-                )}
-              </>
-            )}
-          </section>
-        )}
-      </div>
-
-      <ExceptionEditor
-        open={editorOpen}
-        semesterId={semesterId}
-        date={date}
-        semester={current ?? null}
-        rows={rows}
-        items={template.data?.data.items ?? []}
-        teachers={teachers.data?.data ?? []}
-        rooms={rooms.data?.data ?? []}
-        assignments={assignments.data?.data ?? []}
-        etag={exceptions.data?.etag ?? daily.data?.etag ?? null}
-        onClose={() => setEditorOpen(false)}
-        onSaved={refresh}
-      />
-    </>
-  )
-}
-
-function DailyRowCard({ row }: { row: DailyTimetableRow }) {
-  const temporary = row.status !== "base"
-  const notes =
-    row.substitution_notes.length > 0
-      ? row.substitution_notes.filter((note): note is string => Boolean(note))
-      : row.note
-        ? [row.note]
-        : []
-  return (
-    <div
-      className={cn(
-        "rounded-xl border px-3 py-2.5",
-        row.is_cancelled
-          ? "border-dashed bg-muted/30 text-muted-foreground"
-          : temporary
-            ? "border-[var(--timetable-amber-border)] bg-[var(--timetable-amber-background)]"
-            : "bg-background",
-      )}
-    >
-      <div className="flex items-start gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className={cn("font-medium", row.is_cancelled && "line-through")}>
-              {row.course_name}
-            </p>
-            {temporary && (
-              <Badge variant="outline" className="bg-background/80">
-                {rowStatusLabels[row.status]}
-              </Badge>
-            )}
-          </div>
-          <p className="mt-1 truncate text-sm">{row.target_name}</p>
-          <p className="mt-1 truncate text-xs text-muted-foreground">
-            {row.teacher_names.join("、")} · {row.room_name}
-          </p>
-          {notes.length > 0 && (
-            <p className="mt-1.5 text-xs text-muted-foreground">{notes.join("；")}</p>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-type ExceptionForm = {
-  type: CalendarExceptionType
-  effective_date: string
-  replacement_date: string
-  original_entry_id: string
-  related_entry_id: string
-  replacement_assignment_id: string
-  replacement_teacher_id: string
-  replacement_room_id: string
-  replacement_item_id: string
-  title: string
-  reason: string
-}
-
-function ExceptionEditor({
-  open,
-  semesterId,
-  date,
-  semester,
-  rows,
-  items,
-  teachers,
-  rooms,
-  assignments,
-  etag,
-  onClose,
-  onSaved,
-}: {
-  open: boolean
-  semesterId: number | null
-  date: string
-  semester: Semester | null
-  rows: DailyTimetableRow[]
-  items: Item[]
-  teachers: Teacher[]
-  rooms: Room[]
-  assignments: TeachingAssignment[]
-  etag: string | null
-  onClose: () => void
-  onSaved: () => Promise<void>
-}) {
-  const [form, setForm] = useState<ExceptionForm>(() => emptyExceptionForm(date))
-  const [preview, setPreview] = useState<CalendarExceptionPreview | null>(null)
-  const [previewEtag, setPreviewEtag] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [errors, setErrors] = useState<Partial<Record<keyof ExceptionForm, string>>>({})
-
-  useEffect(() => {
-    if (!open) return
-    setForm(emptyExceptionForm(date))
-    setPreview(null)
-    setPreviewEtag(null)
-    setErrors({})
-  }, [date, open])
-
-  const update = <K extends keyof ExceptionForm>(key: K, value: ExceptionForm[K]) => {
-    setForm((current) => ({ ...current, [key]: value }))
-    setPreview(null)
-    setPreviewEtag(null)
-    setErrors((current) => ({ ...current, [key]: undefined }))
-  }
-  const availableRows = rows.filter((row) => !row.is_cancelled && row.original_entry_id !== null)
-  const selectedEntry = availableRows.find(
-    (row) => row.original_entry_id === Number(form.original_entry_id),
-  )
-  const previewReady = Boolean(
-    semesterId &&
-    form.effective_date &&
-    form.reason.trim().length >= 2 &&
-    (form.type === "makeup" || form.original_entry_id) &&
-    (form.type !== "swap" || form.related_entry_id) &&
-    (form.type !== "makeup" || form.replacement_assignment_id) &&
-    (form.type !== "teacher_change" || form.replacement_teacher_id) &&
-    (form.type !== "room_change" || form.replacement_room_id) &&
-    (form.type !== "activity" || form.title.trim()) &&
-    (!(form.type === "move" || form.type === "makeup") ||
-      (form.replacement_date && form.replacement_item_id)),
-  )
-  const submitPreview = async (event?: FormEvent) => {
-    event?.preventDefault()
-    if (!semesterId) return
-    const nextErrors = validateExceptionForm(form)
-    setErrors(nextErrors)
-    if (Object.values(nextErrors).some(Boolean)) {
-      toast.error("请先补齐标出的必填项")
-      return
-    }
-    if (!previewReady) return
-    setBusy(true)
-    try {
-      const result = await api<CalendarExceptionPreview>(
-        `/api/v1/semesters/${semesterId}/calendar-exceptions/preview`,
-        { method: "POST", body: JSON.stringify(exceptionPayload(form)) },
-      )
-      setPreview(result.data)
-      setPreviewEtag(result.etag)
-      if (!result.data.allowed) toast.warning("目标安排存在冲突，请调整后再保存")
-    } catch (error) {
-      toast.error(apiMessage(error))
-    } finally {
-      setBusy(false)
-    }
-  }
-  const save = async () => {
-    if (!semesterId || !preview?.allowed || !(previewEtag ?? etag)) return
-    setBusy(true)
-    try {
-      await api(`/api/v1/semesters/${semesterId}/calendar-exceptions`, {
-        method: "POST",
-        etag: previewEtag ?? etag,
-        body: JSON.stringify(exceptionPayload(form)),
-      })
-      toast.success("临时调整已生效，基础周课表保持不变")
-      onClose()
-      await onSaved()
-    } catch (error) {
-      toast.error(apiMessage(error))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="flex max-h-[calc(100svh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[620px]">
-        <DialogHeader className="border-b p-6 pr-16">
-          <DialogTitle>新建临时调整</DialogTitle>
-          <DialogDescription>先预览影响与冲突，再确认保存；记录只覆盖指定日期。</DialogDescription>
-        </DialogHeader>
-        <form
-          className="grid min-h-0 flex-1 gap-5 overflow-y-auto p-6"
-          onSubmit={(event) => void submitPreview(event)}
-        >
-          <div className="rounded-xl border bg-muted/30 p-3 text-sm text-muted-foreground">
-            <p className="flex items-center gap-2 font-medium text-foreground">
-              <CalendarClockIcon className="size-4 text-primary" />
-              日期例外，不修改周课表
-            </p>
-            <p className="mt-1 leading-6">取消这条记录后，该日期会立即恢复“当前课表”的原始安排。</p>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="调整类型">
-              <SimpleSelect
-                className="w-full"
-                value={form.type}
-                onValueChange={(value) => update("type", value as CalendarExceptionType)}
-              >
-                {Object.entries(typeLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </SimpleSelect>
-            </Field>
-            <Field label="生效日期">
-              <DatePicker
-                disabled
-                value={form.effective_date}
-                onValueChange={(value) => update("effective_date", value)}
-                label="生效日期"
-                className="w-full"
-                ariaDescribedBy="effective-date-help"
-              />
-              <p id="effective-date-help" className="mt-1.5 text-xs text-muted-foreground">
-                来自当前日期视图；如需调整其他日期，请先关闭面板并切换日期。
-              </p>
-            </Field>
-          </div>
-
-          {form.type !== "makeup" && (
-            <Field
-              label={form.type === "activity" ? "被活动占用的课程（必填）" : "原课程（必填）"}
-              error={errors.original_entry_id}
-            >
-              <SimpleSelect
-                required
-                invalid={Boolean(errors.original_entry_id)}
-                className="w-full"
-                value={form.original_entry_id}
-                onValueChange={(value) => update("original_entry_id", value)}
-              >
-                <option value="">请选择当天实际课程</option>
-                {availableRows.map((row) => (
-                  <option key={row.key} value={row.original_entry_id ?? ""}>
-                    {row.item_name} · {row.target_name} · {row.course_name} · {row.teacher_name}
-                  </option>
-                ))}
-              </SimpleSelect>
-            </Field>
-          )}
-
-          {form.type === "swap" && (
-            <Field label="交换目标课程（必填）" error={errors.related_entry_id}>
-              <SimpleSelect
-                required
-                invalid={Boolean(errors.related_entry_id)}
-                className="w-full"
-                value={form.related_entry_id}
-                onValueChange={(value) => update("related_entry_id", value)}
-              >
-                <option value="">请选择另一节课程</option>
-                {availableRows
-                  .filter((row) => row.original_entry_id !== selectedEntry?.original_entry_id)
-                  .map((row) => (
-                    <option key={row.key} value={row.original_entry_id ?? ""}>
-                      {row.item_name} · {row.target_name} · {row.course_name}
-                    </option>
-                  ))}
-              </SimpleSelect>
-            </Field>
-          )}
-
-          {form.type === "makeup" && (
-            <Field label="补课任课关系（必填）" error={errors.replacement_assignment_id}>
-              <AssignmentPicker
-                invalid={Boolean(errors.replacement_assignment_id)}
-                assignments={assignments}
-                requireConfirmed
-                value={form.replacement_assignment_id}
-                onValueChange={(value) => update("replacement_assignment_id", value)}
-              />
-            </Field>
-          )}
-
-          {(form.type === "move" || form.type === "makeup") && (
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="目标日期（必填）" error={errors.replacement_date}>
-                <DatePicker
-                  required
-                  invalid={Boolean(errors.replacement_date)}
-                  min={semester?.start_date}
-                  max={semester?.end_date}
-                  value={form.replacement_date}
-                  onValueChange={(value) => update("replacement_date", value)}
-                  label="目标日期"
-                  className="w-full"
-                />
-              </Field>
-              <Field label="目标课节（必填）" error={errors.replacement_item_id}>
-                <SimpleSelect
-                  required
-                  invalid={Boolean(errors.replacement_item_id)}
-                  className="w-full"
-                  value={form.replacement_item_id}
-                  onValueChange={(value) => update("replacement_item_id", value)}
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={<Button variant="ghost" size="icon-sm" aria-label="更多调课操作" />}
                 >
-                  <option value="">请选择课节</option>
-                  {items
-                    .filter((item) => item.is_active && item.allows_course)
-                    .sort((left, right) => left.sort_order - right.sort_order)
-                    .map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.name} · {shortTime(item.start_time)}–{shortTime(item.end_time)}
-                      </option>
-                    ))}
-                </SimpleSelect>
-              </Field>
-            </div>
-          )}
-
-          {form.type === "teacher_change" && (
-            <Field label="临时教师（必填）" error={errors.replacement_teacher_id}>
-              <TeacherPicker
-                invalid={Boolean(errors.replacement_teacher_id)}
-                teachers={teachers.filter(
-                  (teacher) =>
-                    teacher.id !== selectedEntry?.teacher_id &&
-                    (teacher.courses ?? []).some(
-                      (course) => course.id === selectedEntry?.course_id,
-                    ),
-                )}
-                courseId={selectedEntry?.course_id}
-                requireQualification
-                value={form.replacement_teacher_id}
-                onValueChange={(value) => update("replacement_teacher_id", value)}
+                  <MoreHorizontal />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    disabled={!canEdit}
+                    onClick={() =>
+                      start(null, clampDate(localDate(), current.start_date, current.end_date))
+                    }
+                  >
+                    安排补课
+                  </DropdownMenuItem>
+                  <DropdownMenuItem render={<Link to={`/semesters/${semesterId}/leaves`} />}>
+                    <CalendarClock />
+                    请假与代课
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </AdjustmentPageHeader>
+            {!canEdit && <p className="text-sm text-muted-foreground">当前仅可查看调整记录。</p>}
+            {draft && canEdit && (
+              <AdjustmentDraftNotice
+                description={`${draft.source ? `${draft.source.course_name} · ${draft.source.target_name}` : "补课安排"} · ${draft.form.effective_date}`}
+                onContinue={() => setEditor(draft)}
+                onDelete={() => {
+                  if (storeDraft(storageKey, null)) setDraft(null)
+                }}
               />
-            </Field>
-          )}
-
-          {form.type === "room_change" && (
-            <Field label="临时教室（必填）" error={errors.replacement_room_id}>
-              <RoomPicker
-                invalid={Boolean(errors.replacement_room_id)}
-                rooms={rooms.filter((room) => room.id !== selectedEntry?.room_id)}
-                contextDescription="选择新的教室/场地；当前使用场地已排除"
-                value={form.replacement_room_id}
-                onValueChange={(value) => update("replacement_room_id", value)}
-              />
-            </Field>
-          )}
-
-          {form.type === "activity" && (
-            <Field label="活动名称（必填）" error={errors.title}>
-              <Input
-                required
-                aria-invalid={Boolean(errors.title)}
-                maxLength={120}
-                value={form.title}
-                onChange={(event) => update("title", event.target.value)}
-                placeholder="例如：七年级体检"
-              />
-            </Field>
-          )}
-
-          <Field label="调整原因（必填）" error={errors.reason}>
-            <textarea
-              required
-              minLength={2}
-              maxLength={1000}
-              aria-invalid={Boolean(errors.reason)}
-              className={cn(
-                "min-h-24 rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-ring focus:ring-3 focus:ring-ring/20",
-                errors.reason && "border-destructive ring-3 ring-destructive/20",
-              )}
-              value={form.reason}
-              onChange={(event) => update("reason", event.target.value)}
-              placeholder="这段说明会保留在操作记录中"
-            />
-          </Field>
-
-          {preview && <ExceptionPreviewPanel preview={preview} />}
-
-          <button type="submit" className="hidden" aria-hidden="true" />
-        </form>
-        <DialogFooter className="flex-row flex-wrap justify-end border-t bg-background/95 p-6">
-          {!previewReady && (
-            <p
-              id="exception-preview-help"
-              aria-live="polite"
-              className="mr-auto w-full self-center text-xs text-muted-foreground sm:w-auto"
-            >
-              请先完整填写必填项，再预览影响。
-            </p>
-          )}
-          <Button variant="outline" onClick={onClose} disabled={busy}>
-            取消
-          </Button>
-          <Button
-            variant="outline"
-            disabled={busy || !previewReady}
-            aria-describedby={!previewReady ? "exception-preview-help" : undefined}
-            onClick={() => void submitPreview()}
-          >
-            {busy ? <RefreshCwIcon className="animate-spin" /> : <SearchIcon />}
-            {preview ? "重新检查" : "预览影响"}
-          </Button>
-          <Button disabled={busy || !preview?.allowed} onClick={() => void save()}>
-            <CheckCircle2Icon />
-            确认保存
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-function ExceptionPreviewPanel({ preview }: { preview: CalendarExceptionPreview }) {
-  return (
-    <div
-      className={cn(
-        "overflow-hidden rounded-xl border",
-        preview.allowed
-          ? "border-[var(--timetable-success-border)]"
-          : "border-[var(--timetable-rose-border)]",
-      )}
-    >
-      <div
-        className={cn(
-          "flex items-start gap-3 px-4 py-3",
-          preview.allowed
-            ? "bg-[var(--timetable-success-background)] text-foreground"
-            : "bg-[var(--timetable-rose-background)] text-foreground",
-        )}
-      >
-        {preview.allowed ? (
-          <CheckCircle2Icon className="mt-0.5 size-5 shrink-0 text-[var(--timetable-success-accent)]" />
+            )}
+            <AdjustmentHistory semesterId={semesterId!} canEdit={canEdit} onChanged={refresh} />
+          </>
         ) : (
-          <CircleXIcon className="mt-0.5 size-5 shrink-0 text-destructive" />
-        )}
-        <div>
-          <p className="font-medium">{preview.allowed ? "可以保存" : "需要先处理冲突"}</p>
-          <p className="mt-1 text-sm leading-6 opacity-80">{preview.summary}</p>
-        </div>
-      </div>
-      {preview.conflicts.length > 0 && (
-        <div className="space-y-2 border-t px-4 py-3">
-          {preview.conflicts.map((conflict, index) => (
-            <p key={`${conflict.type}-${index}`} className="flex gap-2 text-sm text-destructive">
-              <AlertTriangleIcon className="mt-0.5 size-4 shrink-0" />
-              {conflict.message}
-            </p>
-          ))}
-        </div>
-      )}
-      {preview.affected.length > 0 && (
-        <div className="border-t px-4 py-3">
-          <p className="text-xs font-semibold tracking-wide text-muted-foreground">受影响安排</p>
-          <div className="mt-2 space-y-2">
-            {preview.affected.map((item, index) => (
-              <div key={`${item.entry_id ?? "new"}-${index}`} className="text-sm">
-                <span className="font-medium">{item.target}</span>
-                <span className="text-muted-foreground">
-                  {" "}
-                  · {item.course} · {item.teacher}
-                </span>
+          <>
+            {resourcesFailed ? (
+              <ErrorState
+                retry={() => {
+                  void template.refetch()
+                  void settings.refetch()
+                  void teachers.refetch()
+                  void rooms.refetch()
+                  if (editor?.form.type === "makeup") void assignments.refetch()
+                }}
+              />
+            ) : resourcesLoading ? (
+              <LoadingState />
+            ) : editor ? (
+              <div className={adjustmentContentClass}>
+                <AdjustmentPanel
+                  key={editor.id}
+                  semester={current}
+                  source={editor.source}
+                  form={editor.form}
+                  onChange={(form) => setEditor({ ...editor, form })}
+                  items={template.data?.data.items ?? []}
+                  teachers={teachers.data?.data ?? []}
+                  rooms={rooms.data?.data ?? []}
+                  classes={
+                    settings.data?.data
+                      .filter((setting) => setting.status === "active")
+                      .map((setting) => setting.school_class) ?? []
+                  }
+                  assignments={assignments.data?.data ?? []}
+                  onClose={() => close()}
+                  onChangeSource={() => close("source")}
+                  onBusyChange={setEditorBusy}
+                  onDraft={() => {
+                    if (saveDraft()) {
+                      closeDestination.current = "records"
+                      finishClose()
+                    }
+                  }}
+                  onSaved={async () => {
+                    clearOwnDraft()
+                    setEditor((value) => (value ? { ...value, published: true } : null))
+                    await refresh()
+                  }}
+                />
               </div>
-            ))}
-          </div>
-        </div>
-      )}
-      {preview.notifications.length > 0 && (
-        <div className="flex gap-2 border-t bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
-          <BellRingIcon className="mt-0.5 size-4 shrink-0" />
-          <p>建议通知：{preview.notifications.join("、")}</p>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function emptyExceptionForm(date: string): ExceptionForm {
-  return {
-    type: "move",
-    effective_date: date,
-    replacement_date: date,
-    original_entry_id: "",
-    related_entry_id: "",
-    replacement_assignment_id: "",
-    replacement_teacher_id: "",
-    replacement_room_id: "",
-    replacement_item_id: "",
-    title: "",
-    reason: "",
-  }
-}
-
-function exceptionPayload(form: ExceptionForm) {
-  const payload: Record<string, string | number> = {
-    effective_date: form.effective_date,
-    type: form.type,
-    reason: form.reason.trim(),
-  }
-  if (form.type !== "makeup" && form.original_entry_id)
-    payload.original_entry_id = Number(form.original_entry_id)
-  if (form.type === "swap" && form.related_entry_id)
-    payload.related_entry_id = Number(form.related_entry_id)
-  if (form.type === "makeup" && form.replacement_assignment_id)
-    payload.replacement_assignment_id = Number(form.replacement_assignment_id)
-  if (form.type === "teacher_change" && form.replacement_teacher_id)
-    payload.replacement_teacher_id = Number(form.replacement_teacher_id)
-  if (form.type === "room_change" && form.replacement_room_id)
-    payload.replacement_room_id = Number(form.replacement_room_id)
-  if ((form.type === "move" || form.type === "makeup") && form.replacement_item_id) {
-    payload.replacement_date = form.replacement_date
-    payload.replacement_item_id = Number(form.replacement_item_id)
-  }
-  if (form.type === "activity") payload.title = form.title.trim()
-  return payload
-}
-
-function validateExceptionForm(form: ExceptionForm) {
-  const errors: Partial<Record<keyof ExceptionForm, string>> = {}
-  if (form.type !== "makeup" && !form.original_entry_id)
-    errors.original_entry_id = "请选择当天实际课程"
-  if (form.type === "swap" && !form.related_entry_id)
-    errors.related_entry_id = "请选择要交换的另一节课程"
-  if (form.type === "makeup" && !form.replacement_assignment_id)
-    errors.replacement_assignment_id = "请选择补课对应的任课关系"
-  if ((form.type === "move" || form.type === "makeup") && !form.replacement_date)
-    errors.replacement_date = "请选择目标日期"
-  if ((form.type === "move" || form.type === "makeup") && !form.replacement_item_id)
-    errors.replacement_item_id = "请选择目标课节"
-  if (form.type === "teacher_change" && !form.replacement_teacher_id)
-    errors.replacement_teacher_id = "请选择临时教师"
-  if (form.type === "room_change" && !form.replacement_room_id)
-    errors.replacement_room_id = "请选择临时教室"
-  if (form.type === "activity" && !form.title.trim()) errors.title = "请填写活动名称"
-  if (form.reason.trim().length < 2) errors.reason = "请填写至少 2 个字的调整原因"
-  return errors
-}
-
-function groupDailyRows(rows: DailyTimetableRow[]) {
-  const groups = new Map<
-    number,
-    { itemId: number; name: string; start: string; end: string; rows: DailyTimetableRow[] }
-  >()
-  for (const row of rows) {
-    const group = groups.get(row.item_id) ?? {
-      itemId: row.item_id,
-      name: row.item_name,
-      start: row.start_time,
-      end: row.end_time,
-      rows: [],
-    }
-    group.rows.push(row)
-    groups.set(row.item_id, group)
-  }
-  return [...groups.values()].sort((left, right) => {
-    const leftOrder = left.rows[0]?.item_sort_order ?? 0
-    const rightOrder = right.rows[0]?.item_sort_order ?? 0
-    return leftOrder - rightOrder
-  })
-}
-
-function exceptionChange(item: CalendarException) {
-  if (item.type === "move")
-    return `${item.replacement_item?.name ?? "目标课节"}${item.replacement_date && item.replacement_date !== item.effective_date ? ` · ${dateLabel(item.replacement_date)}` : ""}`
-  if (item.type === "swap") return `与 ${item.related_entry?.course?.name ?? "另一节课程"} 交换`
-  if (item.type === "teacher_change") return item.replacement_teacher?.name ?? "临时换教师"
-  if (item.type === "room_change") return item.replacement_room?.name ?? "临时换教室"
-  if (item.type === "activity") return item.title ?? "临时活动"
-  if (item.type === "makeup") return item.replacement_item?.name ?? "补课"
-  return "当日停课"
-}
-
-function entryTarget(entry?: CalendarException["original_entry"]) {
-  return entry?.school_class?.name ?? entry?.teaching_group?.name ?? null
-}
-
-function assignmentTarget(assignment?: TeachingAssignment | null) {
-  return assignment?.school_class?.name ?? assignment?.teaching_group?.name ?? null
-}
-
-function paginationOf(meta?: Record<string, unknown>): PaginationMeta | null {
-  const value = meta?.pagination
-  if (!value || typeof value !== "object") return null
-  return value as PaginationMeta
-}
-
-function todayString() {
-  const now = new Date()
-  const offset = now.getTimezoneOffset() * 60_000
-  return new Date(now.getTime() - offset).toISOString().slice(0, 10)
-}
-
-function dateParam(params: URLSearchParams, key: string, fallback: string) {
-  const value = params.get(key)
-  return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : fallback
-}
-
-function clampDate(value: string, min: string, max: string) {
-  if (value < min) return min
-  if (value > max) return max
-  return value
-}
-
-function addDays(value: string, amount: number) {
-  const date = new Date(`${value}T12:00:00`)
-  date.setDate(date.getDate() + amount)
-  const offset = date.getTimezoneOffset() * 60_000
-  return new Date(date.getTime() - offset).toISOString().slice(0, 10)
-}
-
-function shortTime(value: string) {
-  return value.slice(0, 5)
-}
-
-function dateLabel(value: string) {
-  return new Intl.DateTimeFormat("zh-CN", { month: "numeric", day: "numeric" }).format(
-    new Date(`${value.slice(0, 10)}T12:00:00`),
+            ) : (
+              <AdjustmentSourcePicker
+                semester={current}
+                classes={
+                  settings.data?.data
+                    .filter((setting) => setting.status === "active")
+                    .map((setting) => setting.school_class) ?? []
+                }
+                teachers={teachers.data?.data ?? []}
+                rooms={rooms.data?.data ?? []}
+                items={template.data?.data.items ?? []}
+                onBack={() => close()}
+                onSelect={(row) => start(row, row.date)}
+                onMakeup={(date, itemId) => start(null, date, itemId)}
+                canEdit={canEdit}
+              />
+            )}
+          </>
+        )}
+      </div>
+      <Dialog open={closePrompt} onOpenChange={setClosePrompt}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>保留这次未发布的方案？</DialogTitle>
+            <DialogDescription>暂存后可以继续处理，老师课表不会改变。</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                clearOwnDraft()
+                finishClose()
+              }}
+            >
+              放弃方案
+            </Button>
+            <Button variant="outline" onClick={() => setClosePrompt(false)}>
+              继续编辑
+            </Button>
+            <Button
+              onClick={() => {
+                if (saveDraft()) finishClose()
+              }}
+            >
+              暂存并返回
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }

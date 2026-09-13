@@ -6,7 +6,7 @@ import { apiMessage } from "@/lib/api"
 import { useAuth } from "@/lib/auth"
 
 export function LoginPage() {
-  const { login } = useAuth()
+  const { login, user } = useAuth()
   const navigate = useNavigate()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -35,7 +35,11 @@ export function LoginPage() {
 
         <section className="auth-content" aria-labelledby="login-title">
           <h1 id="login-title">教师登录</h1>
-          <p className="auth-description">使用学校分配的教师账号</p>
+          <p className="auth-description">
+            {user && user.role !== "teacher"
+              ? "当前会话是管理端账号，请使用学校分配的教师账号登录。"
+              : "使用学校分配的教师账号"}
+          </p>
 
           <form className="auth-form" onSubmit={submit}>
             <label className="field-label" htmlFor="email">

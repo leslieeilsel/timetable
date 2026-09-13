@@ -489,6 +489,33 @@ export interface CalendarException {
   replacement_room?: Room | null
   replacement_item?: Item | null
   creator?: User
+  messages?: ChangeMessageReceipt[]
+}
+
+export interface ChangeMessageReceipt {
+  id: number
+  teacher_id: number
+  name: string
+  event: "published" | "cancelled"
+  read_at: string | null
+  created_at: string
+}
+
+export interface TimetableChange {
+  before: DailyTimetableRow | null
+  after: DailyTimetableRow | null
+}
+
+export interface AdjustmentOption {
+  key: string
+  date: string
+  allowed: boolean
+  reasons: string[]
+  conflicts: CalendarExceptionPreview["conflicts"]
+  row?: DailyTimetableRow
+  item?: Pick<Item, "id" | "name" | "start_time" | "end_time">
+  teacher?: Pick<Teacher, "id" | "name">
+  payload: Record<string, string | number>
 }
 
 export interface CalendarExceptionPreview {
@@ -509,6 +536,8 @@ export interface CalendarExceptionPreview {
   }>
   notifications: string[]
   version_id: number
+  changes: TimetableChange[]
+  recipients: Pick<Teacher, "id" | "name" | "employee_no">[]
 }
 
 export interface TeacherLeave {

@@ -2,6 +2,7 @@
 
 namespace App\Modules\Timetable\Services;
 
+use App\Enums\CalendarExceptionType;
 use App\Enums\OperationalStatus;
 use App\Models\User;
 use App\Modules\AcademicCalendar\Models\Semester;
@@ -141,7 +142,9 @@ class TimetableEffectivePeriodService
                 && $effectiveDate <= $to->toDateString();
             if ($effectiveIsInside && $exception->timetable_version_id !== $version->id) {
                 $exception->original_entry_id = $this->mappedEntryId($version, $exception->original_entry_id);
-                $exception->related_entry_id = $this->mappedEntryId($version, $exception->related_entry_id);
+                if ($exception->type !== CalendarExceptionType::Swap || $replacementDate === null || $replacementDate === $effectiveDate) {
+                    $exception->related_entry_id = $this->mappedEntryId($version, $exception->related_entry_id);
+                }
                 $exception->timetable_version_id = $version->id;
                 $exception->save();
                 $rebasedExceptions++;
@@ -152,6 +155,10 @@ class TimetableEffectivePeriodService
             $replacementIsInside = $replacementDate !== null
                 && $replacementDate >= $from->toDateString()
                 && $replacementDate <= $to->toDateString();
+            if ($replacementIsInside && $exception->type === CalendarExceptionType::Swap) {
+                $exception->related_entry_id = $this->mappedEntryId($version, $exception->related_entry_id);
+                $exception->save();
+            }
             // Rebinding the source can change the moved lesson outside this period too.
             if ($replacementDate !== null && ($effectiveIsInside || $replacementIsInside)) {
                 $affectedDates[] = $replacementDate;

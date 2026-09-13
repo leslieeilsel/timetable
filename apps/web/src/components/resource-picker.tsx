@@ -635,18 +635,21 @@ export function TeacherPicker({
   teachers,
   courseId,
   requireQualification = false,
+  disabledReasons,
   ...props
 }: CommonPickerProps & {
   teachers: Teacher[]
   courseId?: number | null
   requireQualification?: boolean
+  disabledReasons?: Record<number, string>
 }) {
   const byId = new Map(teachers.map((teacher) => [String(teacher.id), teacher]))
   const items = teachers.map<ResourcePickerItem>((teacher) => {
     const qualificationKnown = Array.isArray(teacher.courses)
     const qualified =
       !courseId || !qualificationKnown || teacher.courses?.some((course) => course.id === courseId)
-    const disabled = !teacher.is_active || (requireQualification && !qualified)
+    const reason = disabledReasons?.[teacher.id]
+    const disabled = !teacher.is_active || (requireQualification && !qualified) || Boolean(reason)
     return {
       value: String(teacher.id),
       label: teacher.name,
@@ -658,9 +661,17 @@ export function TeacherPicker({
         ? "教师已停用"
         : requireQualification && !qualified
           ? "未标记当前课程任教资格"
-          : undefined,
-      status: !teacher.is_active ? "已停用" : qualified ? "可选" : "未标记任教资格",
-      statusTone: !teacher.is_active ? "muted" : qualified ? "success" : "warning",
+          : reason,
+      status: !teacher.is_active
+        ? "已停用"
+        : requireQualification && !qualified
+          ? "未标记任教资格"
+          : reason
+            ? "当前安排不可选"
+            : qualified
+              ? "可选"
+              : "未标记任教资格",
+      statusTone: !teacher.is_active ? "muted" : reason || !qualified ? "warning" : "success",
     }
   })
   const courseMap = new Map<number, Course>()

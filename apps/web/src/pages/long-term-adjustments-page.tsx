@@ -1,466 +1,734 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { Link } from "react-router"
-import {
-  ArrowRightIcon,
-  CalendarRangeIcon,
-  CheckCircle2Icon,
-  FilePenLineIcon,
-  PlusIcon,
-} from "lucide-react"
+import { CheckCircle2Icon } from "lucide-react"
 import { toast } from "sonner"
-import { EmptyList, ErrorState, Field, LoadingState, PageHeader } from "@/components/page"
-import { SimpleSelect } from "@/components/simple-select"
-import { StatusBadge } from "@/components/status-badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { api, apiAllPages, apiMessage } from "@/lib/api"
-import { semesterPath, useResolvedSemesterId } from "@/lib/semester"
-import type { Semester, TimetableEffectivePeriod, TimetableVersion } from "@/lib/types"
+import { Checkbox } from "@/components/ui/checkbox"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { DatePicker } from "@/components/date-picker"
+import {
+  AdjustmentPageHeader,
+  AdjustmentStepHeader,
+  AdjustmentDraftNotice,
+  AdjustmentFooter,
+  AdjustmentObjectPicker,
+  adjustmentPageClass,
+  adjustmentContentClass,
+} from "@/components/adjustments/workbench"
+import { WeeklyLessonPicker } from "@/components/long-term-changes/lesson-picker"
+import { SimpleSelect } from "@/components/simple-select"
+import { ErrorState, LoadingState } from "@/components/page"
+import { LongTermEditor } from "@/components/long-term-changes/editor"
+import { LongTermHistory } from "@/components/long-term-changes/history"
+import { WeeklyComparison } from "@/components/long-term-changes/comparison"
+import { api, apiAllPages, apiMessage, ApiError, type ApiResult } from "@/lib/api"
+import { useAuth } from "@/lib/auth"
+import { useResolvedSemesterId } from "@/lib/semester"
+import {
+  applyOperations,
+  arrangement,
+  changedEntries,
+  changeFields,
+  defaultStart,
+  localDate,
+  matchesObject,
+} from "@/lib/long-term-changes"
+import type {
+  ChangeOperation,
+  LongTermEntry,
+  LongTermPreview,
+  LongTermSource,
+  LongTermSelection,
+} from "@/lib/long-term-changes"
+import type { Room, SchoolClass, Semester, Teacher } from "@/lib/types"
 
-interface LongTermPreview {
-  allowed: boolean
-  version: TimetableVersion
-  effective_from: string
-  effective_to: string
-  replaced_periods: Array<{
-    id: number
-    version_id: number
-    effective_from: string
-    effective_to: string
-  }>
-  calendar_exceptions_to_rebase: number
-  cross_period_exceptions_to_validate: number
-  substitutions_to_rebase: number
-  summary: string
+interface SavedDraft {
+  id: string
+  view: string
+  resourceId: string
+  from: string
+  to: string
+  reason: string
+  notify: boolean
+  operations: ChangeOperation[]
+  originals: LongTermEntry[]
+  selection?: Omit<LongTermSelection, "entryId"> & { entryKey: string }
 }
-
+function readDraft(key: string): SavedDraft | null {
+  try {
+    const value = JSON.parse(localStorage.getItem(key) ?? "null")
+    return value &&
+      Array.isArray(value.operations) &&
+      Array.isArray(value.originals) &&
+      typeof value.from === "string"
+      ? { ...value, id: typeof value.id === "string" ? value.id : String(Date.now()) }
+      : null
+  } catch {
+    return null
+  }
+}
 export function LongTermAdjustmentsPage() {
   const { semesterId, context } = useResolvedSemesterId()
-  const client = useQueryClient()
-  const [baseVersionId, setBaseVersionId] = useState("")
-  const [draftName, setDraftName] = useState("")
-  const [draftVersionId, setDraftVersionId] = useState("")
-  const [effectiveFrom, setEffectiveFrom] = useState("")
-  const [effectiveTo, setEffectiveTo] = useState("")
-  const [reason, setReason] = useState("")
-  const [preview, setPreview] = useState<LongTermPreview | null>(null)
-  const [creating, setCreating] = useState(false)
-  const [previewing, setPreviewing] = useState(false)
-  const [publishing, setPublishing] = useState(false)
-
+  const { user } = useAuth()
   const semester = useQuery({
     queryKey: ["semester", semesterId],
     queryFn: () => api<Semester>(`/api/v1/semesters/${semesterId}`),
     enabled: semesterId !== null,
   })
-  const versions = useQuery({
-    queryKey: ["timetable-versions", semesterId],
-    queryFn: () =>
-      apiAllPages<TimetableVersion>(`/api/v1/semesters/${semesterId}/timetable-versions`),
-    enabled: semesterId !== null,
-  })
-  const periods = useQuery({
-    queryKey: ["long-term-adjustments", semesterId],
-    queryFn: () =>
-      api<TimetableEffectivePeriod[]>(`/api/v1/semesters/${semesterId}/long-term-adjustments`),
-    enabled: semesterId !== null,
-  })
-
-  const allVersions = useMemo(() => versions.data?.data ?? [], [versions.data?.data])
-  const sourceVersions = useMemo(
-    () => allVersions.filter((version) => version.status !== "draft"),
-    [allVersions],
-  )
-  const draftVersions = useMemo(
-    () => allVersions.filter((version) => version.status === "draft"),
-    [allVersions],
-  )
-  const selectedDraft = draftVersions.find((version) => String(version.id) === draftVersionId)
-
-  useEffect(() => {
-    const currentId = semester.data?.data.current_timetable_version_id
-    if (!baseVersionId && currentId) setBaseVersionId(String(currentId))
-  }, [baseVersionId, semester.data?.data.current_timetable_version_id])
-  useEffect(() => {
-    if (creating || versions.isFetching) return
-    if (!draftVersions.some((version) => String(version.id) === draftVersionId)) {
-      setDraftVersionId(draftVersions[0] ? String(draftVersions[0].id) : "")
-    }
-  }, [creating, draftVersionId, draftVersions, versions.isFetching])
-  useEffect(() => {
-    const current = semester.data?.data
-    if (!current) return
-    if (!effectiveFrom) setEffectiveFrom(dateWithinSemester(current))
-    if (!effectiveTo) setEffectiveTo(current.end_date)
-  }, [effectiveFrom, effectiveTo, semester.data?.data])
-  useEffect(() => setPreview(null), [draftVersionId, effectiveFrom, effectiveTo, reason])
-
-  if (semesterId === null) {
-    if (context.isLoading) return <LoadingState label="正在载入学期…" />
-    return (
-      <>
-        <PageHeader title="长期调课" />
-        <EmptyList title="尚未设置当前学期" description="请先设置当前开放学期。" />
-      </>
-    )
-  }
-  if (semester.isLoading || versions.isLoading || periods.isLoading) return <LoadingState />
-  if (semester.isError || versions.isError || periods.isError || !semester.data) {
-    return (
-      <ErrorState
-        retry={() => {
-          void semester.refetch()
-          void versions.refetch()
-          void periods.refetch()
-        }}
-      />
-    )
-  }
-
-  const current = semester.data.data
-  const canChange = current.status === "open"
-  const mutationEtag = periods.data?.etag ?? versions.data?.etag ?? semester.data.etag
-
-  const createDraft = async () => {
-    if (!mutationEtag || !baseVersionId) return
-    setCreating(true)
-    try {
-      const result = await api<TimetableVersion>(
-        `/api/v1/semesters/${semesterId}/timetable-versions`,
-        {
-          method: "POST",
-          etag: mutationEtag,
-          body: JSON.stringify({
-            base_version_id: Number(baseVersionId),
-            name: draftName.trim() || `长期调课草稿 · ${effectiveFrom || current.start_date}`,
-          }),
-        },
-      )
-      setDraftVersionId(String(result.data.id))
-      setDraftName("")
-      toast.success("长期调课草稿已创建，可进入课表工作台编辑")
-      await Promise.all([
-        client.invalidateQueries({ queryKey: ["semester", semesterId] }),
-        client.invalidateQueries({ queryKey: ["timetable-versions", semesterId] }),
-        client.invalidateQueries({ queryKey: ["long-term-adjustments", semesterId] }),
-      ])
-    } catch (error) {
-      toast.error(apiMessage(error))
-    } finally {
-      setCreating(false)
-    }
-  }
-
-  const previewPublish = async () => {
-    if (!draftVersionId || !effectiveFrom || !effectiveTo || !reason.trim()) return
-    setPreviewing(true)
-    try {
-      const result = await api<LongTermPreview>(
-        `/api/v1/semesters/${semesterId}/long-term-adjustments/preview`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            version_id: Number(draftVersionId),
-            effective_from: effectiveFrom,
-            effective_to: effectiveTo,
-            reason: reason.trim(),
-          }),
-        },
-      )
-      setPreview(result.data)
-    } catch (error) {
-      toast.error(apiMessage(error))
-    } finally {
-      setPreviewing(false)
-    }
-  }
-
-  const publish = async () => {
-    if (!preview || !mutationEtag) return
-    setPublishing(true)
-    try {
-      await api<TimetableEffectivePeriod>(`/api/v1/semesters/${semesterId}/long-term-adjustments`, {
-        method: "POST",
-        etag: mutationEtag,
-        body: JSON.stringify({
-          version_id: Number(draftVersionId),
-          effective_from: effectiveFrom,
-          effective_to: effectiveTo,
-          reason: reason.trim(),
-        }),
-      })
-      toast.success("长期调课已发布，指定日期区间将使用新课表")
-      setPreview(null)
-      setReason("")
-      setDraftVersionId("")
-      await Promise.all([
-        client.invalidateQueries({ queryKey: ["semester", semesterId] }),
-        client.invalidateQueries({ queryKey: ["timetable-versions", semesterId] }),
-        client.invalidateQueries({ queryKey: ["long-term-adjustments", semesterId] }),
-        client.invalidateQueries({ queryKey: ["daily-timetable"] }),
-      ])
-    } catch (error) {
-      toast.error(apiMessage(error))
-    } finally {
-      setPublishing(false)
-    }
-  }
-
+  if (semesterId === null)
+    return context.isLoading ? <LoadingState /> : <div className="p-7">请先设置当前学期。</div>
+  if (semester.isLoading) return <LoadingState />
+  if (semester.isError || !semester.data)
+    return <ErrorState retry={() => void semester.refetch()} />
   return (
-    <>
-      <PageHeader
-        title={`${current.name} · 长期调课`}
-        description="按日期区间发布新的基础课表，区间外继续使用原课表。"
-      />
-      <div className="space-y-5 p-4 md:p-7">
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <CalendarRangeIcon className="size-4 text-primary" />
-                生效时间线
-              </CardTitle>
-              <CardDescription>教师课表和每日课表会按日期自动选用这里的基础版本。</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {periods.data?.data.length ? (
-                <div className="space-y-2">
-                  {periods.data.data.map((period) => (
-                    <div
-                      key={period.id}
-                      className="grid gap-3 rounded-2xl border bg-background/70 p-4 sm:grid-cols-[150px_1fr_auto] sm:items-center"
-                    >
-                      <div className="font-medium tabular-nums">
-                        {formatDate(period.effective_from)}
-                        <ArrowRightIcon className="mx-1 inline size-3.5 text-muted-foreground" />
-                        {formatDate(period.effective_to)}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="truncate font-medium">
-                          v{period.timetable_version.version_no} · {period.timetable_version.name}
-                        </p>
-                        <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                          {period.reason} · {period.creator.name}
-                        </p>
-                      </div>
-                      <StatusBadge value={period.timetable_version.status} />
-                    </div>
-                  ))}
+    <LongTermWorkbench
+      key={`${semesterId}:${user?.id}`}
+      semester={semester.data.data}
+      userId={user?.id ?? 0}
+      canEdit={Boolean(
+        user && ["admin", "scheduler"].includes(user.role) && semester.data.data.status === "open",
+      )}
+    />
+  )
+}
+function LongTermWorkbench({
+  semester,
+  userId,
+  canEdit,
+}: {
+  semester: Semester
+  userId: number
+  canEdit: boolean
+}) {
+  const client = useQueryClient()
+  const draftKey = `long-term-changes:${userId}:${semester.id}:draft`
+  const [saved, setSaved] = useState<SavedDraft | null>(() => readDraft(draftKey))
+  const draftId = useRef(String(Date.now()))
+  const [step, setStep] = useState(0)
+  const [view, setView] = useState("teacher")
+  const [selection, setSelection] = useState<LongTermSelection>({
+    entryId: 0,
+    scope: "entry",
+    action: "swap",
+  })
+  const [resourceId, setResourceId] = useState("")
+  const [from, setFrom] = useState(() => defaultStart(semester))
+  const [to, setTo] = useState(semester.end_date)
+  const [customEnd, setCustomEnd] = useState(false)
+  const [reason, setReason] = useState("")
+  const [notify, setNotify] = useState(true)
+  const [operations, setOperations] = useState<ChangeOperation[]>([])
+  const [source, setSource] = useState<ApiResult<LongTermSource> | null>(null)
+  const [preview, setPreview] = useState<ApiResult<LongTermPreview> | null>(null)
+  const [busy, setBusy] = useState(false)
+  const publishing = useRef(false)
+  const [error, setError] = useState("")
+  const [details, setDetails] = useState<string[]>([])
+  const [leave, setLeave] = useState<"home" | "scope" | "new" | null>(null)
+  const [result, setResult] = useState<LongTermPreview | null>(null)
+  const [draftWarning, setDraftWarning] = useState(false)
+  const resources = useQuery({
+    queryKey: ["long-term-resources", semester.id],
+    enabled: step > 0,
+    queryFn: async () => {
+      const [teachers, rooms, classes] = await Promise.all([
+        apiAllPages<Teacher>("/api/v1/teachers"),
+        apiAllPages<Room>("/api/v1/rooms"),
+        apiAllPages<SchoolClass>(`/api/v1/academic-years/${semester.academic_year_id}/classes`),
+      ])
+      return { teachers: teachers.data, rooms: rooms.data, classes: classes.data }
+    },
+  })
+  const data = resources.data ?? { teachers: [], rooms: [], classes: [] }
+  const resourceName =
+    (view === "class" ? data.classes : view === "teacher" ? data.teachers : data.rooms).find(
+      (item) => String(item.id) === resourceId,
+    )?.name ?? "已选对象"
+  const edited = useMemo(
+    () => (source ? applyOperations(source.data.entries, operations) : []),
+    [source, operations],
+  )
+  const patches = useMemo(
+    () => (source ? changedEntries(source.data.entries, edited) : []),
+    [source, edited],
+  )
+  const today = source?.data.today ?? localDate()
+  const minDate = today > semester.start_date ? today : semester.start_date
+  const availableSource = useQuery({
+    queryKey: ["long-term-source", semester.id, from],
+    enabled:
+      step === 1 && Boolean(resourceId) && from >= minDate && from <= to && to <= semester.end_date,
+    queryFn: () =>
+      api<LongTermSource>(`/api/v1/semesters/${semester.id}/long-term-changes/source?date=${from}`),
+  })
+  const setStart = (value: string) => {
+    setFrom(value)
+    if (to < value) setTo(value)
+  }
+  const selectCourse = (entry: LongTermEntry, scope: LongTermSelection["scope"] = "entry") => {
+    if (!availableSource.data) return
+    setSource(availableSource.data)
+    setSelection({ entryId: entry.id, scope, action: scope === "assignment" ? "teacher" : "swap" })
+    setOperations([])
+    setPreview(null)
+    setStep(2)
+    clearError()
+  }
+  const clearError = () => {
+    setError("")
+    setDetails([])
+  }
+  const setCaught = (caught: unknown) => {
+    setError(apiMessage(caught))
+    setDetails([])
+    if (caught instanceof ApiError) {
+      const conflicts = caught.details.hard_conflicts
+      if (Array.isArray(conflicts))
+        setDetails([
+          ...new Set(
+            conflicts
+              .map((conflict) => (typeof conflict?.message === "string" ? conflict.message : ""))
+              .filter(Boolean),
+          ),
+        ])
+    }
+  }
+  useEffect(() => {
+    if (!source) return
+    if (!patches.length) {
+      if (readDraft(draftKey)?.id === draftId.current) {
+        try {
+          localStorage.removeItem(draftKey)
+          setSaved(null)
+        } catch {
+          setDraftWarning(true)
+        }
+      }
+      return
+    }
+    const draft: SavedDraft = {
+      id: draftId.current,
+      view,
+      resourceId,
+      from,
+      to,
+      reason,
+      notify,
+      operations,
+      selection: {
+        entryKey:
+          source.data.entries.find((entry) => entry.id === selection.entryId)?.entry_key ?? "",
+        scope: selection.scope,
+        action: selection.action,
+      },
+      originals: source.data.entries.filter((entry) =>
+        operations.some((operation) => entry.id in operation.updates),
+      ),
+    }
+    try {
+      localStorage.setItem(draftKey, JSON.stringify(draft))
+      setSaved(draft)
+      setDraftWarning(false)
+    } catch {
+      setDraftWarning(true)
+    }
+  }, [
+    source,
+    patches.length,
+    view,
+    resourceId,
+    from,
+    to,
+    reason,
+    notify,
+    operations,
+    draftKey,
+    selection,
+  ])
+  useEffect(() => {
+    if (!patches.length) return
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+    }
+    window.addEventListener("beforeunload", beforeUnload)
+    return () => window.removeEventListener("beforeunload", beforeUnload)
+  }, [patches.length])
+  const loadSource = async (draft?: SavedDraft) => {
+    if (busy) return
+    setBusy(true)
+    clearError()
+    try {
+      const start = draft?.from ?? from
+      const value = await api<LongTermSource>(
+        `/api/v1/semesters/${semester.id}/long-term-changes/source?date=${start}`,
+      )
+      let restored: ChangeOperation[] = []
+      if (draft) {
+        const ids = new Map<number, number>()
+        for (const original of draft.originals) {
+          const current = value.data.entries.find((entry) => entry.entry_key === original.entry_key)
+          if (!current || changeFields.some((field) => current[field] !== original[field]))
+            throw new Error("草稿涉及的课程已经变化，请重新选择课程。原草稿仍保留。")
+          ids.set(original.id, current.id)
+        }
+        restored = draft.operations.map((operation) => ({
+          ...operation,
+          updates: Object.fromEntries(
+            Object.entries(operation.updates).map(([id, fields]) => [ids.get(Number(id))!, fields]),
+          ),
+        }))
+        setView(draft.view)
+        setResourceId(draft.resourceId)
+        setFrom(draft.from)
+        setTo(draft.to)
+        setCustomEnd(draft.to !== semester.end_date)
+        setReason(draft.reason)
+        setNotify(draft.notify)
+        draftId.current = draft.id
+      }
+      setSource(value)
+      setOperations(restored)
+      setSelection({
+        entryId:
+          value.data.entries.find((entry) => entry.entry_key === draft?.selection?.entryKey)?.id ??
+          (Number(Object.keys(restored.at(-1)?.updates ?? {})[0]) ||
+            value.data.entries[0]?.id ||
+            0),
+        scope: draft?.selection?.scope === "assignment" ? "assignment" : "entry",
+        action:
+          draft?.selection && ["swap", "move", "teacher", "room"].includes(draft.selection.action)
+            ? draft.selection.action
+            : "swap",
+      })
+      setPreview(null)
+      setStep(2)
+    } catch (caught) {
+      setCaught(caught)
+    } finally {
+      setBusy(false)
+    }
+  }
+  const startNew = () => {
+    draftId.current = String(Date.now())
+    setLeave(null)
+    setStep(1)
+    setSource(null)
+    setOperations([])
+    setPreview(null)
+    setResult(null)
+    setReason("")
+    clearError()
+  }
+  const exit = () => {
+    setStep(0)
+    setSource(null)
+    setOperations([])
+    setPreview(null)
+    setLeave(null)
+    clearError()
+  }
+  const changeScope = () => {
+    draftId.current = String(Date.now())
+    setSource(null)
+    setOperations([])
+    setPreview(null)
+    setStep(1)
+    setLeave(null)
+    clearError()
+  }
+  const publish = async (confirm: boolean) => {
+    if (publishing.current || !source || !patches.length || !reason.trim()) return
+    publishing.current = true
+    setBusy(true)
+    clearError()
+    try {
+      const value = await api<LongTermPreview>(
+        `/api/v1/semesters/${semester.id}/long-term-changes${confirm ? "" : "/preview"}`,
+        {
+          method: "POST",
+          etag: confirm ? preview?.etag : source.etag,
+          body: JSON.stringify({
+            source_version_id: source.data.version_id,
+            effective_from: from,
+            effective_to: to,
+            reason: reason.trim(),
+            notify_teachers: notify,
+            changes: patches,
+          }),
+        },
+      )
+      if (confirm) {
+        try {
+          localStorage.removeItem(draftKey)
+        } catch {
+          setDraftWarning(true)
+        }
+        setSaved(null)
+        setResult(value.data)
+        setSource(null)
+        setOperations([])
+        setPreview(null)
+        setStep(4)
+        await client.invalidateQueries({ predicate: (query) => query.queryKey[0] !== "me" })
+      } else {
+        setPreview(value)
+        setStep(3)
+      }
+    } catch (caught) {
+      setCaught(caught)
+    } finally {
+      publishing.current = false
+      setBusy(false)
+    }
+  }
+  const saveAndExit = () => {
+    if (!patches.length) return toast.info("请先设置新安排")
+    if (draftWarning) return toast.error("浏览器暂存失败，请保持页面打开")
+    toast.success("草稿已暂存，尚未发布")
+    exit()
+  }
+  return (
+    <div className={adjustmentPageClass}>
+      <div className={step === 0 ? "space-y-4" : adjustmentContentClass}>
+        {step === 0 ? (
+          <AdjustmentPageHeader
+            title="长期调课"
+            description="调整生效期间的每周课程，查看每次调整的执行情况。"
+            onNew={canEdit ? () => (saved ? setLeave("new") : startNew()) : undefined}
+          />
+        ) : (
+          <AdjustmentStepHeader
+            step={step}
+            description={`长期调课 · ${from} 至 ${to}，按周执行。`}
+            onBack={step < 4 ? () => (patches.length ? setLeave("home") : exit()) : undefined}
+            busy={busy}
+          />
+        )}
+        {error && (
+          <div
+            role="alert"
+            className="space-y-2 rounded-lg border border-destructive/25 bg-destructive/5 p-4 text-sm"
+          >
+            <p className="font-medium text-destructive">{error}</p>
+            {details.length > 0 && (
+              <ul className="list-disc space-y-1 pl-5">
+                {details.map((detail) => (
+                  <li key={detail}>{detail}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+        {step === 0 && (
+          <>
+            {saved && canEdit && (
+              <AdjustmentDraftNotice
+                description={`${saved.from} 至 ${saved.to} · ${saved.operations.length} 次修改`}
+                busy={busy}
+                onContinue={() => void loadSource(saved)}
+                onDelete={() => {
+                  try {
+                    localStorage.removeItem(draftKey)
+                    setSaved(null)
+                  } catch {
+                    toast.error("删除草稿失败，请保持页面打开")
+                  }
+                }}
+              />
+            )}
+            <LongTermHistory semesterId={semester.id} canEdit={canEdit} />
+          </>
+        )}
+        {step > 0 && step < 4 && !canEdit && (
+          <p role="alert" className="text-destructive">
+            当前账号或学期只允许查看，不能发布调整。
+          </p>
+        )}
+        {step === 1 && (
+          <div className="space-y-5 rounded-xl border bg-card p-5 lg:p-7">
+            {resources.isError ? (
+              <ErrorState retry={() => void resources.refetch()} />
+            ) : resources.isLoading ? (
+              <LoadingState label="正在载入选择器…" />
+            ) : (
+              <>
+                <div
+                  className={`flex flex-wrap items-center gap-3 ${resourceId ? "border-b pb-5" : ""}`}
+                >
+                  <AdjustmentObjectPicker
+                    kind={view}
+                    resource={resourceId}
+                    onChange={(kind, id) => {
+                      setView(kind)
+                      setResourceId(id)
+                    }}
+                    classes={data.classes}
+                    teachers={data.teachers}
+                    rooms={data.rooms}
+                  />
+                  <span className="text-xs text-muted-foreground">从</span>
+                  <DatePicker
+                    label="开始生效日期"
+                    value={from}
+                    min={minDate}
+                    max={semester.end_date}
+                    required
+                    onValueChange={setStart}
+                  />
+                  <SimpleSelect
+                    label="调整持续时间"
+                    value={customEnd ? "custom" : "semester"}
+                    onValueChange={(value) => {
+                      setCustomEnd(value === "custom")
+                      if (value === "semester") setTo(semester.end_date)
+                    }}
+                  >
+                    <option value="semester">至学期结束</option>
+                    <option value="custom">指定结束日期</option>
+                  </SimpleSelect>
+                  {customEnd && (
+                    <DatePicker
+                      label="结束生效日期"
+                      value={to}
+                      min={from}
+                      max={semester.end_date}
+                      required
+                      onValueChange={setTo}
+                    />
+                  )}
                 </div>
+                {from < minDate || from > to || to > semester.end_date ? (
+                  <p role="alert" className="text-sm text-destructive">
+                    请选择本学期内、从今天或未来开始的有效日期范围。
+                  </p>
+                ) : !resourceId ? null : availableSource.isFetching ? (
+                  <LoadingState label="正在查找每周课程…" />
+                ) : availableSource.isError ? (
+                  <ErrorState retry={() => void availableSource.refetch()} />
+                ) : (
+                  availableSource.data && (
+                    <WeeklyLessonPicker
+                      key={`${view}:${resourceId}:${from}`}
+                      source={availableSource.data.data}
+                      entries={availableSource.data.data.entries.filter((entry) =>
+                        matchesObject(entry, view, resourceId),
+                      )}
+                      teachers={data.teachers}
+                      rooms={data.rooms}
+                      label={resourceName}
+                      onSelect={canEdit ? (entry) => selectCourse(entry) : undefined}
+                      onSelectAssignment={
+                        canEdit ? (entry) => selectCourse(entry, "assignment") : undefined
+                      }
+                    />
+                  )
+                )}
+              </>
+            )}
+          </div>
+        )}
+        {(step === 2 || step === 3) && source && (
+          <div hidden={step !== 2} className="space-y-4">
+            <fieldset disabled={busy} className="min-w-0 space-y-4">
+              {resources.isLoading ? (
+                <LoadingState />
+              ) : resources.isError ? (
+                <ErrorState retry={() => void resources.refetch()} />
               ) : (
-                <EmptyList
-                  title="还没有生效区间"
-                  description="首次发布正式课表或长期调课后，会在这里形成时间线。"
-                />
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <PlusIcon className="size-4 text-primary" />
-                1. 创建调整草稿
-              </CardTitle>
-              <CardDescription>复制一份既有课表作为起点；草稿与原课表相互独立。</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Field label="基于课表版本">
-                <SimpleSelect
-                  className="w-full"
-                  value={baseVersionId}
-                  onValueChange={setBaseVersionId}
-                  disabled={!sourceVersions.length}
-                >
-                  {sourceVersions.map((version) => (
-                    <option key={version.id} value={String(version.id)}>
-                      v{version.version_no} · {version.name}
-                      {version.id === current.current_timetable_version_id ? "（当前）" : ""}
-                    </option>
-                  ))}
-                </SimpleSelect>
-              </Field>
-              <Field label="草稿名称">
-                <Input
-                  value={draftName}
-                  onChange={(event) => setDraftName(event.target.value)}
-                  placeholder="例如：国庆后执行的新课表"
-                />
-              </Field>
-              <Button
-                className="w-full"
-                disabled={!canChange || !baseVersionId || creating}
-                onClick={() => void createDraft()}
-              >
-                <PlusIcon />
-                {creating ? "正在创建…" : "创建独立草稿"}
-              </Button>
-              {!sourceVersions.length && (
-                <p className="text-xs text-amber-700">请先生成并发布一份正式课表。</p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FilePenLineIcon className="size-4 text-primary" />
-              2. 编辑并发布
-            </CardTitle>
-            <CardDescription>
-              临时调课仍按单日或短期处理；这里用于替换连续日期区间的基础课表。
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.8fr)]">
-            <div className="space-y-4">
-              <Field label="调整草稿">
-                <SimpleSelect
-                  className="w-full"
-                  value={draftVersionId}
-                  onValueChange={setDraftVersionId}
-                  disabled={!draftVersions.length}
-                >
-                  {draftVersions.map((version) => (
-                    <option key={version.id} value={String(version.id)}>
-                      v{version.version_no} · {version.name}（{version.entries_count ?? 0} 项）
-                    </option>
-                  ))}
-                </SimpleSelect>
-              </Field>
-              {selectedDraft && (
-                <Button
-                  variant="outline"
-                  render={
-                    <Link
-                      to={`${semesterPath(semesterId, "timetable")}?version=${selectedDraft.id}`}
+                <LongTermEditor
+                  classes={data.classes}
+                  scopeDescription={`${from} 至 ${to}`}
+                  footer={
+                    <AdjustmentFooter
+                      onBack={() => (patches.length ? setLeave("scope") : changeScope())}
+                      backLabel="上一步：选择课程"
+                      onDraft={saveAndExit}
+                      onPrimary={() => void publish(false)}
+                      primaryLabel="下一步：核对"
+                      busy={busy}
+                      disabled={!canEdit || !patches.length || reason.trim().length < 2}
+                      hint={
+                        draftWarning ? (
+                          <span className="text-destructive">浏览器暂存失败，请保持页面打开</span>
+                        ) : !patches.length ? (
+                          "请先填写新的安排"
+                        ) : reason.trim().length < 2 ? (
+                          "请填写调整原因（至少 2 字）"
+                        ) : (
+                          "下一步检查冲突并核对调整结果"
+                        )
+                      }
                     />
                   }
+                  source={source.data}
+                  selection={selection}
+                  onSelection={setSelection}
+                  semester={semester}
+                  view={view}
+                  resourceId={resourceId}
+                  resourceName={resourceName}
+                  teachers={data.teachers}
+                  rooms={data.rooms}
+                  operations={operations}
+                  onOperations={(value) => {
+                    setOperations(value)
+                    setPreview(null)
+                    clearError()
+                  }}
                 >
-                  <FilePenLineIcon />
-                  在课表工作台编辑此草稿
-                </Button>
+                  <label className="block text-sm">
+                    <span className="mb-2 block font-medium">
+                      调整原因 <span className="font-normal text-muted-foreground">（必填）</span>
+                    </span>
+                    <Textarea
+                      aria-label="调整原因"
+                      required
+                      value={reason}
+                      onChange={(event) => {
+                        setReason(event.target.value)
+                        setPreview(null)
+                      }}
+                      placeholder="例如：任课老师调整、固定教研时间变更"
+                      maxLength={500}
+                      rows={1}
+                      className="min-h-10"
+                    />
+                  </label>
+                </LongTermEditor>
               )}
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="开始生效日期">
-                  <Input
-                    type="date"
-                    min={current.start_date}
-                    max={current.end_date}
-                    value={effectiveFrom}
-                    onChange={(event) => setEffectiveFrom(event.target.value)}
-                  />
-                </Field>
-                <Field label="结束生效日期">
-                  <Input
-                    type="date"
-                    min={effectiveFrom || current.start_date}
-                    max={current.end_date}
-                    value={effectiveTo}
-                    onChange={(event) => setEffectiveTo(event.target.value)}
-                  />
-                </Field>
+            </fieldset>
+          </div>
+        )}
+        {step === 3 && preview && (
+          <div className="space-y-5 rounded-xl border bg-card p-5 lg:p-7">
+            <div className="flex items-center gap-3 rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-4">
+              <CheckCircle2Icon className="size-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              <div>
+                <p className="font-medium">
+                  检查通过 · {from} 至 {to}
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  涉及{" "}
+                  {new Set(preview.data.changes.flatMap(({ before }) => before.class_ids)).size}{" "}
+                  个班、
+                  {
+                    new Set(
+                      preview.data.changes.flatMap(({ before, after }) => [
+                        ...before.teacher_ids,
+                        ...after.teacher_ids,
+                      ]),
+                    ).size
+                  }{" "}
+                  位老师
+                  {preview.data.checked_temporary_count
+                    ? `；已有 ${preview.data.checked_temporary_count} 项临时调整 / 代课已衔接并检查`
+                    : ""}
+                  。
+                </p>
               </div>
-              <Field label="调整原因">
-                <Textarea
-                  value={reason}
-                  onChange={(event) => setReason(event.target.value)}
-                  placeholder="说明为什么调整，以及适用范围"
-                  maxLength={500}
+            </div>
+            <WeeklyComparison changes={preview.data.changes} />
+            {to < semester.end_date && (
+              <div className="space-y-2 rounded-xl bg-muted/40 p-4">
+                <p className="text-sm font-medium">区间结束后，接着执行以下安排</p>
+                {preview.data.following?.length ? (
+                  preview.data.following.map((row) => (
+                    <p key={row.entry_key} className="text-sm text-muted-foreground">
+                      {row.effective_from} 起 · {row.target_name} {row.course_name}：
+                      {arrangement(row)}
+                    </p>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">所选课程在后续课表中没有安排。</p>
+                )}
+              </div>
+            )}
+            <div className="space-y-3 text-sm">
+              <p>调整原因：{reason}</p>
+              <label className="flex items-center gap-2">
+                <Checkbox
+                  disabled={busy}
+                  checked={notify}
+                  onCheckedChange={(checked) => setNotify(checked === true)}
                 />
-              </Field>
-              <Button
-                disabled={
-                  !canChange ||
-                  !draftVersionId ||
-                  !effectiveFrom ||
-                  !effectiveTo ||
-                  reason.trim().length < 2 ||
-                  previewing
-                }
-                onClick={() => void previewPublish()}
-              >
-                {previewing ? "正在检查…" : "预览发布影响"}
+                向涉及老师发送站内变更消息
+              </label>
+              <p className="text-xs text-muted-foreground">
+                老师按对应日期查看新课表，无需确认或审批。
+              </p>
+            </div>
+            <AdjustmentFooter
+              onBack={() => {
+                setStep(2)
+                clearError()
+              }}
+              backLabel="上一步：修改安排"
+              onPrimary={() => void publish(true)}
+              primaryLabel="确认发布"
+              busy={busy}
+              disabled={!canEdit}
+              hint="核对无误后确认发布，课表才会更新"
+            />
+          </div>
+        )}
+        {step === 4 && result && (
+          <div className="space-y-5 rounded-xl border bg-card p-5 lg:p-7">
+            <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-5">
+              <p className="flex items-center gap-2 font-medium">
+                <CheckCircle2Icon className="size-5 text-emerald-600 dark:text-emerald-400" />
+                已保存并安排生效
+              </p>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {result.record.effective_from} 至 {result.record.effective_to}
+                ，自动执行新的每周安排。
+              </p>
+            </div>
+            <WeeklyComparison changes={result.changes} />
+            <AdjustmentFooter onPrimary={exit} primaryLabel="返回调整记录" />
+          </div>
+        )}
+        <Dialog
+          open={leave !== null}
+          onOpenChange={(open) => {
+            if (!open) setLeave(null)
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>
+                {leave === "new"
+                  ? "开始一份新的调整？"
+                  : leave === "scope"
+                    ? "重新选择对象和时间？"
+                    : "离开这次调整？"}
+              </DialogTitle>
+              <DialogDescription>
+                {leave === "new"
+                  ? "本浏览器每学期保留一份草稿。开始修改新方案后，将替换已有草稿。"
+                  : leave === "scope"
+                    ? "重新载入课表后需要重新选择修改。当前方案已暂存，可从首页继续。"
+                    : "当前方案已暂存到本浏览器，下次可继续调整。"}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setLeave(null)}>
+                继续编辑
               </Button>
-            </div>
-
-            <div className="rounded-2xl border bg-muted/35 p-5">
-              {preview ? (
-                <div className="space-y-4">
-                  <div className="flex items-start gap-3">
-                    <CheckCircle2Icon className="mt-0.5 size-5 shrink-0 text-emerald-600" />
-                    <div>
-                      <p className="font-medium">检查通过，可以发布</p>
-                      <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                        {preview.summary}
-                      </p>
-                    </div>
-                  </div>
-                  <dl className="grid grid-cols-2 gap-3 text-sm">
-                    <PreviewMetric label="覆盖既有区间" value={preview.replaced_periods.length} />
-                    <PreviewMetric
-                      label="迁移临时调课"
-                      value={preview.calendar_exceptions_to_rebase}
-                    />
-                    <PreviewMetric
-                      label="校验跨区间调课"
-                      value={preview.cross_period_exceptions_to_validate}
-                    />
-                    <PreviewMetric label="迁移代课记录" value={preview.substitutions_to_rebase} />
-                    <PreviewMetric
-                      label="生效天数"
-                      value={inclusiveDays(preview.effective_from, preview.effective_to)}
-                    />
-                  </dl>
-                  <Button className="w-full" disabled={publishing} onClick={() => void publish()}>
-                    {publishing ? "正在发布…" : "确认发布长期调课"}
-                  </Button>
-                </div>
-              ) : (
-                <div className="flex min-h-48 flex-col items-center justify-center text-center">
-                  <CalendarRangeIcon className="size-8 text-muted-foreground/55" />
-                  <p className="mt-3 font-medium">等待发布前检查</p>
-                  <p className="mt-1 max-w-xs text-sm leading-6 text-muted-foreground">
-                    系统会检查草稿完整性、区间冲突，以及已有临时调课和代课能否安全迁移。
-                  </p>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+              <Button onClick={leave === "new" ? startNew : leave === "scope" ? changeScope : exit}>
+                {leave === "new" ? "开始新调整" : leave === "scope" ? "重新选择" : "暂存并返回"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
-    </>
-  )
-}
-
-function PreviewMetric({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-xl bg-background p-3 ring-1 ring-foreground/5">
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="mt-1 text-xl font-semibold tabular-nums">{value}</dd>
     </div>
   )
-}
-
-function dateWithinSemester(semester: Semester) {
-  const now = new Date()
-  const month = String(now.getMonth() + 1).padStart(2, "0")
-  const day = String(now.getDate()).padStart(2, "0")
-  const today = `${now.getFullYear()}-${month}-${day}`
-  if (today < semester.start_date) return semester.start_date
-  if (today > semester.end_date) return semester.end_date
-  return today
-}
-
-function formatDate(value: string) {
-  return value.slice(5).replace("-", "/")
-}
-
-function inclusiveDays(from: string, to: string) {
-  const start = Date.parse(`${from}T00:00:00Z`)
-  const end = Date.parse(`${to}T00:00:00Z`)
-  return Math.floor((end - start) / 86_400_000) + 1
 }
