@@ -58,6 +58,8 @@ for (const trigger of ["visibility", "interval"] as const) {
   test(`R9 教师课表在${trigger === "visibility" ? "恢复可见" : "前台停留一分钟"}后刷新停课安排`, async ({
     page,
   }) => {
+    const pageErrors: string[] = []
+    page.on("pageerror", (error) => pageErrors.push(error.message))
     await page.setViewportSize({ width: 390, height: 844 })
     await page.clock.install({ time: new Date("2026-09-07T08:10:00+08:00") })
     const state = await mockTeacher(page)
@@ -78,5 +80,7 @@ for (const trigger of ["visibility", "interval"] as const) {
     await expect(page.getByText("正在上课", { exact: true })).toHaveCount(0)
     await page.getByRole("tab", { name: "周", exact: true }).click()
     await expect(page.getByText("已取消", { exact: true }).first()).toBeVisible()
+    expect(state.unexpectedRequests).toEqual([])
+    expect(pageErrors).toEqual([])
   })
 }

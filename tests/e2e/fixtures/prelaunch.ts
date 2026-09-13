@@ -169,7 +169,7 @@ export async function mockAdmin(page: Page) {
 }
 
 export async function mockTeacher(page: Page) {
-  const state = { cancelled: false, requests: 0 }
+  const state = { cancelled: false, requests: 0, unexpectedRequests: [] as string[] }
   await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url())
     if (url.pathname === "/api/v1/me") {
@@ -188,7 +188,21 @@ export async function mockTeacher(page: Page) {
       })
       return
     }
-    state.requests++
+    if (url.pathname === "/api/v1/teacher/me/change-messages") {
+      await route.fulfill({
+        json: { data: { messages: [], unread: 0, page: 1, last_page: 1 } },
+      })
+      return
+    }
+    const isTimetable = url.pathname === "/api/v1/teacher/me/timetable"
+    const isClasses = url.pathname === "/api/v1/teacher/me/classes"
+    if (!isTimetable && !isClasses) {
+      const request = `${route.request().method()} ${url.pathname}`
+      state.unexpectedRequests.push(request)
+      await route.fulfill({ status: 501, json: { message: `未配置模拟接口：${request}` } })
+      return
+    }
+    if (isTimetable) state.requests++
     const from = url.searchParams.get("from") ?? "2026-09-07"
     const to = url.searchParams.get("to") ?? "2026-09-13"
     const days = []
@@ -240,7 +254,7 @@ export async function mockTeacher(page: Page) {
           timezone: "Asia/Shanghai",
           from,
           to,
-          ...(url.pathname.endsWith("/classes") ? { classes: [] } : { days }),
+          ...(isClasses ? { classes: [] } : { days }),
         },
       },
     })
