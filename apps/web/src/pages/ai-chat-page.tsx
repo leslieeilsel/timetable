@@ -609,12 +609,19 @@ function ChatSession({
         )}
         <div
           className={cn(
-            "mx-auto flex w-full max-w-3xl shrink-0 flex-col px-4 pb-4 sm:px-8 sm:pb-5",
-            showWelcome &&
-              "min-h-0 flex-1 overflow-y-auto pt-16 pb-8 sm:pt-20 sm:pb-12 [@media(max-height:600px)]:pt-6",
+            "flex w-full shrink-0 flex-col",
+            showWelcome
+              ? "min-h-0 flex-1 overflow-y-auto"
+              : "mx-auto max-w-3xl px-4 pb-4 sm:px-8 sm:pb-5",
           )}
         >
-          <div className={cn("w-full shrink-0", showWelcome && "my-auto")}>
+          <div
+            className={cn(
+              "w-full shrink-0",
+              showWelcome &&
+                "mx-auto my-auto max-w-3xl px-4 pt-16 pb-8 sm:px-8 sm:pt-20 sm:pb-12 [@media(max-height:600px)]:pt-6",
+            )}
+          >
             {showWelcome && (
               <h1 className="mb-6 text-center text-2xl font-medium tracking-tight">
                 今天想处理什么？

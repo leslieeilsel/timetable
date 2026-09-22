@@ -83,8 +83,8 @@ export function AiChatLoadingState() {
               </div>
             </>
           ) : (
-            <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col overflow-y-auto px-4 pt-16 pb-8 sm:px-8 sm:pt-20 sm:pb-12 [@media(max-height:600px)]:pt-6">
-              <div className="my-auto w-full shrink-0">
+            <div className="flex min-h-0 w-full flex-1 flex-col overflow-y-auto">
+              <div className="mx-auto my-auto w-full max-w-3xl shrink-0 px-4 pt-16 pb-8 sm:px-8 sm:pt-20 sm:pb-12 [@media(max-height:600px)]:pt-6">
                 <Skeleton className="mx-auto mb-6 h-8 w-48" />
                 <ComposerSkeleton />
                 <div className="mt-5 space-y-1">
