@@ -8,6 +8,7 @@ import {
   ChevronsUpDownIcon,
   DatabaseIcon,
   LayoutDashboardIcon,
+  SparklesIcon,
   PanelLeftIcon,
   SettingsIcon,
   UsersIcon,
@@ -70,6 +71,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const branding = useSystemBranding()
   const { pathname } = useLocation()
   const { user } = useAuth()
+  const primaryItems =
+    user && ["admin", "scheduler"].includes(user.role)
+      ? [...primary, { title: "AI 助手", to: "/ai", icon: SparklesIcon }]
+      : primary
   const { semesterId } = useResolvedSemesterId()
   const sidebar = useSidebar()
   const resourcesActive = pathname.startsWith("/resources") || pathname.startsWith("/years")
@@ -314,7 +319,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader className="shrink-0 px-2 pt-3 pb-2">{sidebarHeader}</SidebarHeader>
       <SidebarContent role="navigation" aria-label="主导航">
-        {group("日常工作", primary)}
+        {group("日常工作", primaryItems)}
         {user?.role !== "viewer" &&
           group(
             "当前学期",

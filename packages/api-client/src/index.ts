@@ -1,1 +1,1 @@
-export type { components, operations, paths } from "./generated-types"
+export type { components, operations, paths } from "./generated-types.js"

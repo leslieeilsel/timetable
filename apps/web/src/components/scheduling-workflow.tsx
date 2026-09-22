@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils"
 
 const steps = [
   { number: 1, label: "准备检查", destination: "preparation" },
-  { number: 2, label: "课程与任课矩阵", destination: "assignments" },
+  { number: 2, label: "任课关系", destination: "assignments" },
   { number: 3, label: "规则与约束", destination: "constraints" },
   { number: 4, label: "方案生成", destination: "generate" },
   { number: 5, label: "课表调整与诊断", destination: "timetable" },

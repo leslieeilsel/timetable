@@ -40,6 +40,7 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     proxy: {
+      "/agent": process.env.VITE_AGENT_TARGET ?? "http://127.0.0.1:8010",
       "/api": process.env.VITE_API_TARGET ?? "http://127.0.0.1:8000",
       "/sanctum": process.env.VITE_API_TARGET ?? "http://127.0.0.1:8000",
     },
@@ -48,6 +49,7 @@ export default defineConfig({
     host: "127.0.0.1",
     port: 4173,
     proxy: {
+      "/agent": process.env.VITE_AGENT_TARGET ?? "http://127.0.0.1:8010",
       "/api": process.env.VITE_API_TARGET ?? "http://127.0.0.1:8000",
       "/sanctum": process.env.VITE_API_TARGET ?? "http://127.0.0.1:8000",
     },

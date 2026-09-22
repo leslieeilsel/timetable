@@ -44,6 +44,14 @@ async function ensureCsrf() {
   csrfReady = true
 }
 
+export async function csrfHeaders(refresh = false): Promise<Record<string, string>> {
+  if (refresh) csrfReady = false
+  await ensureCsrf()
+  const token = cookie("XSRF-TOKEN")
+  if (!token) throw new ApiError("请登录并刷新页面后重试。", 401, "SESSION_REQUIRED", {})
+  return { "X-XSRF-TOKEN": token }
+}
+
 export async function api<T>(
   path: string,
   options: RequestInit & { etag?: string | null; formData?: boolean } = {},

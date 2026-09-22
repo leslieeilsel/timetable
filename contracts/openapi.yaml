@@ -80,6 +80,133 @@ x-role-permission-matrix:
     - operation: PATCH resource identity
       rule: 已有关闭学期引用时仅 admin 可更正名称或班级身份；停用仍按普通写权限处理。
 paths:
+  /api/v1/auth/session-check:
+    post:
+      operationId: checkAuthenticatedSession
+      tags: [认证]
+      summary: 验证现有登录会话及 CSRF
+      description: 与当前用户接口返回相同资料；经过 session.valid 和 Sanctum CSRF 中间件，不签发服务账号或其他凭据。
+      parameters:
+        - $ref: "#/components/parameters/XsrfToken"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "419": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/scheduling-constraints/capabilities:
+    get:
+      operationId: getConstraintDraftCapabilities
+      tags: [规则约束]
+      summary: 获取批量规则草稿支持的模板
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+      responses:
+        "200":
+          description: 当前支持教师禁排、课程时段偏好和教师每日课时上限。
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, label, kind, category, target_type, requirement, scope_keys]
+                      properties:
+                        id: { type: string }
+                        label: { type: string }
+                        kind: { type: string, enum: [hard, soft] }
+                        category:
+                          { type: string, enum: [forbidden_slot, preferred_slot, daily_load] }
+                        target_type: { type: string, enum: [teacher, course] }
+                        requirement: { type: object, additionalProperties: true }
+                        scope_keys: { type: array, items: { type: string } }
+                        weight: { type: integer, minimum: 1, maximum: 100 }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/scheduling-constraints/preview:
+    post:
+      operationId: previewConstraintDrafts
+      tags: [规则约束]
+      summary: 校验并预览规则草稿，不修改业务数据
+      description: 仅 admin、scheduler 可访问。返回规范化载荷、可读摘要及当前强 ETag；有效不表示整个课表必然可排。
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - $ref: "#/components/parameters/XsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConstraintDraftBatch" }
+      responses:
+        "200":
+          description: 可供用户确认的预览，未创建任何规则。
+          headers:
+            ETag: { schema: { type: string }, description: 与 data.etag 相同的学期版本。 }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [constraints, summaries, etag]
+                    properties:
+                      constraints:
+                        type: array
+                        minItems: 1
+                        maxItems: 10
+                        items: { $ref: "#/components/schemas/ConstraintDraft" }
+                      summaries:
+                        type: array
+                        minItems: 1
+                        maxItems: 10
+                        items: { type: string }
+                      etag: { type: string }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "419": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /api/v1/semesters/{semester}/scheduling-constraints/bulk:
+    post:
+      operationId: createConstraintDraftBatch
+      tags: [规则约束]
+      summary: 原子、幂等地保存一批用户规则草稿
+      description: |
+        仅 admin、scheduler 可访问。全部成功或回滚，状态均为 draft，source 为 user。
+        相同操作者、学期和 Idempotency-Key 配合相同载荷时返回已提交结果（200），
+        不同载荷返回 IDEMPOTENCY_CONFLICT（409）；重放仍验证身份，允许原提交的旧 If-Match。
+        首次提交必须通过最新学期版本校验。
+      parameters:
+        - $ref: "#/components/parameters/SemesterPath"
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/XsrfToken"
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConstraintDraftBatch" }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "201": { $ref: "#/components/responses/Created" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "412": { $ref: "#/components/responses/Problem" }
+        "419": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
   /api/v1/branding:
     get:
       operationId: getBranding
@@ -792,7 +919,12 @@ paths:
               additionalProperties: false
               properties:
                 system_name: { type: string, minLength: 1, maxLength: 60 }
-                system_tagline: { type: [string, "null"], maxLength: 60, description: 留空或 null 时隐藏副标题；省略时保留原值。 }
+                system_tagline:
+                  {
+                    type: [string, "null"],
+                    maxLength: 60,
+                    description: 留空或 null 时隐藏副标题；省略时保留原值。,
+                  }
       responses:
         "200": { $ref: "#/components/responses/Success" }
         "401": { $ref: "#/components/responses/Problem" }
@@ -2092,7 +2224,16 @@ paths:
           required: false
           schema:
             type: string
-            enum: [added, removed, moved, teacher_changed, room_changed, week_pattern_changed, lock_changed]
+            enum:
+              [
+                added,
+                removed,
+                moved,
+                teacher_changed,
+                room_changed,
+                week_pattern_changed,
+                lock_changed,
+              ]
         - $ref: "#/components/parameters/Page"
         - $ref: "#/components/parameters/PerPage"
       responses:
@@ -3312,7 +3453,63 @@ components:
       schema:
         type: string
         minLength: 3
+    XsrfToken:
+      name: X-XSRF-TOKEN
+      in: header
+      required: true
+      description: URL 解码后的 Sanctum XSRF-TOKEN Cookie；与当前 Session Cookie 同时发送。
+      schema: { type: string }
   schemas:
+    ConstraintDraftBatch:
+      type: object
+      additionalProperties: false
+      required: [constraints]
+      properties:
+        constraints:
+          type: array
+          minItems: 1
+          maxItems: 10
+          items: { $ref: "#/components/schemas/ConstraintDraft" }
+    ConstraintDraft:
+      type: object
+      additionalProperties: false
+      required: [name, kind, category, target_type, target_id, scope, requirement]
+      description: |
+        支持 hard/forbidden_slot/teacher、soft/preferred_slot/course、hard/daily_load/teacher。
+        硬约束权重为空，软规则权重必填。每日上限 scope 为空；时段规则至少有一个有效选择器。
+        所有对象、课节和星期须由业务校验确认，condition 只能为空对象或 null。
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        kind: { type: string, enum: [hard, soft] }
+        category: { type: string, enum: [forbidden_slot, preferred_slot, daily_load] }
+        target_type: { type: string, enum: [teacher, course] }
+        target_id: { type: integer, minimum: 1 }
+        scope:
+          type: object
+          additionalProperties: false
+          properties:
+            weekdays:
+              type: array
+              minItems: 1
+              uniqueItems: true
+              items: { type: integer, minimum: 1, maximum: 7 }
+            item_ids:
+              type: array
+              minItems: 1
+              uniqueItems: true
+              items: { type: integer, minimum: 1 }
+        condition: { type: [object, "null"], additionalProperties: false }
+        requirement:
+          type: object
+          additionalProperties: false
+          minProperties: 1
+          maxProperties: 1
+          properties:
+            available: { type: boolean, const: false }
+            preference: { type: string, enum: [prefer, avoid] }
+            max_items_per_day: { type: integer, minimum: 1, maximum: 20 }
+        weight: { type: [integer, "null"], minimum: 1, maximum: 100 }
+        explanation: { type: [string, "null"], maxLength: 1000 }
     LongTermChangeWrite:
       type: object
       required: [source_version_id, effective_from, effective_to, reason, changes]

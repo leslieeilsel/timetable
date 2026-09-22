@@ -11,10 +11,10 @@ const pageTitles: Record<string, string> = {
   "/resources/rooms": "教室",
   "/years": "学年与班级",
   "/semester/setup": "学期配置",
-  "/semester/assignments": "课程与任课矩阵",
+  "/semester/assignments": "任课关系",
   "/semester/timetable": "课表调整与诊断",
   "/scheduling/preparation": "准备检查",
-  "/scheduling/assignments": "课程与任课矩阵",
+  "/scheduling/assignments": "任课关系",
   "/scheduling/constraints": "规则与约束",
   "/scheduling/generate": "方案生成",
   "/scheduling/timetable": "课表调整与诊断",
@@ -28,7 +28,7 @@ const pageTitles: Record<string, string> = {
 const semesterPageTitles: Record<string, string> = {
   setup: "学期配置",
   preparation: "准备检查",
-  assignments: "课程与任课矩阵",
+  assignments: "任课关系",
   constraints: "规则与约束",
   generate: "方案生成",
   timetable: "课表调整与诊断",
@@ -38,6 +38,7 @@ const semesterPageTitles: Record<string, string> = {
 }
 
 export function pageTitleForPath(pathname: string) {
+  if (pathname === "/ai" || pathname.startsWith("/ai/")) return "AI 助手"
   const normalizedPath = pathname.replace(/\/+$/, "") || "/"
   if (/^\/years\/[^/]+$/.test(normalizedPath)) return "学年详情"
   const semesterPage = /^\/semesters\/[^/]+\/([^/]+)$/.exec(normalizedPath)?.[1]

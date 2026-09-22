@@ -4,6 +4,86 @@
  */
 
 export interface paths {
+    "/api/v1/auth/session-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 验证现有登录会话及 CSRF
+         * @description 与当前用户接口返回相同资料；经过 session.valid 和 Sanctum CSRF 中间件，不签发服务账号或其他凭据。
+         */
+        post: operations["checkAuthenticatedSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/scheduling-constraints/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取批量规则草稿支持的模板 */
+        get: operations["getConstraintDraftCapabilities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/scheduling-constraints/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 校验并预览规则草稿，不修改业务数据
+         * @description 仅 admin、scheduler 可访问。返回规范化载荷、可读摘要及当前强 ETag；有效不表示整个课表必然可排。
+         */
+        post: operations["previewConstraintDrafts"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/semesters/{semester}/scheduling-constraints/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 原子、幂等地保存一批用户规则草稿
+         * @description 仅 admin、scheduler 可访问。全部成功或回滚，状态均为 draft，source 为 user。
+         *     相同操作者、学期和 Idempotency-Key 配合相同载荷时返回已提交结果（200），
+         *     不同载荷返回 IDEMPOTENCY_CONFLICT（409）；重放仍验证身份，允许原提交的旧 If-Match。
+         *     首次提交必须通过最新学期版本校验。
+         */
+        post: operations["createConstraintDraftBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/branding": {
         parameters: {
             query?: never;
@@ -1850,6 +1930,38 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        ConstraintDraftBatch: {
+            constraints: components["schemas"]["ConstraintDraft"][];
+        };
+        /**
+         * @description 支持 hard/forbidden_slot/teacher、soft/preferred_slot/course、hard/daily_load/teacher。
+         *     硬约束权重为空，软规则权重必填。每日上限 scope 为空；时段规则至少有一个有效选择器。
+         *     所有对象、课节和星期须由业务校验确认，condition 只能为空对象或 null。
+         */
+        ConstraintDraft: {
+            name: string;
+            /** @enum {string} */
+            kind: "hard" | "soft";
+            /** @enum {string} */
+            category: "forbidden_slot" | "preferred_slot" | "daily_load";
+            /** @enum {string} */
+            target_type: "teacher" | "course";
+            target_id: number;
+            scope: {
+                weekdays?: number[];
+                item_ids?: number[];
+            };
+            condition?: Record<string, never> | null;
+            requirement: {
+                /** @constant */
+                available?: false;
+                /** @enum {string} */
+                preference?: "prefer" | "avoid";
+                max_items_per_day?: number;
+            };
+            weight?: number | null;
+            explanation?: string | null;
+        };
         LongTermChangeWrite: {
             source_version_id: number;
             /**
@@ -2088,6 +2200,8 @@ export interface components {
         Direction: "asc" | "desc";
         /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
         IfMatch: string;
+        /** @description URL 解码后的 Sanctum XSRF-TOKEN Cookie；与当前 Session Cookie 同时发送。 */
+        XsrfToken: string;
     };
     requestBodies: never;
     headers: never;
@@ -2095,6 +2209,141 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    checkAuthenticatedSession: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description URL 解码后的 Sanctum XSRF-TOKEN Cookie；与当前 Session Cookie 同时发送。 */
+                "X-XSRF-TOKEN": components["parameters"]["XsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            419: components["responses"]["Problem"];
+        };
+    };
+    getConstraintDraftCapabilities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 当前支持教师禁排、课程时段偏好和教师每日课时上限。 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            id: string;
+                            label: string;
+                            /** @enum {string} */
+                            kind: "hard" | "soft";
+                            /** @enum {string} */
+                            category: "forbidden_slot" | "preferred_slot" | "daily_load";
+                            /** @enum {string} */
+                            target_type: "teacher" | "course";
+                            requirement: {
+                                [key: string]: unknown;
+                            };
+                            scope_keys: string[];
+                            weight?: number;
+                        }[];
+                    };
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+        };
+    };
+    previewConstraintDrafts: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description URL 解码后的 Sanctum XSRF-TOKEN Cookie；与当前 Session Cookie 同时发送。 */
+                "X-XSRF-TOKEN": components["parameters"]["XsrfToken"];
+            };
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConstraintDraftBatch"];
+            };
+        };
+        responses: {
+            /** @description 可供用户确认的预览，未创建任何规则。 */
+            200: {
+                headers: {
+                    /** @description 与 data.etag 相同的学期版本。 */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            constraints: components["schemas"]["ConstraintDraft"][];
+                            summaries: string[];
+                            etag: string;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            419: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    createConstraintDraftBatch: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 使用同一次可编辑资源读取响应或列表项携带的强 ETag；全局格式为 catalog-N，学期格式为 semester-ID-timetable-N-catalog-N，用户格式为 user-ID-SHA256。 */
+                "If-Match": components["parameters"]["IfMatch"];
+                /** @description URL 解码后的 Sanctum XSRF-TOKEN Cookie；与当前 Session Cookie 同时发送。 */
+                "X-XSRF-TOKEN": components["parameters"]["XsrfToken"];
+                "Idempotency-Key": string;
+            };
+            path: {
+                semester: components["parameters"]["SemesterPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConstraintDraftBatch"];
+            };
+        };
+        responses: {
+            200: components["responses"]["Success"];
+            201: components["responses"]["Created"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            419: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+        };
+    };
     getBranding: {
         parameters: {
             query?: never;

@@ -10,6 +10,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { CircleHelpIcon, PlusIcon } from "lucide-react"
 import { toast } from "sonner"
 import { api, apiAllPages, apiMessage } from "@/lib/api"
+import { TEACHING_GROUPS_ENABLED } from "@/lib/features"
 import {
   supportsConstraintKindCategory,
   unsupportedConstraintReason,
@@ -30,6 +31,7 @@ import type {
 import { EmptyList, ErrorState, Field, LoadingState, PageHeader } from "@/components/page"
 import { GridSelectionOverlay } from "@/components/grid-selection-frame"
 import { ListToolbar, ToolbarSelect } from "@/components/list-toolbar"
+import { AiAssistantButton } from "@/components/ai-assistant"
 import { AssignmentPicker, RoomPicker } from "@/components/resource-picker"
 import { SimpleSelect } from "@/components/simple-select"
 import { SchedulingWorkflow } from "@/components/scheduling-workflow"
@@ -301,10 +303,13 @@ export function SchedulingConstraintsPage() {
                 <span>共 {rulePagination?.total ?? rules.data?.data.length ?? 0} 条规则</span>
               }
               actions={
-                <Button onClick={() => setEditingRule(null)}>
-                  <PlusIcon />
-                  新增规则
-                </Button>
+                <>
+                  <AiAssistantButton semesterId={semesterId} />
+                  <Button onClick={() => setEditingRule(null)}>
+                    <PlusIcon />
+                    新增规则
+                  </Button>
+                </>
               }
             >
               <ToolbarSelect value={kind} onChange={setKind} label="规则类型">
@@ -486,7 +491,9 @@ export function SchedulingConstraintsPage() {
                 <Table responsive>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>班级/教学组 · 课程</TableHead>
+                      <TableHead>
+                        {TEACHING_GROUPS_ENABLED ? "班级/教学组 · 课程" : "班级 · 课程"}
+                      </TableHead>
                       <TableHead>教师</TableHead>
                       <TableHead>时间</TableHead>
                       <TableHead>教室</TableHead>
@@ -498,7 +505,12 @@ export function SchedulingConstraintsPage() {
                   <TableBody>
                     {placements.data.data.map((placement) => (
                       <TableRow key={placement.id}>
-                        <TableCell data-label="班级/教学组 · 课程" className="font-medium">
+                        <TableCell
+                          data-label={
+                            TEACHING_GROUPS_ENABLED ? "班级/教学组 · 课程" : "班级 · 课程"
+                          }
+                          className="font-medium"
+                        >
                           {assignmentTarget(placement.teaching_assignment)} ·{" "}
                           {placement.teaching_assignment.course.name}
                         </TableCell>
@@ -876,7 +888,9 @@ function RuleDialog({
   const nameError = !name.trim() ? "请填写一个便于识别的规则名称" : undefined
   const targetError =
     resourceLimited && ["course", "teaching_assignment"].includes(targetType)
-      ? "课时上限需要选择教师、班级、教室、年级或教学组"
+      ? TEACHING_GROUPS_ENABLED
+        ? "课时上限需要选择教师、班级、教室、年级或教学组"
+        : "课时上限需要选择教师、班级、教室或年级"
       : targetType && !targetId
         ? "请选择一个具体作用对象"
         : undefined
@@ -1167,7 +1181,9 @@ function RuleDialog({
                         <option value="teaching_assignment" disabled={resourceLimited}>
                           任课关系
                         </option>
-                        <option value="teaching_group">教学组</option>
+                        {(TEACHING_GROUPS_ENABLED || targetType === "teaching_group") && (
+                          <option value="teaching_group">教学组</option>
+                        )}
                       </SimpleSelect>
                     </Field>
                   )}
@@ -1191,7 +1207,7 @@ function RuleDialog({
                         invalid={attemptedSubmit && Boolean(targetError)}
                         emptyDescription={
                           targetType === "teaching_group" && options.length === 0
-                            ? "当前学期还没有教学组，请先在课程与任课矩阵中建立教学组"
+                            ? "当前学期还没有教学组，请先在任课关系中建立教学组"
                             : undefined
                         }
                       />

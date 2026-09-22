@@ -1,0 +1,107 @@
+@property --history-offset {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+.chat-history-item {
+  --history-actions-space: 2.5rem;
+}
+.chat-history-link {
+  padding-right: 0.625rem;
+  transition: padding-right 160ms ease-out;
+}
+.chat-history-item:focus-within > .chat-history-link,
+.chat-history-item[data-menu-open="true"] > .chat-history-link {
+  padding-right: var(--history-actions-space);
+}
+@media (hover: hover) {
+  .chat-history-item:hover > .chat-history-link {
+    padding-right: var(--history-actions-space);
+  }
+}
+@media (hover: none) {
+  .chat-history-link {
+    padding-right: var(--history-actions-space);
+  }
+}
+@media (width < 48rem) {
+  .chat-history-item {
+    --history-actions-space: 3.5rem;
+  }
+}
+.chat-history-title {
+  --history-distance: 0px;
+  --title-fade-left: clamp(0px, var(--history-offset), 20px);
+  --title-fade-right: clamp(0px, calc(var(--history-distance) - var(--history-offset)), 24px);
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 var(--title-fade-left),
+    #000 calc(100% - var(--title-fade-right)),
+    transparent
+  );
+}
+.chat-shimmer {
+  display: inline-grid;
+  min-width: 0;
+  vertical-align: baseline;
+}
+.chat-shimmer > span {
+  grid-area: 1 / 1;
+  transition: opacity 220ms ease-out;
+}
+.chat-shimmer-overlay {
+  opacity: 0;
+}
+.chat-shimmer[data-active="true"] > .chat-shimmer-overlay {
+  opacity: 1;
+}
+.chat-shimmer[data-active="true"] > .chat-shimmer-base {
+  opacity: 0;
+}
+.chat-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 220ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 160ms ease-out,
+    margin-bottom 220ms ease-out;
+}
+.chat-collapse[data-open="true"] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+.chat-process[data-open="true"][data-has-following="true"] {
+  margin-bottom: 12px;
+}
+.chat-answer[data-live="true"] {
+  animation: chat-answer-enter 140ms ease-out both;
+}
+@keyframes chat-answer-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-history-link,
+  .chat-collapse,
+  .chat-shimmer > span {
+    transition: none;
+  }
+  .chat-answer[data-live="true"] {
+    animation: none;
+  }
+  .chat-shimmer-overlay {
+    display: none;
+  }
+  .chat-shimmer[data-active="true"] > .chat-shimmer-base {
+    opacity: 1;
+  }
+}

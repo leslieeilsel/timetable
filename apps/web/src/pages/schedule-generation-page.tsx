@@ -17,6 +17,7 @@ import {
   SquareIcon,
 } from "lucide-react"
 import { toast } from "sonner"
+import { AiAssistantButton } from "@/components/ai-assistant"
 import { api, apiAllPages, apiMessage } from "@/lib/api"
 import { assessCandidateQuality } from "@/lib/candidate-quality"
 import { semesterPath, useResolvedSemesterId } from "@/lib/semester"
@@ -705,6 +706,9 @@ function RunWorkspace({
             未找到完整可行方案
           </p>
           <p className="mt-2 text-sm leading-6 text-rose-800/80">{run.error_message}</p>
+          <div className="mt-3">
+            <AiAssistantButton semesterId={run.semester_id} scheduleRunId={run.id} />
+          </div>
           {bottleneck && (
             <div className="mt-3 rounded-lg border border-rose-200 bg-white/55 p-3 text-sm text-rose-900">
               <p className="font-medium">

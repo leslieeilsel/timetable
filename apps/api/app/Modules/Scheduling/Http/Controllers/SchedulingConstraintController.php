@@ -10,6 +10,7 @@ use App\Modules\AcademicCalendar\Models\AppSetting;
 use App\Modules\AcademicCalendar\Models\Semester;
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Scheduling\Models\SchedulingConstraint;
+use App\Modules\Scheduling\Services\ConstraintDraftService;
 use App\Modules\Scheduling\Services\ConstraintPayloadValidator;
 use App\Modules\Timetable\Services\TimetableSynchronizationService;
 use App\Support\ApiProblemException;
@@ -29,6 +30,7 @@ class SchedulingConstraintController
         private readonly AuditLogger $audit,
         private readonly ConstraintPayloadValidator $payloads,
         private readonly TimetableSynchronizationService $synchronization,
+        private readonly ConstraintDraftService $drafts,
     ) {}
 
     public function index(Request $request, Semester $semester): JsonResponse
@@ -77,16 +79,7 @@ class SchedulingConstraintController
 
         return DB::transaction(function () use ($request, $semester, $data): JsonResponse {
             [$actor, $settings, $lockedSemester] = $this->guard->semester($request, $semester);
-            $this->payloads->assertValid($lockedSemester, $data);
-            $constraint = SchedulingConstraint::query()->create([
-                ...$data,
-                'semester_id' => $lockedSemester->id,
-                'name' => Normalizer::text($data['name']),
-                'source' => 'user',
-                'status' => ConstraintStatus::Draft,
-            ]);
-            $this->bumpRevision($lockedSemester);
-            $this->audit->record($request, $actor, 'create', 'scheduling_constraint', $constraint->id, null, $constraint->toArray());
+            [$constraint] = $this->drafts->create($request, $actor, $lockedSemester, [$data]);
 
             return response()->json([
                 'data' => $constraint,
@@ -202,20 +195,7 @@ class SchedulingConstraintController
     /** @return array<string, mixed> */
     private function validatedPayload(Request $request, bool $partial = false): array
     {
-        $presence = $partial ? 'sometimes' : 'required';
-
-        return $request->validate([
-            'name' => [$presence, 'string', 'max:120'],
-            'kind' => [$presence, Rule::enum(ConstraintKind::class)],
-            'category' => [$presence, Rule::enum(ConstraintCategory::class)],
-            'target_type' => [$partial ? 'sometimes' : 'nullable', 'nullable', Rule::enum(ConstraintTargetType::class)],
-            'target_id' => [$partial ? 'sometimes' : 'nullable', 'nullable', 'integer'],
-            'scope' => [$partial ? 'sometimes' : 'present', 'array'],
-            'condition' => ['sometimes', 'nullable', 'array'],
-            'requirement' => [$presence, 'array', 'min:1'],
-            'weight' => ['sometimes', 'nullable', 'integer', 'between:1,100'],
-            'explanation' => ['sometimes', 'nullable', 'string', 'max:1000'],
-        ]);
+        return $this->drafts->validate($request->all(), $partial);
     }
 
     private function assertUserEditable(SchedulingConstraint $constraint): void

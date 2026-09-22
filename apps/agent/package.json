@@ -1,0 +1,29 @@
+{
+  "name": "@timetable/agent",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env --watch src/server.ts",
+    "start": "node --env-file-if-exists=.env dist/server.js",
+    "build": "tsc --noEmit && vp build",
+    "check": "tsc --noEmit && vp lint",
+    "test": "vp test run",
+    "eval:chat": "node --env-file-if-exists=.env evals/chat-quality.ts"
+  },
+  "dependencies": {
+    "@earendil-works/pi-agent-core": "0.86.1",
+    "@earendil-works/pi-ai": "0.86.1",
+    "@timetable/agent-contracts": "workspace:*",
+    "@timetable/api-client": "workspace:*",
+    "ai": "7.0.107",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "typescript": "6.0.2",
+    "vite": "catalog:",
+    "vite-plus": "catalog:",
+    "vitest": "4.1.10"
+  }
+}

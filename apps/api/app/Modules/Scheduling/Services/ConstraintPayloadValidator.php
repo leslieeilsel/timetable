@@ -15,6 +15,18 @@ use Illuminate\Support\Facades\DB;
 
 class ConstraintPayloadValidator
 {
+    /** @return list<array<string, mixed>> */
+    public function draftCapabilities(): array
+    {
+        $templates = [
+            ['id' => 'teacher_unavailable', 'label' => '教师禁排时段', 'kind' => 'hard', 'category' => 'forbidden_slot', 'target_type' => 'teacher', 'requirement' => ['available' => false], 'scope_keys' => ['weekdays', 'item_ids']],
+            ['id' => 'course_preferred_time', 'label' => '课程偏好时段', 'kind' => 'soft', 'category' => 'preferred_slot', 'target_type' => 'course', 'requirement' => ['preference' => ['enum' => ['prefer', 'avoid'], 'default' => 'prefer']], 'weight' => 50, 'scope_keys' => ['weekdays', 'item_ids']],
+            ['id' => 'teacher_daily_load', 'label' => '教师每日课时上限', 'kind' => 'hard', 'category' => 'daily_load', 'target_type' => 'teacher', 'requirement' => ['max_items_per_day' => ['minimum' => 1, 'maximum' => 20]], 'scope_keys' => []],
+        ];
+
+        return array_values(array_filter($templates, fn (array $row): bool => $this->supports(ConstraintKind::from($row['kind']), ConstraintCategory::from($row['category']))));
+    }
+
     /**
      * The public rule editor may only activate combinations that both the solver and
      * the manual timetable diagnostics execute with the same meaning.

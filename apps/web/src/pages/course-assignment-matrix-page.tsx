@@ -15,6 +15,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { api, apiAllPages, apiMessage } from "@/lib/api"
+import { TEACHING_GROUPS_ENABLED } from "@/lib/features"
 import { useResolvedSemesterId } from "@/lib/semester"
 import type {
   ClassSetting,
@@ -573,7 +574,7 @@ export function CourseAssignmentMatrixPage() {
   if (!semesterId && !context.isLoading)
     return (
       <>
-        <PageHeader title="课程与任课矩阵" />
+        <PageHeader title="任课关系" />
         <EmptyList title="尚未设置当前学期" description="请先设置当前开放学期。" />
       </>
     )
@@ -600,10 +601,12 @@ export function CourseAssignmentMatrixPage() {
   const current = semester.data.data
   const toolbarActions = (
     <>
-      <Button variant="outline" onClick={() => setGroupsOpen(true)}>
-        <UsersIcon />
-        教学组
-      </Button>
+      {TEACHING_GROUPS_ENABLED && (
+        <Button variant="outline" onClick={() => setGroupsOpen(true)}>
+          <UsersIcon />
+          教学组
+        </Button>
+      )}
       {sourceSemester && gradeFilter && (
         <Button variant="outline" onClick={() => void copyPreviousGrade()}>
           <CopyIcon />
@@ -620,7 +623,7 @@ export function CourseAssignmentMatrixPage() {
   return (
     <>
       <PageHeader
-        title="课程与任课矩阵"
+        title="任课关系"
         description="按班级和课程批量维护教师、周课时、周型、连排和教室方式。"
       />
       <SchedulingWorkflow />
@@ -1094,14 +1097,16 @@ export function CourseAssignmentMatrixPage() {
           await refresh()
         }}
       />
-      <TeachingGroupManager
-        open={groupsOpen}
-        semesterId={current.id}
-        etag={etag}
-        settings={settings.data?.data ?? []}
-        onClose={() => setGroupsOpen(false)}
-        onSaved={refresh}
-      />
+      {TEACHING_GROUPS_ENABLED && (
+        <TeachingGroupManager
+          open={groupsOpen}
+          semesterId={current.id}
+          etag={etag}
+          settings={settings.data?.data ?? []}
+          onClose={() => setGroupsOpen(false)}
+          onSaved={refresh}
+        />
+      )}
     </>
   )
 }

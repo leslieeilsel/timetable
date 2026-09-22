@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./components/chat/chat-motion.css";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
@@ -50,19 +51,19 @@
 /* 石墨：纯白画布、炭黑主操作，颜色只服务于状态和数据。 */
 :root {
   --background: oklch(1 0 0);
-  --foreground: oklch(0.243 0.004 106.7);
+  --foreground: #0d0d0d;
   --card: oklch(1 0 89.9);
-  --card-foreground: oklch(0.243 0.004 106.7);
+  --card-foreground: var(--foreground);
   --popover: oklch(1 0 89.9);
-  --popover-foreground: oklch(0.243 0.004 106.7);
+  --popover-foreground: var(--foreground);
   --primary: oklch(0.288 0.005 106.7);
   --primary-foreground: oklch(0.984 0.004 106.5);
   --secondary: oklch(0.954 0.005 106.5);
-  --secondary-foreground: oklch(0.324 0.005 106.7);
+  --secondary-foreground: var(--foreground);
   --muted: oklch(0.966 0.004 106.5);
   --muted-foreground: oklch(0.526 0.009 106.7);
   --accent: oklch(0.944 0.007 115.7);
-  --accent-foreground: oklch(0.307 0.007 118.2);
+  --accent-foreground: var(--foreground);
   --destructive: oklch(0.571 0.162 27.4);
   --border: oklch(0.914 0.007 106.5);
   --input: oklch(0.884 0.008 106.6);
@@ -98,11 +99,11 @@
   --timetable-success-border: oklch(0.85 0.055 150);
   --timetable-success-accent: oklch(0.53 0.12 150);
   --sidebar: oklch(0.972 0.005 106.5);
-  --sidebar-foreground: oklch(0.26 0.004 106.7);
+  --sidebar-foreground: var(--foreground);
   --sidebar-primary: oklch(0.288 0.005 106.7);
   --sidebar-primary-foreground: oklch(0.984 0.004 106.5);
   --sidebar-accent: oklch(0.935 0.008 114.2);
-  --sidebar-accent-foreground: oklch(0.313 0.009 124.8);
+  --sidebar-accent-foreground: var(--foreground);
   --sidebar-border: oklch(0.905 0.008 106.6);
   --sidebar-ring: oklch(0.58 0.011 113.3);
 }
@@ -115,7 +116,7 @@
   --popover: oklch(0.251 0.004 106.7);
   --popover-foreground: oklch(0.966 0.005 106.5);
   --primary: oklch(0.954 0.007 106.5);
-  --primary-foreground: oklch(0.255 0.006 106.8);
+  --primary-foreground: #0d0d0d;
   --secondary: oklch(0.296 0.005 106.7);
   --secondary-foreground: oklch(0.945 0.007 106.5);
   --muted: oklch(0.284 0.004 106.6);
@@ -158,7 +159,7 @@
   --sidebar: oklch(0.239 0.004 106.7);
   --sidebar-foreground: oklch(0.966 0.005 106.5);
   --sidebar-primary: oklch(0.954 0.007 106.5);
-  --sidebar-primary-foreground: oklch(0.255 0.006 106.8);
+  --sidebar-primary-foreground: #0d0d0d;
   --sidebar-accent: oklch(0.307 0.007 118.2);
   --sidebar-accent-foreground: oklch(0.954 0.007 106.5);
   --sidebar-border: oklch(0.966 0.005 106.5 / 12%);

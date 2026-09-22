@@ -12,6 +12,7 @@ use App\Modules\Identity\Http\Controllers\UserController;
 use App\Modules\Resources\Http\Controllers\CatalogController;
 use App\Modules\Resources\Http\Controllers\SchoolClassController;
 use App\Modules\ScheduleTemplate\Http\Controllers\ScheduleTemplateController;
+use App\Modules\Scheduling\Http\Controllers\ConstraintBatchController;
 use App\Modules\Scheduling\Http\Controllers\DashboardSummaryController;
 use App\Modules\Scheduling\Http\Controllers\FixedPlacementController;
 use App\Modules\Scheduling\Http\Controllers\PreparationCheckController;
@@ -53,6 +54,7 @@ Route::prefix('v1')->group(function (): void {
 
     Route::middleware(['auth:sanctum', 'session.valid'])->group(function (): void {
         Route::get('/me', MeController::class)->name('me');
+        Route::post('/auth/session-check', MeController::class)->name('auth.session-check');
         Route::post('/auth/logout', [AuthController::class, 'logout'])->name('auth.logout');
         Route::post('/auth/change-password', [AuthController::class, 'changePassword'])->name('auth.change-password');
         Route::get('/teacher/me/timetable', MyTimetableController::class)->middleware('role.teacher');
@@ -142,6 +144,9 @@ Route::prefix('v1')->group(function (): void {
             Route::delete('/semesters/{semester}/teaching-groups/{group}', [TeachingGroupController::class, 'destroy']);
 
             Route::get('/semesters/{semester}/scheduling-constraints', [SchedulingConstraintController::class, 'index']);
+            Route::get('/semesters/{semester}/scheduling-constraints/capabilities', [ConstraintBatchController::class, 'capabilities']);
+            Route::post('/semesters/{semester}/scheduling-constraints/preview', [ConstraintBatchController::class, 'preview']);
+            Route::post('/semesters/{semester}/scheduling-constraints/bulk', [ConstraintBatchController::class, 'store']);
             Route::get('/semesters/{semester}/preparation-check', PreparationCheckController::class);
             Route::get('/semesters/{semester}/dashboard-summary', DashboardSummaryController::class);
             Route::post('/semesters/{semester}/scheduling-constraints', [SchedulingConstraintController::class, 'store']);

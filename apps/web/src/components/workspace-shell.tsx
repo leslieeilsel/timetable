@@ -46,7 +46,7 @@ const labels: Record<string, string> = {
   semester: "当前学期",
   scheduling: "排课中心",
   preparation: "准备检查",
-  assignments: "课程与任课矩阵",
+  assignments: "任课关系",
   constraints: "规则与约束",
   generate: "方案生成",
   setup: "学期配置",
@@ -58,6 +58,7 @@ const labels: Record<string, string> = {
   users: "用户管理",
   settings: "系统设置",
   "change-password": "修改密码",
+  ai: "AI 助手",
 }
 
 export function WorkspaceShell({ children }: { children?: ReactNode }) {
@@ -68,6 +69,7 @@ export function WorkspaceShell({ children }: { children?: ReactNode }) {
   const { semesterId } = useResolvedSemesterId()
   const parts = pathname.split("/").filter(Boolean)
   const part = parts.at(-1)
+  const isAiPage = parts[0] === "ai"
   const isResourcePage = pathname.startsWith("/resources/")
   const isSemesterPage = isSchedulingSemesterPath(pathname)
   const isDailyPage = isDailySemesterPath(pathname)
@@ -110,81 +112,91 @@ export function WorkspaceShell({ children }: { children?: ReactNode }) {
         </a>
         <AppSidebar />
         <SidebarInset id="main-content" tabIndex={-1}>
-          <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b border-border/50 bg-background px-4 lg:px-5">
-            <SidebarTrigger className="-ml-1 rounded-full border bg-background md:hidden" />
-            <Breadcrumb className="min-w-0 flex-1 overflow-hidden">
-              <BreadcrumbList className="flex-nowrap overflow-hidden">
-                {isResourcePage && (
-                  <>
-                    <BreadcrumbItem>
-                      <BreadcrumbMenu
-                        label="基础资料"
-                        items={resourceNavigationItems}
-                        pathname={pathname}
-                      />
-                    </BreadcrumbItem>
-                    <BreadcrumbSeparator />
-                  </>
-                )}
-                {isSemesterPage && (
-                  <>
-                    <BreadcrumbItem>
-                      <BreadcrumbMenu
-                        label="排课中心"
-                        items={schedulingMenuItems}
-                        pathname={pathname}
-                      />
-                    </BreadcrumbItem>
-                    <BreadcrumbSeparator />
-                  </>
-                )}
-                {isDailyPage && (
-                  <>
-                    <BreadcrumbItem>
-                      <BreadcrumbMenu label="日常运行" items={dailyMenuItems} pathname={pathname} />
-                    </BreadcrumbItem>
-                    <BreadcrumbSeparator />
-                  </>
-                )}
-                {isYearDetail && (
-                  <>
-                    <BreadcrumbItem>
-                      <BreadcrumbLink render={<Link to="/years" />}>学年与班级</BreadcrumbLink>
-                    </BreadcrumbItem>
-                    <BreadcrumbSeparator />
-                  </>
-                )}
-                <BreadcrumbItem className="min-w-0">
-                  <BreadcrumbPage className="block truncate">
-                    {isYearDetail ? "学年详情" : part ? (labels[part] ?? "工作台") : "工作台"}
-                  </BreadcrumbPage>
-                </BreadcrumbItem>
-              </BreadcrumbList>
-            </Breadcrumb>
-            <div className="ml-auto flex shrink-0 items-center gap-2">
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                className="text-muted-foreground"
-                aria-label={isDark ? "切换到浅色模式" : "切换到深色模式"}
-                aria-pressed={isDark}
-                title={isDark ? "切换到浅色模式" : "切换到深色模式"}
-                onClick={() => setTheme(isDark ? "light" : "dark")}
-              >
-                {isDark ? <SunIcon /> : <MoonIcon />}
-              </Button>
-              <div className="hidden items-center gap-2 text-sm whitespace-nowrap text-muted-foreground lg:flex">
-                <time dateTime={today}>
-                  {today} {weekday}
-                </time>
+          {!isAiPage && (
+            <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b border-border/50 bg-background px-4 lg:px-5">
+              <SidebarTrigger className="-ml-1 rounded-full border bg-background md:hidden" />
+              <Breadcrumb className="min-w-0 flex-1 overflow-hidden">
+                <BreadcrumbList className="flex-nowrap overflow-hidden">
+                  {isResourcePage && (
+                    <>
+                      <BreadcrumbItem>
+                        <BreadcrumbMenu
+                          label="基础资料"
+                          items={resourceNavigationItems}
+                          pathname={pathname}
+                        />
+                      </BreadcrumbItem>
+                      <BreadcrumbSeparator />
+                    </>
+                  )}
+                  {isSemesterPage && (
+                    <>
+                      <BreadcrumbItem>
+                        <BreadcrumbMenu
+                          label="排课中心"
+                          items={schedulingMenuItems}
+                          pathname={pathname}
+                        />
+                      </BreadcrumbItem>
+                      <BreadcrumbSeparator />
+                    </>
+                  )}
+                  {isDailyPage && (
+                    <>
+                      <BreadcrumbItem>
+                        <BreadcrumbMenu
+                          label="日常运行"
+                          items={dailyMenuItems}
+                          pathname={pathname}
+                        />
+                      </BreadcrumbItem>
+                      <BreadcrumbSeparator />
+                    </>
+                  )}
+                  {isYearDetail && (
+                    <>
+                      <BreadcrumbItem>
+                        <BreadcrumbLink render={<Link to="/years" />}>学年与班级</BreadcrumbLink>
+                      </BreadcrumbItem>
+                      <BreadcrumbSeparator />
+                    </>
+                  )}
+                  <BreadcrumbItem className="min-w-0">
+                    <BreadcrumbPage className="block truncate">
+                      {isYearDetail ? "学年详情" : part ? (labels[part] ?? "工作台") : "工作台"}
+                    </BreadcrumbPage>
+                  </BreadcrumbItem>
+                </BreadcrumbList>
+              </Breadcrumb>
+              <div className="ml-auto flex shrink-0 items-center gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="text-muted-foreground"
+                  aria-label={isDark ? "切换到浅色模式" : "切换到深色模式"}
+                  aria-pressed={isDark}
+                  title={isDark ? "切换到浅色模式" : "切换到深色模式"}
+                  onClick={() => setTheme(isDark ? "light" : "dark")}
+                >
+                  {isDark ? <SunIcon /> : <MoonIcon />}
+                </Button>
+                <div className="hidden items-center gap-2 text-sm whitespace-nowrap text-muted-foreground lg:flex">
+                  <time dateTime={today}>
+                    {today} {weekday}
+                  </time>
+                </div>
+                <WorkspaceUserMenu
+                  trigger={<UserMenuTrigger userName={user?.name} className="md:hidden" />}
+                />
               </div>
-              <WorkspaceUserMenu
-                trigger={<UserMenuTrigger userName={user?.name} className="md:hidden" />}
-              />
-            </div>
-          </header>
-          <div className="min-w-0 flex-1 bg-background">{children ?? <Outlet />}</div>
+            </header>
+          )}
+          <div
+            className={cn("min-w-0 flex-1 bg-background", isAiPage && "min-h-0 overflow-hidden")}
+          >
+            {children ?? <Outlet />}
+          </div>
         </SidebarInset>
       </SidebarProvider>
     </TooltipProvider>

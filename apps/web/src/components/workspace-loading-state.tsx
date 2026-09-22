@@ -1,11 +1,19 @@
 import { Skeleton } from "@/components/ui/skeleton"
+import { AiChatLoadingState } from "@/components/chat/ai-chat-loading-state"
+import { useLocation } from "react-router"
+import { cn } from "@/lib/utils"
 
 export function WorkspaceLoadingState() {
+  const { pathname } = useLocation()
+  const isAiPage = pathname === "/ai" || pathname.startsWith("/ai/")
   return (
     <div
       role="status"
       aria-live="polite"
-      className="grid min-h-svh bg-background md:grid-cols-[255px_minmax(0,1fr)]"
+      className={cn(
+        "grid min-h-svh bg-background md:grid-cols-[255px_minmax(0,1fr)]",
+        isAiPage && "h-dvh min-h-0 overflow-hidden",
+      )}
     >
       <span className="sr-only">正在恢复会话…</span>
       <aside aria-hidden="true" className="hidden border-r bg-sidebar p-4 md:block">
@@ -33,24 +41,30 @@ export function WorkspaceLoadingState() {
           ))}
         </div>
       </aside>
-      <div className="min-w-0">
-        <header aria-hidden="true" className="flex h-14 items-center gap-3 border-b px-4 md:px-7">
-          <Skeleton className="size-7 md:hidden" />
-          <Skeleton className="h-4 w-28" />
-          <Skeleton className="ml-auto h-7 w-24" />
-        </header>
-        <main aria-hidden="true" className="space-y-7 p-5 md:p-7">
-          <div className="grid gap-3">
-            <Skeleton className="h-8 w-full max-w-lg" />
-            <Skeleton className="h-4 w-full max-w-sm" />
-          </div>
-          <Skeleton className="h-28 w-full" />
-          <div className="grid gap-6 xl:grid-cols-[1.5fr_0.75fr]">
-            <Skeleton className="h-80 w-full" />
-            <Skeleton className="h-80 w-full" />
-          </div>
-        </main>
-      </div>
+      {isAiPage ? (
+        <div aria-hidden="true" className="min-h-0 min-w-0">
+          <AiChatLoadingState />
+        </div>
+      ) : (
+        <div className="min-w-0">
+          <header aria-hidden="true" className="flex h-14 items-center gap-3 border-b px-4 md:px-7">
+            <Skeleton className="size-7 md:hidden" />
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="ml-auto h-7 w-24" />
+          </header>
+          <main aria-hidden="true" className="space-y-7 p-5 md:p-7">
+            <div className="grid gap-3">
+              <Skeleton className="h-8 w-full max-w-lg" />
+              <Skeleton className="h-4 w-full max-w-sm" />
+            </div>
+            <Skeleton className="h-28 w-full" />
+            <div className="grid gap-6 xl:grid-cols-[1.5fr_0.75fr]">
+              <Skeleton className="h-80 w-full" />
+              <Skeleton className="h-80 w-full" />
+            </div>
+          </main>
+        </div>
+      )}
     </div>
   )
 }

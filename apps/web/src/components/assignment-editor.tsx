@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import { AlertTriangleIcon } from "lucide-react"
 import { toast } from "sonner"
 import { api, apiMessage } from "@/lib/api"
+import { TEACHING_GROUPS_ENABLED } from "@/lib/features"
 import type {
   ClassSetting,
   Course,
@@ -198,7 +199,9 @@ export function AssignmentEditorDialog({
                 }}
               >
                 <option value="class">班级</option>
-                <option value="group">教学组（合班 / 拆班 / 走班）</option>
+                {(TEACHING_GROUPS_ENABLED || Boolean(assignment?.teaching_group_id)) && (
+                  <option value="group">教学组（合班 / 拆班 / 走班）</option>
+                )}
               </SimpleSelect>
             </Field>
             {form.targetType === "class" ? (

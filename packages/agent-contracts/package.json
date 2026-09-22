@@ -1,0 +1,11 @@
+{
+  "name": "@timetable/agent-contracts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "ai": "7.0.107",
+    "zod": "4.4.3"
+  }
+}

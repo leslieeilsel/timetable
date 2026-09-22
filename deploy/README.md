@@ -6,10 +6,11 @@
 
 ## 1. 部署结论与架构
 
-项目由两个运行单元组成：
+项目的主要运行单元如下：
 
 - `apps/web`：React 19 + Vite+ 构建的纯静态 SPA，构建产物位于 `apps/web/dist`；
 - `apps/api`：PHP 8.4 + Laravel 13 API，通过 PHP-FPM 运行；
+- `apps/agent`：Node.js 24.19.0 + TypeScript + pi，通过 DeepSeek 提供教务助手，独立常驻运行；
 - MySQL 8.4 LTS：生产数据库；
 - Laravel 数据库队列：执行自动排课任务，必须有常驻队列进程；
 - Laravel Scheduler：由宝塔计划任务每分钟触发一次。当前代码尚无自定义定时任务，但架构设计要求保留该入口，便于后续版本增加任务时不漏执行。
@@ -21,6 +22,7 @@
   └─ HTTPS / timetable.example.com
       └─ 宝塔 Nginx
           ├─ /api/*、/sanctum/csrf-cookie → Laravel public/index.php → PHP 8.4 FPM
+          ├─ /agent/*                    → TypeScript Agent（127.0.0.1:8010）
           └─ 其他路径                     → apps/web/dist（React SPA）
 
 Laravel → MySQL 8.4
@@ -34,15 +36,15 @@ Laravel → MySQL 8.4
 
 建议使用仍在安全支持期内的 64 位 Linux 发行版。宝塔“软件商店”中准备以下组件：
 
-| 组件 | 要求 | 说明 |
-| --- | --- | --- |
-| Nginx | 宝塔当前稳定版 | 提供 HTTPS、静态文件和 FastCGI 转发 |
-| PHP | **8.4** | `apps/api/composer.json` 要求 `^8.4`，不能降到 8.3 |
-| MySQL | **8.4 LTS** | 项目架构和生产数据库测试基线；不建议用 SQLite 或未经验证的 MariaDB 替代 |
-| Composer | 2.x | 安装 Laravel 生产依赖时必须实际使用 PHP 8.4 |
-| Node.js | **24.19.0** | 只在构建前端时需要，不作为常驻 Web 服务运行 |
-| Vite+ | **0.2.9** | 项目的前端工具链入口，命令为 `vp` |
-| 进程守护管理器 | 宝塔 Supervisor/进程守护插件 | 常驻运行 Laravel 队列 worker |
+| 组件           | 要求                         | 说明                                                                    |
+| -------------- | ---------------------------- | ----------------------------------------------------------------------- |
+| Nginx          | 宝塔当前稳定版               | 提供 HTTPS、静态文件和 FastCGI 转发                                     |
+| PHP            | **8.4**                      | `apps/api/composer.json` 要求 `^8.4`，不能降到 8.3                      |
+| MySQL          | **8.4 LTS**                  | 项目架构和生产数据库测试基线；不建议用 SQLite 或未经验证的 MariaDB 替代 |
+| Composer       | 2.x                          | 安装 Laravel 生产依赖时必须实际使用 PHP 8.4                             |
+| Node.js        | **24.19.0**                  | 用于构建前端，并常驻运行 TypeScript Agent                               |
+| Vite+          | **0.2.9**                    | 项目的前端工具链入口，命令为 `vp`                                       |
+| 进程守护管理器 | 宝塔 Supervisor/进程守护插件 | 常驻运行 Laravel 队列 worker 和独立 Agent                               |
 
 PHP 扩展至少启用：
 
@@ -79,15 +81,15 @@ date.timezone = Asia/Shanghai
 
 本文后续统一使用以下示例值，实际部署时必须替换：
 
-| 项目 | 示例值 |
-| --- | --- |
-| 域名 | `timetable.example.com` |
-| 项目目录 | `/www/wwwroot/timetable/current` |
-| Laravel 目录 | `/www/wwwroot/timetable/current/apps/api` |
-| 前端产物目录 | `/www/wwwroot/timetable/current/apps/web/dist` |
-| 数据库 | `timetable` |
-| 数据库用户 | `timetable` |
-| PHP-FPM Socket | `/tmp/php-cgi-84.sock`（以宝塔生成配置为准） |
+| 项目           | 示例值                                         |
+| -------------- | ---------------------------------------------- |
+| 域名           | `timetable.example.com`                        |
+| 项目目录       | `/www/wwwroot/timetable/current`               |
+| Laravel 目录   | `/www/wwwroot/timetable/current/apps/api`      |
+| 前端产物目录   | `/www/wwwroot/timetable/current/apps/web/dist` |
+| 数据库         | `timetable`                                    |
+| 数据库用户     | `timetable`                                    |
+| PHP-FPM Socket | `/tmp/php-cgi-84.sock`（以宝塔生成配置为准）   |
 
 ### 3.1 上传代码
 
@@ -166,7 +168,7 @@ vp run build:web
 test -f apps/web/dist/index.html
 ```
 
-`--frozen-lockfile` 可防止服务器静默修改依赖锁文件。生产运行时不需要启动 `vp dev`、`vp preview` 或 Node 常驻进程，Nginx 直接提供 `apps/web/dist`。
+`--frozen-lockfile` 可防止服务器静默修改依赖锁文件。管理端生产运行时不启动 `vp dev` 或 `vp preview`，Nginx 直接提供 `apps/web/dist`。AI 助手另行构建并常驻运行 Node Agent，具体配置、Nginx `/agent/` 代理和守护进程见 [Agent 部署指南](agent.md)。
 
 ### 4.3 安装 Laravel 生产依赖
 
@@ -414,13 +416,13 @@ add_header X-Frame-Options "DENY" always;
 
 在宝塔 Supervisor/进程守护管理器中新建 `timetable-queue`：
 
-| 字段 | 建议值 |
-| --- | --- |
-| 工作目录 | `/www/wwwroot/timetable/current/apps/api` |
-| 启动用户 | `www` |
-| 进程数 | `1`（先按单进程运行，确认 CPU/内存余量后再评估） |
-| 自动启动/重启 | 开启 |
-| 停止等待时间 | 至少 `360` 秒 |
+| 字段          | 建议值                                           |
+| ------------- | ------------------------------------------------ |
+| 工作目录      | `/www/wwwroot/timetable/current/apps/api`        |
+| 启动用户      | `www`                                            |
+| 进程数        | `1`（先按单进程运行，确认 CPU/内存余量后再评估） |
+| 自动启动/重启 | 开启                                             |
+| 停止等待时间  | 至少 `360` 秒                                    |
 
 启动命令：
 
@@ -516,12 +518,12 @@ curl -sS -o /dev/null -w '%{http_code}\n' \
 3. 让 Laravel 进入维护模式；
 4. 停止或平滑退出队列 worker；
 5. 更新到已验证的 Tag/Commit；
-6. 重新执行 `vp install --frozen-lockfile` 和 `vp run build:web`；
+6. 重新执行 `vp install --frozen-lockfile`、`vp run build:web` 和 `vp run build:agent`；
 7. 重新执行 Composer 生产安装和 `composer check-platform-reqs --no-dev`；
 8. 修正 `storage`、`bootstrap/cache` 权限；
 9. 执行 `php artisan migrate --force`；
 10. 执行 `php artisan config:cache`、`php artisan view:cache` 和 `php artisan queue:restart`；
-11. 恢复队列守护进程并退出维护模式；
+11. 恢复队列守护进程、重启 Agent 并退出维护模式；
 12. 完成健康检查和浏览器冒烟测试，再结束观察期。
 
 维护模式命令：
@@ -572,18 +574,18 @@ tail -n 100 storage/logs/queue-worker.log
 
 ### 13.3 常见故障
 
-| 现象 | 优先检查 |
-| --- | --- |
-| 502 Bad Gateway | `fastcgi_pass` Socket 是否与宝塔 PHP 8.4 实际配置一致，PHP-FPM 是否运行 |
-| API 返回 404/HTML | `/api/` 是否进入 `@timetable_laravel`，是否误被 SPA `index.html` 接管 |
-| 登录或写操作返回 419 | `/sanctum/csrf-cookie` 是否转发，HTTPS、`APP_URL`、`SANCTUM_STATEFUL_DOMAINS`、Secure Cookie 是否匹配 |
-| 登录后立即 401 | `sessions` 表、数据库 Session 配置、Cookie 域名、系统时间是否正常 |
-| 健康检查 503 | MySQL 连接、Migration、`app_settings` 记录、数据库权限 |
-| 自动排课一直等待 | 队列守护进程、`jobs`/`failed_jobs`、worker 使用的代码目录和 `.env` |
-| 深层页面刷新 404 | Nginx 的 `try_files $uri $uri/ /index.html` 是否存在 |
-| Laravel 无法写日志/缓存 | `storage`、`bootstrap/cache` 的属主和权限，宝塔 open_basedir |
-| 上传返回 413 | Nginx `client_max_body_size` 与 PHP `upload_max_filesize`/`post_max_size` |
-| 修改 `.env` 不生效 | 清除并重新生成 Laravel 配置缓存，然后平滑重启队列 worker |
+| 现象                    | 优先检查                                                                                              |
+| ----------------------- | ----------------------------------------------------------------------------------------------------- |
+| 502 Bad Gateway         | `fastcgi_pass` Socket 是否与宝塔 PHP 8.4 实际配置一致，PHP-FPM 是否运行                               |
+| API 返回 404/HTML       | `/api/` 是否进入 `@timetable_laravel`，是否误被 SPA `index.html` 接管                                 |
+| 登录或写操作返回 419    | `/sanctum/csrf-cookie` 是否转发，HTTPS、`APP_URL`、`SANCTUM_STATEFUL_DOMAINS`、Secure Cookie 是否匹配 |
+| 登录后立即 401          | `sessions` 表、数据库 Session 配置、Cookie 域名、系统时间是否正常                                     |
+| 健康检查 503            | MySQL 连接、Migration、`app_settings` 记录、数据库权限                                                |
+| 自动排课一直等待        | 队列守护进程、`jobs`/`failed_jobs`、worker 使用的代码目录和 `.env`                                    |
+| 深层页面刷新 404        | Nginx 的 `try_files $uri $uri/ /index.html` 是否存在                                                  |
+| Laravel 无法写日志/缓存 | `storage`、`bootstrap/cache` 的属主和权限，宝塔 open_basedir                                          |
+| 上传返回 413            | Nginx `client_max_body_size` 与 PHP `upload_max_filesize`/`post_max_size`                             |
+| 修改 `.env` 不生效      | 清除并重新生成 Laravel 配置缓存，然后平滑重启队列 worker                                              |
 
 ## 14. 上线前最终清单
 

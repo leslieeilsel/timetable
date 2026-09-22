@@ -7,6 +7,7 @@ import { semesterPath, type SemesterDestination } from "@/lib/semester"
 import type { Role } from "@/lib/types"
 import { LoadingState } from "@/components/page"
 import { WorkspaceLoadingState } from "@/components/workspace-loading-state"
+import { AiChatLoadingState } from "@/components/chat/ai-chat-loading-state"
 
 const LoginPage = lazy(() =>
   import("@/pages/auth-pages").then((module) => ({ default: module.LoginPage })),
@@ -23,6 +24,9 @@ const ProtectedWorkspace = lazy(() =>
 )
 const DashboardPage = lazy(() =>
   import("@/pages/dashboard-page").then((module) => ({ default: module.DashboardPage })),
+)
+const AiChatPage = lazy(() =>
+  import("@/pages/ai-chat-page").then((module) => ({ default: module.AiChatPage })),
 )
 const GradesPage = lazy(() =>
   import("@/pages/resources-page").then((module) => ({ default: module.GradesPage })),
@@ -125,6 +129,16 @@ export default function App() {
           <Route path="/change-password" element={<ChangePasswordPage />} />
           <Route element={<ProtectedWorkspace />}>
             <Route index element={<DashboardPage />} />
+            <Route
+              path="ai/:conversationId?"
+              element={
+                <RequireRole roles={["admin", "scheduler"]}>
+                  <Suspense fallback={<AiChatLoadingState />}>
+                    <AiChatPage />
+                  </Suspense>
+                </RequireRole>
+              }
+            />
             <Route path="resources" element={<Navigate to="/resources/grades" replace />} />
             <Route
               path="resources/grades"

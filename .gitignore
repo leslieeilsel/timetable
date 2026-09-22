@@ -1,4 +1,8 @@
 /.env
+/apps/agent/.env
+/apps/agent/.env.*
+!/apps/agent/.env.example
+/apps/agent/dist/
 /.DS_Store
 **/node_modules/
 /test-results/
@@ -20,3 +24,6 @@
 /apps/api/storage/framework/views/*
 /apps/api/storage/logs/*
 !/apps/api/storage/**/.gitignore
+
+# Agent conversation storage (contains private school conversations)
+apps/agent/storage/

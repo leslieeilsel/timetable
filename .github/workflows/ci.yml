@@ -23,6 +23,9 @@ jobs:
       - run: vp run @timetable/teacher#check
       - run: vp run @timetable/teacher#test -- run
       - run: vp run @timetable/teacher#build
+      - run: vp run @timetable/agent#check
+      - run: vp run @timetable/agent#test
+      - run: vp run @timetable/agent#build
 
   api-sqlite:
     runs-on: ubuntu-latest

@@ -35,7 +35,7 @@ export const resourceNavigationItems = [
 
 export const schedulingNavigationItems = [
   { title: "① 准备检查", destination: "preparation", icon: BookOpenCheckIcon },
-  { title: "② 课程与任课矩阵", destination: "assignments", icon: ClipboardListIcon },
+  { title: "② 任课关系", destination: "assignments", icon: ClipboardListIcon },
   { title: "③ 规则与约束", destination: "constraints", icon: SettingsIcon },
   { title: "④ 方案生成", destination: "generate", icon: GalleryVerticalEndIcon },
   { title: "⑤ 课表调整与诊断", destination: "timetable", icon: BookOpenTextIcon },
