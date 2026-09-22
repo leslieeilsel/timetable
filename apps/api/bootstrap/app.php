@@ -4,11 +4,14 @@ use App\Http\Middleware\AssignRequestId;
 use App\Http\Middleware\EnsureSessionIsValid;
 use App\Http\Middleware\EnsureStaffRole;
 use App\Http\Middleware\EnsureTeacherRole;
+use App\Http\Middleware\PreventClientRequestForgery;
+use App\Http\Middleware\UseClientSession;
 use App\Modules\Identity\Console\CreateAdminCommand;
 use App\Support\ApiProblemException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
@@ -21,6 +24,11 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->statefulApi();
+        $middleware->web(
+            prepend: [UseClientSession::class],
+            replace: [PreventRequestForgery::class => PreventClientRequestForgery::class],
+        );
+        $middleware->api(prepend: [UseClientSession::class]);
         $middleware->append(AssignRequestId::class);
         $middleware->alias([
             'session.valid' => EnsureSessionIsValid::class,

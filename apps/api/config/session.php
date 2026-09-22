@@ -1,7 +1,5 @@
 <?php
 
-use Illuminate\Support\Str;
-
 return [
 
     /*
@@ -128,9 +126,23 @@ return [
     */
 
     'cookie' => env(
-        'SESSION_COOKIE',
-        Str::slug((string) env('APP_NAME', 'laravel')).'-session'
+        'SESSION_ADMIN_COOKIE',
+        env('SESSION_COOKIE', 'timetable_admin_session')
     ),
+
+    'admin_cookie' => env(
+        'SESSION_ADMIN_COOKIE',
+        env('SESSION_COOKIE', 'timetable_admin_session')
+    ),
+
+    'teacher_cookie' => env(
+        'SESSION_TEACHER_COOKIE',
+        'timetable_teacher_session'
+    ),
+
+    'admin_xsrf_cookie' => env('SESSION_ADMIN_XSRF_COOKIE', 'XSRF-TOKEN-ADMIN'),
+
+    'teacher_xsrf_cookie' => env('SESSION_TEACHER_XSRF_COOKIE', 'XSRF-TOKEN-TEACHER'),
 
     /*
     |--------------------------------------------------------------------------

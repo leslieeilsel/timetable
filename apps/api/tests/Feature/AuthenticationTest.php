@@ -24,6 +24,86 @@ it('starts a session for the configured Vite development host', function (): voi
         ->assertJsonPath('data.id', $user->id);
 });
 
+
+it('keeps administrator and teacher browser sessions isolated', function (): void {
+    config(['session.driver' => 'database']);
+    $this->withCredentials();
+
+    $admin = User::factory()->create([
+        'email' => 'parallel-admin@example.test',
+        'password' => 'Permanent5678',
+        'role' => Role::Admin,
+        'must_change_password' => false,
+    ]);
+    $teacherProfile = Teacher::query()->create([
+        'employee_no' => 'T-PARALLEL-001',
+        'name' => '并行登录教师',
+        'is_active' => true,
+    ]);
+    $teacher = User::factory()->create([
+        'email' => 'parallel-teacher@example.test',
+        'password' => 'Permanent5678',
+        'role' => Role::Teacher,
+        'teacher_id' => $teacherProfile->id,
+        'must_change_password' => false,
+    ]);
+
+    $adminHeaders = [
+        'Origin' => 'http://localhost:5173',
+        'Referer' => 'http://localhost:5173/',
+        'X-Timetable-Client' => 'admin',
+    ];
+    $teacherHeaders = [
+        'Origin' => 'http://localhost:5175',
+        'Referer' => 'http://localhost:5175/',
+        'X-Timetable-Client' => 'teacher',
+    ];
+
+    $this->withHeaders($adminHeaders)
+        ->get('/sanctum/csrf-cookie')
+        ->assertNoContent()
+        ->assertCookie(config('session.admin_xsrf_cookie'));
+
+    $adminLogin = $this->withHeaders($adminHeaders)->postJson('/api/v1/auth/login', [
+        'email' => 'parallel-admin@example.test',
+        'password' => 'Permanent5678',
+    ])->assertOk();
+
+    $this->withHeaders($teacherHeaders)
+        ->get('/sanctum/csrf-cookie')
+        ->assertNoContent()
+        ->assertCookie(config('session.teacher_xsrf_cookie'));
+
+    $teacherLogin = $this->withHeaders($teacherHeaders)->postJson('/api/v1/auth/login', [
+        'email' => 'parallel-teacher@example.test',
+        'password' => 'Permanent5678',
+    ])->assertOk();
+
+    $adminSession = $adminLogin->getCookie(config('session.admin_cookie'))?->getValue();
+    $teacherSession = $teacherLogin->getCookie(config('session.teacher_cookie'))?->getValue();
+
+    expect($adminSession)->not->toBeNull()
+        ->and($teacherSession)->not->toBeNull()
+        ->and($adminSession)->not->toBe($teacherSession);
+
+    $this->withCookies([
+        config('session.admin_cookie') => $adminSession,
+        config('session.teacher_cookie') => $teacherSession,
+    ]);
+
+    $this->withHeaders($adminHeaders)
+        ->getJson('/api/v1/me')
+        ->assertOk()
+        ->assertJsonPath('data.id', $admin->id)
+        ->assertJsonPath('data.role', 'admin');
+
+    $this->withHeaders($teacherHeaders)
+        ->getJson('/api/v1/me')
+        ->assertOk()
+        ->assertJsonPath('data.id', $teacher->id)
+        ->assertJsonPath('data.role', 'teacher');
+});
+
 it('requires a temporary password to be changed before using the workspace', function (): void {
     $this->withHeaders(['Origin' => 'http://localhost:5173', 'Referer' => 'http://localhost:5173/']);
     $user = User::factory()->create([

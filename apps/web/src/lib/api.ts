@@ -23,6 +23,8 @@ export interface ApiDownloadResult {
 }
 
 const unsafeMethods = new Set(["POST", "PUT", "PATCH", "DELETE"])
+const clientHeaders = { "X-Timetable-Client": "admin" } as const
+const xsrfCookie = "XSRF-TOKEN-ADMIN"
 let csrfReady = false
 
 function cookie(name: string) {
@@ -34,10 +36,10 @@ function cookie(name: string) {
 }
 
 async function ensureCsrf() {
-  if (csrfReady && cookie("XSRF-TOKEN")) return
+  if (csrfReady && cookie(xsrfCookie)) return
   const response = await fetch("/sanctum/csrf-cookie", {
     credentials: "include",
-    headers: { Accept: "application/json" },
+    headers: { Accept: "application/json", ...clientHeaders },
   })
   if (!response.ok)
     throw new ApiError("无法初始化安全会话", response.status, "CSRF_INIT_FAILED", {})
@@ -47,7 +49,7 @@ async function ensureCsrf() {
 export async function csrfHeaders(refresh = false): Promise<Record<string, string>> {
   if (refresh) csrfReady = false
   await ensureCsrf()
-  const token = cookie("XSRF-TOKEN")
+  const token = cookie(xsrfCookie)
   if (!token) throw new ApiError("请登录并刷新页面后重试。", 401, "SESSION_REQUIRED", {})
   return { "X-XSRF-TOKEN": token }
 }
@@ -121,8 +123,9 @@ async function request<T>(
 
   const headers = new Headers(options.headers)
   headers.set("Accept", "application/json")
+  headers.set("X-Timetable-Client", "admin")
   if (unsafeMethods.has(method)) {
-    const xsrf = cookie("XSRF-TOKEN")
+    const xsrf = cookie(xsrfCookie)
     if (xsrf) headers.set("X-XSRF-TOKEN", xsrf)
   }
   if (options.etag) headers.set("If-Match", options.etag)
@@ -163,8 +166,9 @@ async function downloadRequest(
 
   const headers = new Headers(options.headers)
   headers.set("Accept", "application/octet-stream, application/json")
+  headers.set("X-Timetable-Client", "admin")
   if (unsafeMethods.has(method)) {
-    const xsrf = cookie("XSRF-TOKEN")
+    const xsrf = cookie(xsrfCookie)
     if (xsrf) headers.set("X-XSRF-TOKEN", xsrf)
   }
   if (options.body && !options.formData) headers.set("Content-Type", "application/json")

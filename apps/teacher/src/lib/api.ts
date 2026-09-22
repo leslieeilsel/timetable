@@ -13,6 +13,8 @@ export class ApiError extends Error {
 
 const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") ?? ""
 const unsafeMethods = new Set(["POST", "PUT", "PATCH", "DELETE"])
+const clientHeaders = { "X-Timetable-Client": "teacher" } as const
+const xsrfCookie = "XSRF-TOKEN-TEACHER"
 let csrfReady = false
 
 function endpoint(path: string) {
@@ -28,10 +30,10 @@ function cookie(name: string) {
 }
 
 async function ensureCsrf() {
-  if (csrfReady && cookie("XSRF-TOKEN")) return
+  if (csrfReady && cookie(xsrfCookie)) return
   const response = await fetch(endpoint("/sanctum/csrf-cookie"), {
     credentials: "include",
-    headers: { Accept: "application/json" },
+    headers: { Accept: "application/json", ...clientHeaders },
   })
   if (!response.ok)
     throw new ApiError("无法初始化安全会话", response.status, "CSRF_INIT_FAILED", {})
@@ -51,8 +53,9 @@ async function request<T>(
   if (unsafeMethods.has(method)) await ensureCsrf()
   const headers = new Headers(options.headers)
   headers.set("Accept", "application/json")
+  headers.set("X-Timetable-Client", "teacher")
   if (unsafeMethods.has(method)) {
-    const xsrf = cookie("XSRF-TOKEN")
+    const xsrf = cookie(xsrfCookie)
     if (xsrf) headers.set("X-XSRF-TOKEN", xsrf)
   }
   if (options.body) headers.set("Content-Type", "application/json")

@@ -50,6 +50,7 @@ export class BusinessApi {
           "Content-Type": "application/json",
           Cookie: this.identity.cookie,
           "X-XSRF-TOKEN": this.identity.csrf,
+          "X-Timetable-Client": "admin",
           Origin: this.identity.origin,
           Referer: `${this.identity.origin}/`,
           ...(mutation
