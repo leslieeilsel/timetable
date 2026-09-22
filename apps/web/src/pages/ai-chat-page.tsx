@@ -24,6 +24,7 @@ import {
 } from "@/lib/chat"
 import { splitChatMessage, type ChatDisplayPart } from "@/lib/chat-message"
 import { useSchoolContext } from "@/lib/queries"
+import { randomUuid } from "@/lib/random-uuid"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { SidebarTrigger } from "@/components/ui/sidebar"
@@ -128,7 +129,7 @@ function ChatSession({
   const composer = useRef<HTMLTextAreaElement>(null)
   const composerForm = useRef<HTMLFormElement>(null)
   const composerOrigin = useRef<DOMRect | null>(null)
-  const [chatId] = useState(() => initial?.id ?? crypto.randomUUID())
+  const [chatId] = useState(() => initial?.id ?? randomUuid())
   const conversation = useRef(initial)
   const active = useRef(true)
   const submitting = useRef(false)
@@ -310,7 +311,7 @@ function ChatSession({
     try {
       await sendMessage(
         {
-          id: crypto.randomUUID(),
+          id: randomUuid(),
           role: "user",
           parts: [{ type: "text", text: value }],
           metadata: { status: "complete", sent_at: new Date().toISOString() },
