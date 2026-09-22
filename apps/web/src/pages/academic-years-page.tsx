@@ -99,7 +99,7 @@ export function AcademicYearsPage() {
   return (
     <>
       <PageHeader
-        title="学年与班级"
+        title="学年学期"
         description="按学年初始化班级，再进入各学期准备作息、任务和课表。"
       />
       <div className="p-5 md:p-7">
@@ -167,15 +167,23 @@ export function AcademicYearsPage() {
                         </div>
                       </TableCell>
                       <TableCell data-label="操作" className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          nativeButton={false}
-                          render={<Link to={`/years/${year.id}`} />}
-                        >
-                          {isCurrent ? "管理学年" : "查看详情"}
-                          {isCurrent && <ChevronRightIcon />}
-                        </Button>
+                        <div className="inline-grid w-28 grid-cols-[1fr_1rem] items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="justify-center px-2"
+                            nativeButton={false}
+                            render={<Link to={`/years/${year.id}`} />}
+                          >
+                            {isCurrent ? "管理学年" : "查看详情"}
+                          </Button>
+                          <span
+                            className="flex size-4 items-center justify-center"
+                            aria-hidden="true"
+                          >
+                            {isCurrent && <ChevronRightIcon className="size-4" />}
+                          </span>
+                        </div>
                       </TableCell>
                     </TableRow>
                   )
@@ -464,10 +472,10 @@ export function AcademicYearDetailPage() {
         </div>
       </div>
       <div className="p-5 md:p-7">
-        <Tabs defaultValue="classes">
+        <Tabs defaultValue="semesters">
           <TabsList>
-            <TabsTrigger value="classes">班级（{classTotal}）</TabsTrigger>
             <TabsTrigger value="semesters">学期（{semesters.data?.length ?? 0}/2）</TabsTrigger>
+            <TabsTrigger value="classes">班级（{classTotal}）</TabsTrigger>
           </TabsList>
           <TabsContent
             value="classes"
@@ -621,7 +629,14 @@ export function AcademicYearDetailPage() {
                     {semestersPagination.items.map((semester) => (
                       <TableRow key={semester.id}>
                         <TableCell data-label="学期" className="font-medium">
-                          {semester.name}
+                          <div className="flex items-center gap-2">
+                            <span>{semester.name}</span>
+                            {context.data?.current_semester?.id === semester.id && (
+                              <span className="inline-flex h-6 items-center rounded-md bg-emerald-50 px-2 text-xs font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
+                                当前学期
+                              </span>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell data-label="日期范围">
                           {semester.start_date} 至 {semester.end_date}
@@ -659,11 +674,7 @@ export function AcademicYearDetailPage() {
                           )}
                           {semester.status === "open" && (
                             <>
-                              {context.data?.current_semester?.id === semester.id ? (
-                                <span className="inline-flex h-8 items-center px-3 text-sm font-medium text-emerald-700 dark:text-emerald-400">
-                                  当前学期
-                                </span>
-                              ) : (
+                              {context.data?.current_semester?.id !== semester.id && (
                                 <Button
                                   size="sm"
                                   variant="ghost"

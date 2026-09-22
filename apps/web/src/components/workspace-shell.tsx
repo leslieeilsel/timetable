@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from "react"
+import { useQuery } from "@tanstack/react-query"
 import { Link, Outlet, useLocation } from "react-router"
 import { ChevronDownIcon, MoonIcon, SunIcon, type LucideIcon } from "lucide-react"
 import { useTheme } from "next-themes"
@@ -10,10 +11,13 @@ import {
 } from "@/components/app-navigation"
 import { WorkspaceUserMenu } from "@/components/workspace-user-menu"
 import { useAuth } from "@/lib/auth"
+import { api } from "@/lib/api"
+import type { Semester } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import {
   isDailySemesterPath,
   isSchedulingSemesterPath,
+  semesterDestinationForPath,
   semesterPathOrCurrent,
   useResolvedSemesterId,
 } from "@/lib/semester"
@@ -42,7 +46,7 @@ const labels: Record<string, string> = {
   teachers: "教师",
   courses: "课程",
   rooms: "教室",
-  years: "学年与班级",
+  years: "学年学期",
   semester: "当前学期",
   scheduling: "排课中心",
   preparation: "准备检查",
@@ -71,7 +75,8 @@ export function WorkspaceShell({ children }: { children?: ReactNode }) {
   const part = parts.at(-1)
   const isAiPage = parts[0] === "ai"
   const isResourcePage = pathname.startsWith("/resources/")
-  const isSemesterPage = isSchedulingSemesterPath(pathname)
+  const isSemesterSetup = semesterDestinationForPath(pathname) === "setup"
+  const isSemesterPage = isSchedulingSemesterPath(pathname) && !isSemesterSetup
   const isDailyPage = isDailySemesterPath(pathname)
   const schedulingMenuItems = schedulingNavigationItems
     .filter((item) => user?.role !== "viewer" || item.destination === "timetable")
@@ -84,6 +89,12 @@ export function WorkspaceShell({ children }: { children?: ReactNode }) {
     to: semesterPathOrCurrent(semesterId, item.destination),
   }))
   const isYearDetail = parts[0] === "years" && parts.length > 1
+  const setupSemester = useQuery({
+    queryKey: ["semester", semesterId],
+    queryFn: () => api<Semester>(`/api/v1/semesters/${semesterId}`),
+    enabled: isSemesterSetup && semesterId !== null,
+  })
+  const setupYearId = setupSemester.data?.data.academic_year_id
   const now = new Date()
   const today = new Intl.DateTimeFormat("zh-CN", {
     year: "numeric",
@@ -156,14 +167,38 @@ export function WorkspaceShell({ children }: { children?: ReactNode }) {
                   {isYearDetail && (
                     <>
                       <BreadcrumbItem>
-                        <BreadcrumbLink render={<Link to="/years" />}>学年与班级</BreadcrumbLink>
+                        <BreadcrumbLink render={<Link to="/years" />}>学年学期</BreadcrumbLink>
+                      </BreadcrumbItem>
+                      <BreadcrumbSeparator />
+                    </>
+                  )}
+                  {isSemesterSetup && (
+                    <>
+                      <BreadcrumbItem>
+                        <BreadcrumbLink render={<Link to="/years" />}>学年学期</BreadcrumbLink>
+                      </BreadcrumbItem>
+                      <BreadcrumbSeparator />
+                      <BreadcrumbItem>
+                        {setupYearId ? (
+                          <BreadcrumbLink render={<Link to={`/years/${setupYearId}`} />}>
+                            学年详情
+                          </BreadcrumbLink>
+                        ) : (
+                          <span className="text-muted-foreground">学年详情</span>
+                        )}
                       </BreadcrumbItem>
                       <BreadcrumbSeparator />
                     </>
                   )}
                   <BreadcrumbItem className="min-w-0">
                     <BreadcrumbPage className="block truncate">
-                      {isYearDetail ? "学年详情" : part ? (labels[part] ?? "工作台") : "工作台"}
+                      {isSemesterSetup
+                        ? "学期配置"
+                        : isYearDetail
+                          ? "学年详情"
+                          : part
+                            ? (labels[part] ?? "工作台")
+                            : "工作台"}
                     </BreadcrumbPage>
                   </BreadcrumbItem>
                 </BreadcrumbList>

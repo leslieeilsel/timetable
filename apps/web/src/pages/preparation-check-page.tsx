@@ -288,8 +288,9 @@ function CheckRow({
   checking: boolean
 }) {
   const state = statusStyle[item.status]
+  const targetPath = withSemesterId(semesterId, item.fix_path)
   return (
-    <div className="grid gap-3 px-4 py-4 sm:grid-cols-[2rem_minmax(0,1fr)_auto] sm:items-start">
+    <div className="group grid gap-3 px-4 py-4 transition-colors hover:bg-muted/30 sm:grid-cols-[2rem_minmax(0,1fr)_auto] sm:items-start">
       {checking ? (
         <CircleDashedIcon className="mt-0.5 size-5 text-muted-foreground" aria-hidden="true" />
       ) : (
@@ -297,7 +298,18 @@ function CheckRow({
       )}
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 className="font-medium">{item.label}</h2>
+          <h2 className="font-medium">
+            {checking ? (
+              item.label
+            ) : (
+              <Link
+                to={targetPath}
+                className="rounded-sm hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              >
+                {item.label}
+              </Link>
+            )}
+          </h2>
           <span
             className={cn(
               "rounded-full border px-2 py-0.5 text-xs font-medium",
@@ -320,14 +332,9 @@ function CheckRow({
           </details>
         )}
       </div>
-      {!checking && item.status !== "passed" && (
-        <Button
-          variant="outline"
-          size="sm"
-          nativeButton={false}
-          render={<Link to={withSemesterId(semesterId, item.fix_path)} />}
-        >
-          去处理
+      {!checking && (
+        <Button variant="outline" size="sm" nativeButton={false} render={<Link to={targetPath} />}>
+          {item.status === "passed" ? "查看" : "去处理"}
           <ArrowRightIcon />
         </Button>
       )}

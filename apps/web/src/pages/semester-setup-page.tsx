@@ -1,6 +1,7 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { ArrowRightLeftIcon, CopyIcon, PlusIcon, Settings2Icon } from "lucide-react"
+import { Link } from "react-router"
+import { ArrowLeftIcon, ArrowRightLeftIcon, CopyIcon, PlusIcon, Settings2Icon } from "lucide-react"
 import { toast } from "sonner"
 import { api, apiAllPages, apiMessage } from "@/lib/api"
 import { useResolvedSemesterId } from "@/lib/semester"
@@ -207,6 +208,18 @@ export function SemesterSetupPage() {
         description="先确定参与排课的班级和固定教室，再维护统一作息。"
       />
       <div className="p-5 md:p-7">
+        <div className="mb-4">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="-ml-2 text-muted-foreground"
+            nativeButton={false}
+            render={<Link to={`/years/${current.academic_year_id}`} />}
+          >
+            <ArrowLeftIcon />
+            返回学年详情
+          </Button>
+        </div>
         <Tabs
           value={urlParams.get("section") === "schedule-template" ? "template" : "classes"}
           onValueChange={(value) =>
@@ -410,7 +423,10 @@ export function SemesterSetupPage() {
                   <p className="mb-2 text-sm font-medium">课节列表</p>
                   <div className="divide-y rounded-2xl border">
                     {template.data.data.items.map((item) => (
-                      <div key={item.id} className="flex items-center gap-3 p-3">
+                      <div
+                        key={item.id}
+                        className="grid grid-cols-[3rem_minmax(0,1fr)_4.5rem_3.5rem] items-center gap-3 p-3"
+                      >
                         <span className="w-12 text-sm tabular-nums text-muted-foreground">
                           {item.sort_order}
                         </span>
@@ -420,10 +436,12 @@ export function SemesterSetupPage() {
                             {item.start_time.slice(0, 5)}–{item.end_time.slice(0, 5)}
                           </p>
                         </div>
-                        <StatusBadge value={item.is_active ? "active" : "inactive"} />
-                        {item.allows_course && (
-                          <span className="text-xs text-muted-foreground">可排课</span>
-                        )}
+                        <div className="flex justify-start">
+                          <StatusBadge value={item.is_active ? "active" : "inactive"} />
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          {item.allows_course ? "可排课" : ""}
+                        </span>
                       </div>
                     ))}
                   </div>

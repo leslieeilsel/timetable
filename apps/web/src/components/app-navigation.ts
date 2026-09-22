@@ -30,7 +30,7 @@ export const resourceNavigationItems = [
   { title: "课程", to: "/resources/courses", icon: BookOpenTextIcon },
   { title: "教室", to: "/resources/rooms", icon: MapPinIcon },
   { title: "年级", to: "/resources/grades", icon: CalendarDaysIcon },
-  { title: "年级与班级", to: "/years", icon: CalendarDaysIcon },
+  { title: "学年学期", to: "/years", icon: CalendarDaysIcon },
 ] satisfies NavigationItem[]
 
 export const schedulingNavigationItems = [
