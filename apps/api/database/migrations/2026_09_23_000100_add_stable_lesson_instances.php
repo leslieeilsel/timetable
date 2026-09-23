@@ -9,10 +9,14 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('lesson_instances', function (Blueprint $table): void {
+        // Imported MySQL databases may use signed IDs; foreign keys must match.
+        $semesterUnsigned = str_contains(Schema::getColumnType('semesters', 'id', true), 'unsigned');
+        $assignmentUnsigned = str_contains(Schema::getColumnType('teaching_assignments', 'id', true), 'unsigned');
+
+        Schema::create('lesson_instances', function (Blueprint $table) use ($semesterUnsigned, $assignmentUnsigned): void {
             $table->id();
-            $table->foreignId('semester_id')->constrained()->restrictOnDelete();
-            $table->foreignId('teaching_assignment_id')->constrained()->restrictOnDelete();
+            $table->foreignId('semester_id')->unsigned($semesterUnsigned)->constrained()->restrictOnDelete();
+            $table->foreignId('teaching_assignment_id')->unsigned($assignmentUnsigned)->constrained()->restrictOnDelete();
             $table->unsignedSmallInteger('occurrence_no');
             $table->string('status', 20)->default('active');
             $table->timestamps();
