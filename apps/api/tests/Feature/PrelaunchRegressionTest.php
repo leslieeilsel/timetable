@@ -48,16 +48,21 @@ it('R2 blocks undoing a cancellation after the released slot is reused', functio
         'original_entry_id' => $this->f['entry_id'], 'reason' => 'review cancel',
     ])->assertCreated();
     $assignment = DB::table('timetable_entries')->where('id', $this->f['entry_id'])->value('teaching_assignment_id');
-    $makeup = reviewWrite($this, '/calendar-exceptions', [
+    // Simulate an existing record from before makeup creation was retired.
+    $makeupId = DB::table('calendar_exceptions')->insertGetId([
         'type' => 'makeup', 'effective_date' => '2026-09-07', 'replacement_date' => '2026-09-07',
         'replacement_assignment_id' => $assignment, 'replacement_item_id' => $this->f['item_ids'][0],
         'reason' => 'review released slot reuse',
-    ])->assertCreated();
+        'semester_id' => $this->f['semester_id'],
+        'timetable_version_id' => $cancel->json('data.timetable_version_id'),
+        'status' => 'active', 'created_by' => $cancel->json('data.created_by'),
+        'created_at' => now(), 'updated_at' => now(),
+    ]);
     $response = reviewWrite($this, '/calendar-exceptions/'.$cancel->json('data.id').'/cancel');
     expect(reviewActualRows($this, '2026-09-07'))->toHaveCount(1);
     $this->assertDatabaseHas('calendar_exceptions', ['id' => $cancel->json('data.id'), 'status' => 'active']);
     $response->assertStatus(409)->assertJsonPath('code', 'DAILY_TIMETABLE_CONFLICT');
-    reviewWrite($this, '/calendar-exceptions/'.$makeup->json('data.id').'/cancel')->assertOk();
+    reviewWrite($this, '/calendar-exceptions/'.$makeupId.'/cancel')->assertOk();
     reviewWrite($this, '/calendar-exceptions/'.$cancel->json('data.id').'/cancel')->assertOk();
     expect(reviewActualRows($this, '2026-09-07')[0]['status'])->toBe('base');
 });

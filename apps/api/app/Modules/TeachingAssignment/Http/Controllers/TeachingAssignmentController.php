@@ -65,7 +65,7 @@ class TeachingAssignmentController
         $versionId = $version === null ? 0 : $version->id;
         $query = $semester->teachingAssignments()->with([
             'schoolClass.grade:id,name', 'teachingGroup.schoolClasses.grade:id,name',
-            'course:id,name,short_name,is_active', 'teacher:id,name,employee_no,is_active',
+            'course:id,name,short_name,is_active,color', 'teacher:id,name,employee_no,is_active',
             'collaborators:id,name,employee_no,is_active', 'specifiedRoom:id,name,type,is_active',
         ])->withCount(['entries' => fn ($entryQuery) => $entryQuery->where('timetable_version_id', $versionId)])
             ->orderBy('school_class_id')->orderBy('course_id');
@@ -684,7 +684,7 @@ class TeachingAssignmentController
     {
         return $assignment->load([
             'schoolClass.grade:id,name', 'teachingGroup.schoolClasses.grade:id,name',
-            'course:id,name,short_name,is_active', 'teacher:id,name,employee_no,is_active',
+            'course:id,name,short_name,is_active,color', 'teacher:id,name,employee_no,is_active',
             'collaborators:id,name,employee_no,is_active', 'specifiedRoom:id,name,type,is_active',
         ]);
     }

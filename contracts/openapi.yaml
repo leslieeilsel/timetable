@@ -3020,7 +3020,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/WritePayload"
+              $ref: "#/components/schemas/CourseWritePayload"
       responses:
         "200": { $ref: "#/components/responses/Success" }
         "201": { $ref: "#/components/responses/Created" }
@@ -3046,7 +3046,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/WritePayload"
+              $ref: "#/components/schemas/CourseWritePayload"
       responses:
         "200": { $ref: "#/components/responses/Success" }
         "401": { $ref: "#/components/responses/Problem" }
@@ -3538,6 +3538,21 @@ components:
       properties:
         effective_from:
           { type: string, format: date, description: 从该日期恢复，不能早于今天或原开始日期 }
+    CourseWritePayload:
+      type: object
+      additionalProperties: false
+      description: 新建时 name 必填；不传 color 时自动分配。仅修改颜色不会使课表版本过期，但会更新目录 ETag 的 appearance 修订。
+      properties:
+        name: { type: string, maxLength: 100 }
+        short_name: { type: [string, "null"], maxLength: 50 }
+        color:
+          type: string
+          pattern: '^#[0-9A-F]{6}$'
+          description: 持久化学科颜色；允许值由 contracts/course-colors.json 色板定义。允许手动选择已使用的颜色。
+          example: '#3973C6'
+        is_active: { type: boolean }
+        confirm_open_impact: { type: boolean }
+        impact_hash: { type: string, maxLength: 2000 }
     WritePayload:
       type: object
       additionalProperties: true
@@ -3570,6 +3585,7 @@ components:
         mode: { type: string, enum: [official, full], default: official }
         version_id: { type: integer, minimum: 1 }
     CalendarExceptionType:
+      description: "makeup 仅用于读取历史记录，不再支持创建或预览。"
       type: string
       enum: [move, swap, teacher_change, room_change, cancel, makeup, activity]
     OperationalStatus:
@@ -3587,19 +3603,18 @@ components:
     CalendarExceptionWrite:
       type: object
       additionalProperties: false
-      required: [effective_date, type, reason]
+      required: [effective_date, type, original_entry_id, reason]
       properties:
         effective_date: { type: string, format: date }
         replacement_date:
           {
             type: [string, "null"],
             format: date,
-            description: "交换目标课程的实际日期；移动或补课的目标日期。省略时使用 effective_date。",
+            description: "交换目标课程的实际日期；移动课程的目标日期。省略时使用 effective_date。",
           }
-        type: { $ref: "#/components/schemas/CalendarExceptionType" }
-        original_entry_id: { type: [integer, "null"], minimum: 1 }
+        type: { type: string, enum: [move, swap, teacher_change, room_change, cancel, activity] }
+        original_entry_id: { type: integer, minimum: 1 }
         related_entry_id: { type: [integer, "null"], minimum: 1 }
-        replacement_assignment_id: { type: [integer, "null"], minimum: 1 }
         replacement_teacher_id: { type: [integer, "null"], minimum: 1 }
         replacement_room_id: { type: [integer, "null"], minimum: 1 }
         replacement_item_id: { type: [integer, "null"], minimum: 1 }

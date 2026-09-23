@@ -410,7 +410,7 @@ export function AssignmentEditorDialog({
             <span>
               <span className="block font-medium">允许临时代课</span>
               <span className="block text-xs text-muted-foreground">
-                教师请假时可在日常运行中为此课程安排代课教师。
+                教师请假时可在“调课与代课”中为此课程安排代课教师。
               </span>
             </span>
           </label>

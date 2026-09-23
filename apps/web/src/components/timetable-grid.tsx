@@ -1,4 +1,6 @@
-import { LockIcon, MoveHorizontalIcon, PlusIcon } from "lucide-react"
+import { courseColorStyle } from "@/lib/course-colors"
+import { AlertTriangleIcon, LockIcon, MoveHorizontalIcon, PlusIcon } from "lucide-react"
+import type { GradeConflict } from "@/lib/grade-timetable"
 import type { Item, ScheduleDay, TimetableEntry } from "@/lib/types"
 import { Badge } from "@/components/ui/badge"
 
@@ -17,11 +19,13 @@ export function TimetableGrid({
   data,
   editable = false,
   pendingCount = 0,
+  conflicts = [],
   onSlot,
 }: {
   data: TimetableGridData
   editable?: boolean
   pendingCount?: number
+  conflicts?: GradeConflict[]
   onSlot?: (slot: { weekday: number; itemId: number; entry?: TimetableEntry }) => void
 }) {
   return (
@@ -52,7 +56,7 @@ export function TimetableGrid({
                 <th
                   key={day.weekday}
                   scope="col"
-                  className="min-w-40 border-b p-3 text-center font-medium"
+                  className="min-w-40 border-r border-b p-3 text-center font-medium last:border-r-0"
                 >
                   {weekdayName[day.weekday]}
                 </th>
@@ -78,16 +82,35 @@ export function TimetableGrid({
                   return (
                     <td
                       key={day.weekday}
-                      className="h-24 border-r border-b p-1.5 align-top last:border-r-0"
+                      className="h-24 border-r border-b p-0 align-top last:border-r-0"
                     >
                       {entries.length > 0 ? (
-                        <div className="grid h-full gap-1.5">
+                        <div className="grid h-full divide-y divide-border">
                           {entries.map((entry) => {
+                            const conflict = conflicts.find(
+                              (item) =>
+                                item.entry_id === entry.id ||
+                                item.existing_entry_id === entry.id ||
+                                (item.entry_id === undefined &&
+                                  item.assignment_id === entry.teaching_assignment_id),
+                            )
                             const content = (
                               <>
                                 <div className="flex items-start justify-between gap-1">
                                   <span className="font-medium">{entry.course.name}</span>
                                   <span className="flex shrink-0 items-center gap-1">
+                                    {conflict && (
+                                      <span
+                                        title={conflict.message}
+                                        className="inline-flex items-center gap-1 text-xs font-medium text-destructive"
+                                      >
+                                        <AlertTriangleIcon
+                                          className="size-3.5"
+                                          aria-hidden="true"
+                                        />
+                                        冲突
+                                      </span>
+                                    )}
                                     {entry.week_pattern !== "all" && (
                                       <Badge
                                         variant="outline"
@@ -106,12 +129,13 @@ export function TimetableGrid({
                                 </p>
                               </>
                             )
-                            const className = `min-h-10 w-full rounded-lg border p-2 text-left ${courseTone(entry.course.name)}`
+                            const className = "course-color-card timetable-lesson"
                             return onSlot ? (
                               <button
                                 key={entry.id}
+                                style={courseColorStyle(entry.course)}
                                 type="button"
-                                className={`${className} transition hover:border-primary/40 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30`}
+                                className={`${className} transition-colors`}
                                 onClick={() =>
                                   onSlot({ weekday: day.weekday, itemId: item.id, entry })
                                 }
@@ -119,7 +143,11 @@ export function TimetableGrid({
                                 {content}
                               </button>
                             ) : (
-                              <div key={entry.id} className={className}>
+                              <div
+                                key={entry.id}
+                                style={courseColorStyle(entry.course)}
+                                className={className}
+                              >
                                 {content}
                               </div>
                             )
@@ -129,7 +157,7 @@ export function TimetableGrid({
                         <button
                           type="button"
                           aria-label={`${weekdayName[day.weekday]}${item.name}安排待排课程`}
-                          className="group flex h-full min-h-20 w-full flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-[var(--timetable-notice-border)] bg-[var(--timetable-notice-background)] text-[var(--timetable-notice-foreground)] transition-colors hover:bg-[var(--timetable-notice-background-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--timetable-notice-border)]/40"
+                          className="group flex h-full min-h-24 w-full flex-col items-center justify-center gap-1 bg-[var(--timetable-notice-background)] text-[var(--timetable-notice-foreground)] transition-colors hover:bg-[var(--timetable-notice-background-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--timetable-notice-border)]/40"
                           onClick={() => onSlot({ weekday: day.weekday, itemId: item.id })}
                         >
                           <PlusIcon className="size-4" />
@@ -169,17 +197,4 @@ function entrySecondary(entry: TimetableEntry, view: TimetableView) {
   if (view === "teacher") return `${entryTargetName(entry)} · ${entry.actual_room.name}`
   if (view === "room") return `${entryTargetName(entry)} · ${teachers}`
   return `${teachers} · ${entry.actual_room.name}`
-}
-
-function courseTone(course: string) {
-  const tones = [
-    "border-[var(--timetable-blue-border)] bg-[var(--timetable-blue-background)]",
-    "border-[var(--timetable-green-border)] bg-[var(--timetable-green-background)]",
-    "border-[var(--timetable-amber-border)] bg-[var(--timetable-amber-background)]",
-    "border-[var(--timetable-violet-border)] bg-[var(--timetable-violet-background)]",
-    "border-[var(--timetable-rose-border)] bg-[var(--timetable-rose-background)]",
-    "border-[var(--timetable-cyan-border)] bg-[var(--timetable-cyan-background)]",
-  ]
-  const index = Array.from(course).reduce((sum, character) => sum + character.charCodeAt(0), 0)
-  return tones[index % tones.length]
 }

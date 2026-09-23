@@ -2,8 +2,8 @@ import { lazy, Suspense, useEffect, type ReactNode } from "react"
 import { Navigate, Route, Routes, useLocation } from "react-router"
 import { useAuth } from "@/lib/auth"
 import { pageTitleForPath } from "@/lib/brand"
-import { useSchoolContext, useSystemName } from "@/lib/queries"
-import { semesterPath, type SemesterDestination } from "@/lib/semester"
+import { useSystemName } from "@/lib/queries"
+import { semesterPath, useResolvedSemesterId, type SemesterDestination } from "@/lib/semester"
 import type { Role } from "@/lib/types"
 import { LoadingState } from "@/components/page"
 import { WorkspaceLoadingState } from "@/components/workspace-loading-state"
@@ -74,6 +74,11 @@ const ScheduleGenerationPage = lazy(() =>
 const TimetablePage = lazy(() =>
   import("@/pages/timetable-page").then((module) => ({ default: module.TimetablePage })),
 )
+const PublishedTimetablePage = lazy(() =>
+  import("@/pages/published-timetable-page").then((module) => ({
+    default: module.PublishedTimetablePage,
+  })),
+)
 const DailyAdjustmentsPage = lazy(() =>
   import("@/pages/daily-adjustments-page").then((module) => ({
     default: module.DailyAdjustmentsPage,
@@ -111,10 +116,9 @@ function DocumentTitle() {
 }
 
 function CurrentSemesterNavigate({ destination }: { destination: SemesterDestination }) {
-  const context = useSchoolContext()
+  const { context, semesterId } = useResolvedSemesterId()
   const { search, hash } = useLocation()
   if (context.isLoading) return <LoadingState label="正在载入当前学期…" />
-  const semesterId = context.data?.current_semester?.id
   if (!semesterId) return <Navigate to="/" replace />
   return <Navigate to={{ pathname: semesterPath(semesterId, destination), search, hash }} replace />
 }
@@ -129,6 +133,7 @@ export default function App() {
           <Route path="/change-password" element={<ChangePasswordPage />} />
           <Route element={<ProtectedWorkspace />}>
             <Route index element={<DashboardPage />} />
+            <Route path="semesters/:semesterId/dashboard" element={<DashboardPage />} />
             <Route
               path="ai/:conversationId?"
               element={
@@ -242,7 +247,7 @@ export default function App() {
             />
             <Route
               path="scheduling/timetable"
-              element={<CurrentSemesterNavigate destination="timetable" />}
+              element={<CurrentSemesterNavigate destination="planning" />}
             />
             <Route
               path="daily/adjustments"
@@ -308,7 +313,23 @@ export default function App() {
                 </RequireRole>
               }
             />
-            <Route path="semesters/:semesterId/timetable" element={<TimetablePage />} />
+            <Route
+              path="scheduling/planning"
+              element={
+                <RequireRole roles={["admin", "scheduler"]}>
+                  <CurrentSemesterNavigate destination="planning" />
+                </RequireRole>
+              }
+            />
+            <Route path="semesters/:semesterId/timetable" element={<PublishedTimetablePage />} />
+            <Route
+              path="semesters/:semesterId/planning"
+              element={
+                <RequireRole roles={["admin", "scheduler"]}>
+                  <TimetablePage />
+                </RequireRole>
+              }
+            />
             <Route
               path="semesters/:semesterId/adjustments"
               element={

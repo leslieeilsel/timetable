@@ -48,6 +48,7 @@ export interface Course {
   id: number
   name: string
   short_name: string | null
+  color?: string | null
   is_active: boolean
 }
 

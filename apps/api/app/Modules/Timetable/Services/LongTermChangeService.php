@@ -19,7 +19,7 @@ use Illuminate\Support\Facades\DB;
 class LongTermChangeService
 {
     public const RELATIONS = ['schoolClass:id,name', 'teachingGroup:id,name', 'schoolClasses:id,name',
-        'teacher:id,name', 'teachers:id,name', 'course:id,name,short_name',
+        'teacher:id,name', 'teachers:id,name', 'course:id,name,short_name,color',
         'actualRoom:id,name', 'item:id,name,start_time,end_time,sort_order'];
 
     private const FIELDS = ['weekday', 'item_id', 'teacher_id', 'actual_room_id'];

@@ -34,15 +34,15 @@ export const resourceNavigationItems = [
 ] satisfies NavigationItem[]
 
 export const schedulingNavigationItems = [
-  { title: "排课准备", destination: "preparation", icon: BookOpenCheckIcon },
+  { title: "教学安排", destination: "preparation", icon: BookOpenCheckIcon },
   { title: "任课关系", destination: "assignments", icon: ClipboardListIcon },
-  { title: "规则与约束", destination: "constraints", icon: SettingsIcon },
-  { title: "方案生成", destination: "generate", icon: GalleryVerticalEndIcon },
-  { title: "课表调整与诊断", destination: "timetable", icon: BookOpenTextIcon },
+  { title: "排课规则", destination: "constraints", icon: SettingsIcon },
+  { title: "自动排课", destination: "generate", icon: GalleryVerticalEndIcon },
+  { title: "检查并发布", destination: "planning", icon: BookOpenTextIcon },
 ] satisfies SemesterNavigationItem[]
 
 export const dailyNavigationItems = [
-  { title: "临时调课", destination: "adjustments", icon: CalendarDaysIcon },
-  { title: "长期调课", destination: "long-term", icon: CalendarRangeIcon },
+  { title: "单次调课记录", destination: "adjustments", icon: CalendarDaysIcon },
+  { title: "持续调课记录", destination: "long-term", icon: CalendarRangeIcon },
   { title: "请假与代课", destination: "leaves", icon: CalendarCheck2Icon },
 ] satisfies SemesterNavigationItem[]

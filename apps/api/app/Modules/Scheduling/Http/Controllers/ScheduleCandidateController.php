@@ -48,7 +48,7 @@ class ScheduleCandidateController
             'teachingAssignment.teachingGroup.schoolClasses.grade:id,name',
             'teachingAssignment.teacher:id,name',
             'teachingAssignment.collaborators:id,name',
-            'teachingAssignment.course:id,name,short_name',
+            'teachingAssignment.course:id,name,short_name,color',
             'actualRoom:id,name',
             'item:id,name,sort_order,start_time,end_time',
         ]);

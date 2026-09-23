@@ -21,16 +21,10 @@ import type {
   SchoolClass,
   Semester,
   Teacher,
-  TeachingAssignment,
   TimetableChange,
 } from "@/lib/types"
 import { DatePicker } from "@/components/date-picker"
-import {
-  AssignmentPicker,
-  ClassPicker,
-  RoomPicker,
-  TeacherPicker,
-} from "@/components/resource-picker"
+import { ClassPicker, RoomPicker, TeacherPicker } from "@/components/resource-picker"
 import { Field } from "@/components/page"
 import { SimpleSelect } from "@/components/simple-select"
 import { Button } from "@/components/ui/button"
@@ -57,7 +51,6 @@ export function AdjustmentPanel({
   teachers,
   rooms,
   classes,
-  assignments,
   onClose,
   onDraft,
   onSaved,
@@ -65,14 +58,13 @@ export function AdjustmentPanel({
   onBusyChange,
 }: {
   semester: Semester
-  source: DailyTimetableRow | null
+  source: DailyTimetableRow
   form: AdjustmentForm
   onChange: (form: AdjustmentForm) => void
   items: Item[]
   teachers: Teacher[]
   rooms: Room[]
   classes: SchoolClass[]
-  assignments: TeachingAssignment[]
   onClose: () => void
   onDraft: () => void
   onSaved: (result: CalendarException) => Promise<void>
@@ -347,7 +339,6 @@ export function AdjustmentPanel({
     <div className="space-y-6" aria-label="临时调整操作面板">
       <AdjustmentStepHeader
         step={result ? 4 : preview ? 3 : 2}
-        title={!source && !preview && !result ? "安排一次补课" : undefined}
         description={`临时调课 · ${dateLabel(form.effective_date)}，仅作用于指定日期。`}
         onBack={!result ? onClose : undefined}
         busy={busy}
@@ -476,11 +467,9 @@ export function AdjustmentPanel({
                             ? "换成哪位老师？"
                             : form.type === "room_change"
                               ? "换到哪个教室？"
-                              : form.type === "makeup"
-                                ? "填写补课安排"
-                                : form.type === "activity"
-                                  ? "填写活动安排"
-                                  : "确认本次停课"
+                              : form.type === "activity"
+                                ? "填写活动安排"
+                                : "确认本次停课"
                     }
                     description={form.type === "swap" ? "指定日期、课节和班级即可。" : undefined}
                     action={
@@ -494,17 +483,6 @@ export function AdjustmentPanel({
                       ) : undefined
                     }
                   >
-                    {form.type === "makeup" && (
-                      <Field label="补课课程与任课关系">
-                        <AssignmentPicker
-                          className="[&>button]:h-10"
-                          assignments={assignments}
-                          value={form.replacement_assignment_id}
-                          onValueChange={(value) => update({ replacement_assignment_id: value })}
-                          requireConfirmed
-                        />
-                      </Field>
-                    )}
                     {form.type === "room_change" && (
                       <Field label="新的上课教室">
                         <RoomPicker
@@ -725,39 +703,6 @@ export function AdjustmentPanel({
                         )}
                       </div>
                     )}
-                    {form.type === "makeup" && (
-                      <div className="grid gap-3">
-                        <Field label="补课日期">
-                          <DatePicker
-                            required
-                            label="补课日期"
-                            value={form.replacement_date}
-                            min={semester.start_date}
-                            max={semester.end_date}
-                            onValueChange={(value) =>
-                              update({ replacement_date: value, effective_date: value })
-                            }
-                          />
-                        </Field>
-                        <Field label="补课课节">
-                          <SimpleSelect
-                            label="补课课节"
-                            value={form.replacement_item_id}
-                            onValueChange={(value) => update({ replacement_item_id: value })}
-                          >
-                            <option value="">请选择课节</option>
-                            {items
-                              .filter((item) => item.is_active && item.allows_course)
-                              .map((item) => (
-                                <option key={item.id} value={item.id}>
-                                  {item.name} {shortTime(item.start_time)}–
-                                  {shortTime(item.end_time)}
-                                </option>
-                              ))}
-                          </SimpleSelect>
-                        </Field>
-                      </div>
-                    )}
                     {form.type === "activity" && (
                       <Field label="活动名称（必填）">
                         <Input
@@ -771,7 +716,7 @@ export function AdjustmentPanel({
                     {["move", "cancel", "activity"].includes(form.type) && (
                       <p className="rounded-lg border border-[var(--timetable-amber-border)] bg-[var(--timetable-amber-background)] p-3 text-xs leading-relaxed">
                         {form.type === "activity"
-                          ? "活动会停掉原课程并标记活动名称，不会自动安排看班老师或占用教室。需要授课的安排请使用补课。"
+                          ? "活动会停掉原课程并标记活动名称，不会自动安排看班老师或占用教室。"
                           : "原时段将空出，不会自动安排自习或看班老师。请在发布前确认学生安排。"}
                       </p>
                     )}

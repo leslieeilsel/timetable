@@ -90,10 +90,10 @@ describe("temporary adjustment filtering and payloads", () => {
     ).toBe(false)
     expect(
       adjustmentReady({
-        ...newAdjustment(row.date),
-        replacement_assignment_id: "1",
+        ...newAdjustment(row.date, row),
+        type: "move",
         replacement_item_id: "2",
-        reason: "补上课程",
+        reason: "调整时间",
       }),
     ).toBe(true)
   })

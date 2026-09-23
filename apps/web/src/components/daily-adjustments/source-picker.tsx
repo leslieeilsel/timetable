@@ -1,5 +1,5 @@
 import { useQueries } from "@tanstack/react-query"
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react"
+import { ChevronLeft, ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { api, apiMessage } from "@/lib/api"
 import { enumParam, mergeSearchParams, useHashPreservingSearchParams } from "@/lib/url-state"
@@ -47,7 +47,6 @@ export function AdjustmentSourcePicker({
   items,
   onSelect,
   onBack,
-  onMakeup,
   canEdit,
 }: {
   semester: Semester
@@ -57,11 +56,10 @@ export function AdjustmentSourcePicker({
   items: Item[]
   onBack: () => void
   onSelect: (row: DailyTimetableRow) => void
-  onMakeup: (date: string, itemId?: number) => void
   canEdit: boolean
 }) {
   const [params, setParams] = useHashPreservingSearchParams()
-  const kind = enumParam(params, "object", ["teacher", "class", "room"], "teacher")
+  const kind = enumParam(params, "object", ["teacher", "class", "room"], "class")
   const resource = params.get("resource") ?? ""
   const date = clampDate(
     validDate(params.get("date")) ? params.get("date")! : localDate(),
@@ -110,11 +108,7 @@ export function AdjustmentSourcePicker({
     update({ object: nextKind, resource: id, q: null, courses: null, period: null, changed: null })
   return (
     <section className="flex w-full flex-col gap-6" aria-label="选择原课">
-      <AdjustmentStepHeader
-        step={1}
-        description="临时调课 · 选择要调整的那一次课程。"
-        onBack={onBack}
-      />
+      <AdjustmentStepHeader step={1} description="选择需要调整的课程" onBack={onBack} />
       <div className="space-y-5 rounded-xl border bg-card p-5 lg:p-7">
         <div className={cn("flex flex-wrap items-center gap-3", label && "border-b pb-5")}>
           <AdjustmentObjectPicker
@@ -169,17 +163,6 @@ export function AdjustmentSourcePicker({
               <ChevronRight />
             </Button>
           </div>
-          {canEdit && (
-            <Button
-              variant="ghost"
-              size="sm"
-              aria-label="没有原课，安排补课"
-              onClick={() => onMakeup(date)}
-            >
-              <Plus />
-              安排补课
-            </Button>
-          )}
         </div>
         {label ? (
           <>
@@ -245,7 +228,6 @@ export function AdjustmentSourcePicker({
                     )
                       onSelect(row)
                   }}
-                  onEmpty={(day, item) => onMakeup(day, item.id)}
                 />
               </div>
             ) : visible.length ? (

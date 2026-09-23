@@ -10,7 +10,9 @@ class EtagService
 {
     public function catalog(AppSetting $settings): string
     {
-        return sprintf('"catalog-%s"', $settings->getRawOriginal('catalog_revision'));
+        $appearance = (int) $settings->getRawOriginal('appearance_revision');
+
+        return sprintf('"catalog-%s%s"', $settings->getRawOriginal('catalog_revision'), $appearance > 0 ? '-appearance-'.$appearance : '');
     }
 
     public function semester(Semester $semester, AppSetting $settings): string
@@ -29,7 +31,7 @@ class EtagService
         if ($actual === null) {
             throw new ApiProblemException('CATALOG_ETAG_REQUIRED', '缺少全局资料版本，请刷新后重试', 428);
         }
-        if (! preg_match('/^"catalog-\d+"$/', $actual)) {
+        if (! preg_match('/^"catalog-\d+(?:-appearance-\d+)?"$/', $actual)) {
             throw new ApiProblemException('INVALID_CATALOG_ETAG', '全局资料版本格式无效', 400);
         }
         if (! hash_equals($this->catalog($settings), $actual)) {

@@ -1,9 +1,11 @@
-import { CalendarDays, Plus } from "lucide-react"
-import type { DailyTimetable, DailyTimetableRow, Item } from "@/lib/types"
+import { CalendarDays } from "lucide-react"
+import { useQuery } from "@tanstack/react-query"
+import { apiAllPages } from "@/lib/api"
+import { courseColorStyle } from "@/lib/course-colors"
+import type { Course, DailyTimetable, DailyTimetableRow, Item } from "@/lib/types"
 import {
   dailyStatusLabels,
   dateLabel,
-  filterCount,
   matchesDailyFilters,
   rowIdentity,
   shortTime,
@@ -21,7 +23,6 @@ export function DailyGrid({
   selected,
   target,
   onSelect,
-  onEmpty,
   canEdit,
   objectKind,
   readOnly = false,
@@ -33,11 +34,14 @@ export function DailyGrid({
   selected?: string
   target?: string
   onSelect: (row: DailyTimetableRow) => void
-  onEmpty: (date: string, item: Item) => void
   canEdit: boolean
   objectKind: ObjectKind
   readOnly?: boolean
 }) {
+  const courses = useQuery({
+    queryKey: ["courses", "all", "resource-filter"],
+    queryFn: () => apiAllPages<Course>("/api/v1/courses"),
+  })
   const periods = items
     .filter((item) => item.is_active && item.allows_course)
     .sort((a, b) => a.sort_order - b.sort_order)
@@ -86,13 +90,14 @@ export function DailyGrid({
                 return (
                   <td
                     key={day.date}
-                    className="border-t border-r p-1.5 align-middle last:border-r-0"
+                    className="h-24 border-t border-r p-0 align-top last:border-r-0"
                   >
-                    <div className="space-y-1">
+                    <div className="grid h-full divide-y divide-border">
                       {visible.map((row) => (
                         <LessonCard
                           key={rowIdentity(row)}
                           row={row}
+                          course={courses.data?.data.find((course) => course.id === row.course_id)}
                           selected={selected === rowIdentity(row)}
                           target={target === rowIdentity(row)}
                           onClick={() => onSelect(row)}
@@ -115,29 +120,12 @@ export function DailyGrid({
                             {actual.length} 节被筛选隐藏
                           </div>
                         ) : (
-                          <button
-                            type="button"
-                            disabled={readOnly || !canEdit || filterCount(filters) > 0}
-                            onClick={() => onEmpty(day.date, item)}
-                            className="group flex min-h-12 w-full items-center justify-center rounded text-xs text-muted-foreground/50 hover:enabled:bg-muted hover:enabled:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                            aria-label={`${dateLabel(day.date)} ${item.name} 空课节${canEdit && !readOnly ? "，安排补课" : ""}`}
+                          <div
+                            className="flex h-full min-h-24 w-full items-center justify-center text-xs text-muted-foreground/50"
+                            aria-label={`${dateLabel(day.date)} ${item.name} 空课节`}
                           >
-                            <span
-                              className={
-                                canEdit && !readOnly
-                                  ? "group-hover:hidden group-focus-visible:hidden"
-                                  : undefined
-                              }
-                            >
-                              —
-                            </span>
-                            {canEdit && !readOnly && (
-                              <Plus
-                                aria-hidden="true"
-                                className="hidden size-4 group-hover:block group-focus-visible:block"
-                              />
-                            )}
-                          </button>
+                            —
+                          </div>
                         ))}
                     </div>
                   </td>
@@ -158,6 +146,7 @@ export function DailyGrid({
 }
 function LessonCard({
   row,
+  course,
   selected,
   target,
   onClick,
@@ -165,6 +154,7 @@ function LessonCard({
   disabled,
 }: {
   row: DailyTimetableRow
+  course?: Course
   selected: boolean
   target: boolean
   onClick: () => void
@@ -177,17 +167,14 @@ function LessonCard({
       type="button"
       onClick={onClick}
       disabled={disabled}
+      style={courseColorStyle(course ?? { color: null })}
       aria-pressed={selected}
       aria-label={`${dateLabel(row.date)} ${row.item_name} ${row.course_name} ${row.target_name} ${row.teacher_names.join("、")} ${dailyStatusLabels[row.status]}`}
       className={cn(
-        "block w-full rounded-md border border-transparent px-2 py-1.5 text-left transition-colors hover:enabled:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        temporary &&
-          "border-[var(--timetable-amber-border)] bg-[var(--timetable-amber-background)]",
-        row.is_cancelled && "border-dashed bg-muted/30",
-        selected &&
-          "border-[var(--timetable-blue-border)] bg-[var(--timetable-blue-background)] ring-1 ring-[var(--timetable-blue-border)]",
-        target &&
-          "border-[var(--timetable-success-border)] bg-[var(--timetable-success-background)] ring-2 ring-[var(--timetable-success-accent)]",
+        "course-color-card timetable-lesson transition-colors",
+        row.is_cancelled && "opacity-60",
+        selected && "ring-2 ring-inset ring-[var(--timetable-blue-accent)]",
+        target && "ring-2 ring-inset ring-[var(--timetable-success-accent)]",
       )}
     >
       <div className="flex flex-wrap items-center gap-1.5">
@@ -202,6 +189,18 @@ function LessonCard({
         {temporary && (
           <span className="rounded border bg-background/80 px-1 text-[10px]">
             {dailyStatusLabels[row.status]}
+          </span>
+        )}
+        {(selected || target) && (
+          <span
+            className={cn(
+              "rounded bg-background/80 px-1 text-[10px]",
+              target
+                ? "text-[var(--timetable-success-accent)]"
+                : "text-[var(--timetable-blue-accent)]",
+            )}
+          >
+            {target ? "交换课程" : "原课"}
           </span>
         )}
       </div>

@@ -1,3 +1,5 @@
+import { CourseColorPicker } from "@/components/course-color-picker"
+import { courseColorStyle, courseColorName } from "@/lib/course-colors"
 import { useDeferredValue, useEffect, useRef, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useSearchParams } from "react-router"
@@ -64,7 +66,7 @@ const titles: Record<Kind, string> = {
 const descriptions: Record<Kind, string> = {
   grades: "维护学校年级和业务排序；停用优先于删除，避免破坏历史班级与课表。",
   teachers: "维护教师、工号和任教课程；停用教师后不能继续用于新任课关系。",
-  courses: "维护全校共用课程及课表简称；历史任课关系会保留原有课程信息。",
+  courses: "维护课程、简称与课表颜色；同一课程在各个课表视图中使用固定颜色。",
   rooms: "维护普通教室和专用教室；停用教室前请先检查开放学期中的排课。",
 }
 const namePlaceholders: Record<Kind, string> = {
@@ -136,7 +138,7 @@ function ResourcesPage({ kind }: { kind: Kind }) {
   const courses = useQuery({
     queryKey: ["courses", "all", "resource-filter"],
     queryFn: () => apiAllPages<Course>("/api/v1/courses"),
-    enabled: kind === "teachers",
+    enabled: kind === "teachers" || kind === "courses",
   })
   const currentEtag = resources.data?.etag
   const resourceItems = resources.data?.data ?? []
@@ -171,6 +173,13 @@ function ResourcesPage({ kind }: { kind: Kind }) {
   }, [page, pagination])
   const refresh = async () => {
     await client.invalidateQueries({ queryKey: [kind] })
+    if (kind === "courses") {
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ["timetable"] }),
+        client.invalidateQueries({ queryKey: ["teaching-assignments"] }),
+        client.invalidateQueries({ queryKey: ["schedule-candidate-grid"] }),
+      ])
+    }
   }
   const remove = async () => {
     if (!deleting || !currentEtag) return
@@ -196,13 +205,15 @@ function ResourcesPage({ kind }: { kind: Kind }) {
       <PageHeader title={titles[kind]} description={descriptions[kind]} />
       <div className="p-5 md:p-7">
         <div className="surface-panel overflow-hidden">
-          {resources.isLoading || (kind === "teachers" && courses.isLoading) ? (
+          {resources.isLoading ||
+          ((kind === "teachers" || kind === "courses") && courses.isLoading) ? (
             <LoadingState />
-          ) : resources.isError || (kind === "teachers" && courses.isError) ? (
+          ) : resources.isError ||
+            ((kind === "teachers" || kind === "courses") && courses.isError) ? (
             <ErrorState
               retry={() => {
                 void resources.refetch()
-                if (kind === "teachers") void courses.refetch()
+                if (kind === "teachers" || kind === "courses") void courses.refetch()
               }}
             />
           ) : !resourceItems.length && !hasFilters ? (
@@ -335,7 +346,12 @@ function ResourceTable({
               <TableHead>任教课程</TableHead>
             </>
           )}
-          {kind === "courses" && <TableHead>简称</TableHead>}
+          {kind === "courses" && (
+            <>
+              <TableHead>简称</TableHead>
+              <TableHead>课表颜色</TableHead>
+            </>
+          )}
           {kind === "rooms" && <TableHead>类型</TableHead>}
           <TableHead>状态</TableHead>
           <TableHead className="w-32 text-right">操作</TableHead>
@@ -378,7 +394,17 @@ function ResourceTable({
               </>
             )}
             {kind === "courses" && (
-              <TableCell data-label="简称">{(item as Course).short_name || "—"}</TableCell>
+              <>
+                <TableCell data-label="简称">{(item as Course).short_name || "—"}</TableCell>
+                <TableCell data-label="课表颜色">
+                  <span
+                    className="course-color-dot inline-block size-3 rounded-full align-middle"
+                    style={courseColorStyle(item as Course)}
+                    role="img"
+                    aria-label={`课表颜色：${courseColorName((item as Course).color)}`}
+                  />
+                </TableCell>
+              </>
             )}
             {kind === "rooms" && (
               <TableCell data-label="类型">
@@ -491,6 +517,7 @@ function ResourceDialog({
 }) {
   const [name, setName] = useState("")
   const [secondary, setSecondary] = useState("")
+  const [color, setColor] = useState("")
   const [active, setActive] = useState(true)
   const [courseIds, setCourseIds] = useState<number[]>([])
   const [courseSearch, setCourseSearch] = useState("")
@@ -498,6 +525,7 @@ function ResourceDialog({
   const [saving, setSaving] = useState(false)
   useEffect(() => {
     setName(item?.name ?? "")
+    setColor(kind === "courses" ? ((item as Course | null)?.color ?? "") : "")
     setActive(item?.is_active ?? true)
     setSecondary(
       kind === "grades"
@@ -530,7 +558,10 @@ function ResourceDialog({
     const body: Record<string, unknown> = { name: name.trim(), is_active: active }
     if (kind === "grades") body.sort_order = Number(secondary)
     if (kind === "teachers") body.employee_no = secondary.trim() || null
-    if (kind === "courses") body.short_name = secondary.trim() || null
+    if (kind === "courses") {
+      body.short_name = secondary.trim() || null
+      if (color) body.color = color
+    }
     if (kind === "rooms") body.type = secondary
     setSaving(true)
     try {
@@ -756,6 +787,15 @@ function ResourceDialog({
                     placeholder="例如：信息"
                   />
                 </Field>
+              )}
+              {kind === "courses" && (
+                <CourseColorPicker
+                  value={color}
+                  onChange={setColor}
+                  courseId={item?.id}
+                  name={name}
+                  courses={courses}
+                />
               )}
               {kind === "rooms" && (
                 <Field label="教室类型">

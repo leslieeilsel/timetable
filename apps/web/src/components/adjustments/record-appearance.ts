@@ -6,8 +6,6 @@ const typeTones: Record<string, string> = {
   换教室: "cyan",
   停课: "amber",
   安排活动: "amber",
-  安排补课: "green",
-  补课: "green",
 }
 const tones: Record<string, { text: string; surface: string }> = {
   blue: {

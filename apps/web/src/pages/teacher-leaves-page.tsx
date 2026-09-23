@@ -1,3 +1,5 @@
+import { AdjustmentNavigation } from "@/components/adjustments/adjustment-navigation"
+import { adjustmentPageClass } from "@/components/adjustments/workbench"
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import {
@@ -163,7 +165,8 @@ export function TeacherLeavesPage() {
   return (
     <>
       <PageHeader title="请假与代课" description="先看受影响课程，再批量安排可解释的代课建议。" />
-      <div className="p-4 md:p-7">
+      <div className={adjustmentPageClass}>
+        <AdjustmentNavigation />
         <section className="surface-panel overflow-hidden">
           <ListToolbar
             summary={
@@ -866,7 +869,7 @@ function LeaveDetailDialog({
                           )}
                         {!existing && row.original_entry_id === null && (
                           <p className="mt-3 border-t pt-3 text-sm text-amber-700">
-                            这是日期例外生成的补课，请到“临时调课”中更换教师。
+                            这条历史课程没有对应的原课，无法直接安排代课。
                           </p>
                         )}
                       </div>

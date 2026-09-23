@@ -1,19 +1,33 @@
+import { useState } from "react"
 import { Link } from "react-router"
 import { useQuery } from "@tanstack/react-query"
-import { ArrowRightIcon, CalendarDaysIcon, CheckIcon, ClipboardCheckIcon } from "lucide-react"
+import {
+  ArrowRightIcon,
+  CalendarDaysIcon,
+  CheckCircle2Icon,
+  CheckIcon,
+  ChevronDownIcon,
+  CircleIcon,
+  ClipboardListIcon,
+  FileClockIcon,
+  ListChecksIcon,
+  SlidersHorizontalIcon,
+} from "lucide-react"
 import { api } from "@/lib/api"
 import { useAuth } from "@/lib/auth"
+import { dashboardTasks, type DashboardTask } from "@/lib/dashboard"
+import { calendarDaysBetween, semesterPhase, useSchoolToday } from "@/lib/semester-phase"
 import type { DashboardSummary, Semester } from "@/lib/types"
-import { useSchoolContext } from "@/lib/queries"
-import { semesterPath } from "@/lib/semester"
-import { ErrorState, LoadingState, PageHeader } from "@/components/page"
+import { semesterPath, useResolvedSemesterId } from "@/lib/semester"
+import { ErrorState, LoadingState } from "@/components/page"
+import { DashboardDaily } from "@/components/dashboard-daily"
+import { SemesterSwitcher } from "@/components/semester-switcher"
 import { Button } from "@/components/ui/button"
-import { StatusBadge } from "@/components/status-badge"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export function DashboardPage() {
-  const { user } = useAuth()
-  const context = useSchoolContext()
-  const semesterId = context.data?.current_semester?.id ?? null
+  const { semesterId, context } = useResolvedSemesterId()
+  const today = useSchoolToday(context.data?.timezone)
   const semester = useQuery({
     queryKey: ["semester", semesterId],
     queryFn: () => api<Semester>(`/api/v1/semesters/${semesterId}`),
@@ -24,372 +38,494 @@ export function DashboardPage() {
     queryFn: () => api<DashboardSummary>(`/api/v1/semesters/${semesterId}/dashboard-summary`),
     enabled: semesterId !== null,
   })
-
   if (context.isLoading || semester.isLoading || summary.isLoading) return <LoadingState />
   if (context.isError || semester.isError || summary.isError)
     return (
-      <ErrorState
-        retry={() => {
-          void context.refetch()
-          void semester.refetch()
-          void summary.refetch()
-        }}
-      />
+      <div className="mx-auto w-full max-w-[1440px] px-5 py-7 md:px-8 md:py-8 lg:px-10">
+        <div className="flex items-center justify-between gap-4">
+          <h1 className="text-2xl font-semibold">学期工作台</h1>
+          <SemesterSwitcher />
+        </div>
+        <ErrorState
+          retry={() => {
+            void context.refetch()
+            void semester.refetch()
+            void summary.refetch()
+          }}
+        />
+      </div>
     )
-
-  const current = semester.data?.data
-  const dashboard = summary.data?.data
-  const classCount = dashboard?.class_count ?? 0
-  const assignmentCount = dashboard?.assignment_count ?? 0
-  const confirmedCount = dashboard?.confirmed_count ?? 0
-  const scheduled = dashboard?.scheduled ?? 0
-  const required = dashboard?.required ?? 0
-  const remaining = dashboard?.remaining ?? 0
-  const templateReady = dashboard?.template_ready ?? false
-  const currentVersionId = dashboard?.current_version_id ?? null
-  const currentVersionIsStale = dashboard?.current_version_is_stale ?? false
-  const workingDraftId = dashboard?.working_draft_id ?? null
-  const hasFreshWorkingDraft =
-    workingDraftId !== null && dashboard?.working_draft_is_stale === false
-  const shouldContinueWorkingDraft =
-    hasFreshWorkingDraft && (!currentVersionId || currentVersionIsStale)
-  const timetablePath = current ? semesterPath(current.id, "timetable") : "/"
-  const nextActionPath = shouldContinueWorkingDraft
-    ? `${timetablePath}?version=${workingDraftId}`
-    : current
-      ? semesterPath(
-          current.id,
-          !currentVersionId || currentVersionIsStale ? "generate" : "timetable",
-        )
-      : "/"
-  const nextActionLabel = shouldContinueWorkingDraft
-    ? "继续编辑最新草稿"
-    : !currentVersionId || currentVersionIsStale
-      ? "前往方案生成"
-      : remaining
-        ? "继续完成排课"
-        : "查看当前课表"
-  const hardConflictCount = dashboard?.current_version_hard_conflict_count ?? 0
-  const softWarningCount = dashboard?.current_version_soft_warning_count ?? 0
-  const blocked =
-    !classCount ||
-    !templateReady ||
-    confirmedCount !== assignmentCount ||
-    remaining > 0 ||
-    !currentVersionId ||
-    currentVersionIsStale ||
-    hardConflictCount > 0
-  const startDelta = current
-    ? daysBetween(new Date(), new Date(`${current.start_date}T00:00:00`))
-    : null
-
+  if (!semester.data || !summary.data) return <NoSemester />
   return (
-    <>
-      <PageHeader title="工作台" description="掌握学期准备与排课状态，快速进入下一项教务工作。" />
-      {!current ? (
-        <div className="p-5 md:p-7">
-          <div className="surface-panel flex min-h-72 flex-col items-start justify-center p-8">
-            <p className="text-xl font-semibold">尚未设置当前学期</p>
-            <p className="mt-2 text-sm text-muted-foreground">
-              请先创建学年、配置学期，并将开放学期设为当前工作上下文。
-            </p>
-            <Button className="mt-6" nativeButton={false} render={<Link to="/years" />}>
-              前往学年与班级
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-7 p-5 md:p-7">
-          <section className="flex flex-col gap-5 border-b pb-7 xl:flex-row xl:items-center xl:justify-between">
-            <div>
-              <div className="flex flex-wrap items-center gap-3">
-                <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">
-                  {current.academic_year?.name} · {current.name}
-                </h2>
-                <StatusBadge value={current.status} />
-              </div>
-              <p className="mt-3 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                <CalendarDaysIcon className="size-4" />
-                {current.start_date} 至 {current.end_date}
-                {startDelta !== null && startDelta >= 0 && (
-                  <>
-                    <span className="h-4 w-px bg-border" aria-hidden="true" />
-                    <span className="font-medium text-emerald-700 dark:text-emerald-400">
-                      距开学 {startDelta} 天
-                    </span>
-                  </>
-                )}
-              </p>
-            </div>
-            <div className="grid w-full grid-cols-2 gap-3 sm:flex sm:w-auto sm:flex-wrap">
-              <Button
-                className="col-span-2 sm:col-span-1"
-                nativeButton={false}
-                render={<Link to={nextActionPath} />}
-              >
-                {nextActionLabel}
-                <ArrowRightIcon />
-              </Button>
-              {user?.role !== "viewer" && (
-                <>
-                  <Button
-                    variant="outline"
-                    nativeButton={false}
-                    render={<Link to={semesterPath(current.id, "assignments")} />}
-                  >
-                    查看任课关系
-                  </Button>
-                  <Button
-                    variant="outline"
-                    nativeButton={false}
-                    render={<Link to={semesterPath(current.id, "setup")} />}
-                  >
-                    学期配置
-                  </Button>
-                </>
-              )}
-            </div>
-          </section>
-
-          <Workflow
-            classCount={classCount}
-            templateReady={templateReady}
-            assignmentCount={assignmentCount}
-            confirmedCount={confirmedCount}
-            scheduled={scheduled}
-            required={required}
-            hasCurrentVersion={currentVersionId !== null}
-            currentVersionIsStale={currentVersionIsStale}
-            hasFreshWorkingDraft={hasFreshWorkingDraft}
-            actionPath={nextActionPath}
-          />
-
-          <div className="grid gap-6 xl:grid-cols-[1.5fr_0.75fr]">
-            <section className="surface-panel p-5">
-              <h3 className="text-lg font-semibold">下一步工作</h3>
-              <div className="mt-4 flex flex-col gap-4 rounded-xl border bg-muted/30 p-5 sm:flex-row sm:items-center">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                  <ClipboardCheckIcon className="size-5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium">
-                    {shouldContinueWorkingDraft
-                      ? "继续复核最新草稿"
-                      : !currentVersionId
-                        ? "生成并确认当前课表"
-                        : currentVersionIsStale
-                          ? "基础数据已变化，需要重新生成"
-                          : remaining
-                            ? "继续完成排课"
-                            : "开学前复核课表"}
-                  </p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {shouldContinueWorkingDraft
-                      ? "已有基于最新资料生成的草稿，请完成复核后再设为当前课表。"
-                      : !currentVersionId
-                        ? "当前还没有已确认课表，请从完整候选方案中选择并设为当前课表。"
-                        : currentVersionIsStale
-                          ? "当前课表仍可查看，但已不能作为可靠的调整基线；请按最新规则和资料重新生成。"
-                          : remaining
-                            ? `还有 ${remaining} 节课程未安排，建议优先处理高周课时任务。`
-                            : "课表已完整，建议分别从班级、教师和教室视角检查结果。"}
-                  </p>
-                </div>
-                <Button
-                  className="w-full sm:w-auto"
-                  nativeButton={false}
-                  render={<Link to={nextActionPath} />}
-                >
-                  {shouldContinueWorkingDraft
-                    ? "进入草稿并继续编辑"
-                    : !currentVersionId || currentVersionIsStale
-                      ? "前往方案生成"
-                      : "查看课表"}
-                </Button>
-              </div>
-              <h3 className="mt-6 text-base font-semibold">需要关注</h3>
-              <div className="mt-3 grid min-h-40 place-items-center rounded-xl border p-6 text-center">
-                {blocked ? (
-                  <div className="max-w-md">
-                    <p className="font-medium">仍有需要处理的项目</p>
-                    <ul className="mt-2 list-disc space-y-1 pl-5 text-left text-sm text-muted-foreground">
-                      {!classCount && <li>尚未配置学期班级</li>}
-                      {!templateReady && <li>尚未设置可用作息模板</li>}
-                      {confirmedCount !== assignmentCount && <li>仍有任课关系未确认</li>}
-                      {!currentVersionId && <li>尚未设置当前课表</li>}
-                      {currentVersionIsStale && <li>当前课表依据的数据已变化</li>}
-                      {remaining > 0 && <li>仍有 {remaining} 节课程未安排</li>}
-                      {hardConflictCount > 0 && <li>当前课表仍有 {hardConflictCount} 个硬冲突</li>}
-                    </ul>
-                  </div>
-                ) : (
-                  <div>
-                    <span className="mx-auto flex size-10 items-center justify-center rounded-full border border-emerald-600 text-emerald-700 dark:border-emerald-400 dark:text-emerald-400">
-                      <CheckIcon className="size-5" />
-                    </span>
-                    <p className="mt-4 font-medium">暂无阻塞项</p>
-                  </div>
-                )}
-              </div>
-            </section>
-
-            <section className="surface-panel p-5">
-              <h3 className="text-lg font-semibold">准备状态</h3>
-              <dl className="mt-4 divide-y border-y">
-                <SummaryRow label="班级配置" value={`${classCount} 个班级`} />
-                <SummaryRow label="作息模板" value={templateReady ? "已设置" : "未设置"} />
-                <SummaryRow
-                  label="任课关系"
-                  value={`${assignmentCount} 条 · 已确认 ${confirmedCount} 条`}
-                />
-                <SummaryRow label="已排课时" value={`${scheduled} / ${required}`} />
-                <SummaryRow
-                  label="当前课表"
-                  value={
-                    !currentVersionId
-                      ? "未设置"
-                      : currentVersionIsStale
-                        ? `${dashboard?.current_version_name ?? "已设置"} · 数据已变化`
-                        : (dashboard?.current_version_name ?? "已设置")
-                  }
-                />
-                <SummaryRow
-                  label="当前课表冲突与提醒"
-                  value={`${hardConflictCount} 个硬冲突 · ${softWarningCount} 个软提醒`}
-                />
-                {dashboard?.working_draft_id && (
-                  <SummaryRow
-                    label="最近草稿"
-                    value={`${dashboard.working_draft_name ?? "未命名草稿"}${dashboard.working_draft_is_stale ? " · 数据已变化" : " · 可继续编辑"}`}
-                  />
-                )}
-              </dl>
-            </section>
-          </div>
-        </div>
-      )}
-    </>
+    <SemesterDashboard
+      key={semesterId}
+      semester={semester.data.data}
+      summary={summary.data.data}
+      today={today}
+    />
   )
 }
 
-function Workflow({
-  classCount,
-  templateReady,
-  assignmentCount,
-  confirmedCount,
-  scheduled,
-  required,
-  hasCurrentVersion,
-  currentVersionIsStale,
-  hasFreshWorkingDraft,
-  actionPath,
+function SemesterDashboard({
+  semester,
+  summary,
+  today,
 }: {
-  classCount: number
-  templateReady: boolean
-  assignmentCount: number
-  confirmedCount: number
-  scheduled: number
-  required: number
-  hasCurrentVersion: boolean
-  currentVersionIsStale: boolean
-  hasFreshWorkingDraft: boolean
-  actionPath: string
+  semester: Semester
+  summary: DashboardSummary
+  today: string
 }) {
-  const steps = [
-    { label: "基础资料", note: "年级、教师、课程、教室", done: true },
-    { label: "学年与班级", note: `${classCount} 个班级`, done: classCount > 0 },
-    {
-      label: "学期配置",
-      note: templateReady ? "班级与作息" : "待设置作息",
-      done: classCount > 0 && templateReady,
-    },
-    {
-      label: "任课关系",
-      note: `${assignmentCount} 条任务`,
-      done: assignmentCount > 0 && confirmedCount === assignmentCount,
-    },
-    {
-      label: "排课",
-      note:
-        currentVersionIsStale && hasFreshWorkingDraft
-          ? "继续编辑最新草稿"
-          : currentVersionIsStale
-            ? "前往重新生成"
-            : !hasCurrentVersion
-              ? "尚未确认当前课表"
-              : `${scheduled}/${required} 节`,
-      done: hasCurrentVersion && !currentVersionIsStale && required > 0 && scheduled === required,
-      href: actionPath,
-    },
-  ]
+  const { user } = useAuth()
+  const isEditor = user?.role === "admin" || user?.role === "scheduler"
+  const phase = semesterPhase(semester, today)
+  const [mode, setMode] = useState(phase.value === "teaching" && isEditor ? "daily" : "planning")
+  const week = Math.floor(calendarDaysBetween(semester.start_date, today) / 7) + 1
+  const canEdit = isEditor && semester.status === "open"
+  const allTasks = dashboardTasks(semester, summary)
+  const timetableHref = semesterPath(semester.id, "timetable")
+  const review: DashboardTask = {
+    id: "review",
+    title: "课表已排完，进入最后复核",
+    description: "分别从班级、教师和教室视角检查课表，确认安排符合教学需要。",
+    action: "复核当前课表",
+    href: timetableHref,
+  }
+  const primary: DashboardTask = !isEditor
+    ? {
+        id: "view",
+        title: summary.current_version_id ? "查看本学期的课表" : "本学期暂未设置当前课表",
+        description: summary.current_version_is_stale
+          ? "课表依据的资料已变化，请以教务复核后的安排为准。"
+          : "按班级、教师或教室查看课程安排。",
+        action: "查看当前课表",
+        href: timetableHref,
+      }
+    : semester.status !== "open"
+      ? {
+          id: "closed",
+          title: semester.status === "closed" ? "本学期已关闭" : "本学期尚未开放",
+          description:
+            semester.status === "closed"
+              ? "可以查阅本学期的课表和历史安排；如需继续编排，请在学期配置中重新开放。"
+              : "先完成学期配置并开放学期，再维护任课关系和生成课表。",
+          action:
+            semester.status === "closed" && summary.current_version_id
+              ? "查看学期课表"
+              : "前往学期配置",
+          href:
+            semester.status === "closed" && summary.current_version_id
+              ? timetableHref
+              : semesterPath(semester.id, "setup"),
+        }
+      : phase.value === "ended"
+        ? {
+            id: "ended",
+            title: "本学期教学已结束",
+            description: "查阅课表与调整记录，或切换到需要准备的学期。",
+            action: "查看学期课表",
+            href: timetableHref,
+          }
+        : (allTasks[0] ?? review)
+  const tasks =
+    canEdit && phase.value !== "ended" ? allTasks.filter((task) => task.id !== primary.id) : []
+  const showDaily = phase.value === "teaching" && isEditor
   return (
-    <section className="surface-panel grid gap-5 p-5 sm:grid-cols-2 xl:grid-cols-5">
-      {steps.map((step, index) => {
-        const content = (
-          <>
-            <span
-              className={`row-span-2 flex size-8 shrink-0 items-center justify-center rounded-full border text-sm font-semibold ${
-                step.done
-                  ? "border-emerald-600 text-emerald-700 dark:border-emerald-400 dark:text-emerald-400"
-                  : "border-primary text-primary"
-              }`}
-            >
-              {index + 1}
+    <section className="mx-auto w-full max-w-[1440px] space-y-7 px-5 py-7 md:px-8 md:py-8 lg:px-10">
+      <header className="space-y-3">
+        <p className="text-sm text-muted-foreground">学期工作台</p>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+          <h1 className="text-2xl leading-snug font-semibold tracking-tight">
+            {semester.academic_year?.name}
+            <span className="block whitespace-nowrap sm:inline">
+              <span className="hidden sm:inline"> · </span>
+              {semester.name}
             </span>
-            <p className="min-w-0 font-medium">{step.label}</p>
-            <div className="min-w-0">
-              <p
-                className={`flex items-center gap-1 text-sm leading-5 ${
-                  step.done ? "text-emerald-700 dark:text-emerald-400" : "text-amber-700"
-                }`}
-              >
-                <span>
-                  {step.done ? "已完成" : index === 4 && hasFreshWorkingDraft ? "待确认" : "待处理"}
-                  {" · "}
-                  {step.note}
-                </span>
-                {step.href && (
-                  <ArrowRightIcon
-                    className="size-3.5 shrink-0 transition-transform group-hover/step:translate-x-0.5"
+          </h1>
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
+              {phase.label}
+            </span>
+            {semester.status !== "open" && (
+              <span className="text-xs text-muted-foreground">
+                {semester.status === "closed" ? "已关闭 · 只读" : "尚未开放"}
+              </span>
+            )}
+            <SemesterSwitcher />
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm leading-6 text-muted-foreground">
+          <p className="flex items-center gap-2">
+            <CalendarDaysIcon className="size-3.5" aria-hidden="true" />
+            {semester.start_date} 至 {semester.end_date}
+          </p>
+          <span>
+            {phase.value === "upcoming"
+              ? `距开学 ${calendarDaysBetween(today, semester.start_date)} 天`
+              : phase.value === "teaching"
+                ? `第 ${week} 教学周`
+                : "历史学期"}
+          </span>
+        </div>
+      </header>
+      <Tabs
+        key={phase.value}
+        value={showDaily ? mode : "planning"}
+        onValueChange={(value) => setMode(String(value))}
+        className="gap-6"
+      >
+        {showDaily && (
+          <TabsList
+            variant="line"
+            className="w-full justify-start border-b pb-2"
+            aria-label="工作台内容"
+          >
+            <TabsTrigger value="daily" className="flex-none px-4">
+              今日教务
+            </TabsTrigger>
+            <TabsTrigger value="planning" className="flex-none px-4">
+              学期编排
+              {allTasks.length > 0 && (
+                <span className="ml-1 text-xs text-muted-foreground">{allTasks.length}</span>
+              )}
+            </TabsTrigger>
+          </TabsList>
+        )}
+        {showDaily && (
+          <TabsContent value="daily">
+            <DashboardDaily
+              semester={semester}
+              summary={summary}
+              today={today}
+              onOpenPlanning={() => setMode("planning")}
+            />
+          </TabsContent>
+        )}
+        <TabsContent value="planning" className="space-y-7">
+          <section
+            className="overflow-hidden rounded-xl border bg-muted/20"
+            aria-label="当前课表与下一步工作"
+          >
+            <div className="grid lg:grid-cols-[1.25fr_1fr]">
+              <div className="flex flex-col items-start p-6 md:p-7">
+                {primary.id === "stale" || primary.id === "draft" ? (
+                  <FileClockIcon
+                    className="mb-5 size-6 text-[var(--timetable-notice-accent)]"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <ClipboardListIcon
+                    className="mb-5 size-6 text-muted-foreground"
                     aria-hidden="true"
                   />
                 )}
-              </p>
+                <h2 className="text-xl font-semibold tracking-tight md:text-2xl">
+                  {primary.title}
+                </h2>
+                <p className="mt-3 max-w-xl text-sm leading-7 text-muted-foreground">
+                  {primary.description}
+                </p>
+                <div className="mt-6 flex flex-wrap items-center gap-3">
+                  <Button nativeButton={false} render={<Link to={primary.href} />}>
+                    {primary.action}
+                    <ArrowRightIcon />
+                  </Button>
+                  {summary.current_version_id && primary.href !== timetableHref && (
+                    <Button
+                      variant="ghost"
+                      nativeButton={false}
+                      render={<Link to={timetableHref} />}
+                    >
+                      查看现有课表
+                    </Button>
+                  )}
+                </div>
+              </div>
+              <TimetableSummary summary={summary} />
             </div>
-          </>
-        )
-        const className = "relative grid min-w-0 grid-cols-[2rem_minmax(0,1fr)] gap-x-3 gap-y-1"
-
-        return step.href ? (
-          <Link
-            key={step.label}
-            to={step.href}
-            className={`${className} group/step -m-3 cursor-pointer rounded-xl p-3 outline-none transition-colors hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/30`}
-            aria-label={`${step.label}：${step.note}`}
-          >
-            {content}
-          </Link>
-        ) : (
-          <div key={step.label} className={className}>
-            {content}
+          </section>
+          <div className="grid gap-8 lg:grid-cols-[1.25fr_1fr] lg:gap-12">
+            <section aria-labelledby="dashboard-tasks">
+              <div className="flex items-center justify-between border-b pb-4">
+                <h2 id="dashboard-tasks" className="text-base font-semibold">
+                  {canEdit && phase.value !== "ended" ? "其他待处理事项" : "课表查阅"}
+                </h2>
+                {tasks.length > 0 && (
+                  <span className="text-xs text-muted-foreground">{tasks.length} 项</span>
+                )}
+              </div>
+              {tasks.length ? (
+                <div className="divide-y">
+                  {tasks.map((task) => (
+                    <TaskRow key={task.id} task={task} />
+                  ))}
+                </div>
+              ) : (
+                <div className="flex gap-3 py-6">
+                  <CheckCircle2Icon
+                    className="mt-0.5 size-5 shrink-0 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                  <div>
+                    <p className="text-sm font-medium">
+                      {canEdit && phase.value !== "ended"
+                        ? "没有其他待处理事项"
+                        : "保留本学期的课程安排"}
+                    </p>
+                    <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                      {primary.id === "stale" || primary.id === "draft"
+                        ? "新方案完成后，再统一复核未排课程与课表冲突。"
+                        : "可随时从班级、教师和教室视角查看课表。"}
+                    </p>
+                  </div>
+                </div>
+              )}
+              <div className="mt-3 border-t pt-4">
+                <Link
+                  to={timetableHref}
+                  className="inline-flex items-center gap-2 rounded text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+                >
+                  查看班级、教师与教室课表
+                  <ArrowRightIcon className="size-3.5" />
+                </Link>
+              </div>
+            </section>
+            {isEditor && (
+              <aside className="space-y-6">
+                <PreparationSummary
+                  key={`${semester.id}:${summary.class_count > 0}:${summary.template_ready}:${summary.assignment_count === summary.confirmed_count}`}
+                  semester={semester}
+                  summary={summary}
+                />
+                <section aria-labelledby="dashboard-shortcuts">
+                  <h2 id="dashboard-shortcuts" className="mb-2 text-sm font-semibold">
+                    常用工作
+                  </h2>
+                  <div className="divide-y">
+                    <Shortcut
+                      to={semesterPath(semester.id, "assignments")}
+                      title="任课与课时"
+                      description="维护教师、课程与周课时"
+                      icon={ClipboardListIcon}
+                    />
+                    <Shortcut
+                      to={semesterPath(semester.id, "constraints")}
+                      title="排课规则"
+                      description="设置课程安排偏好与限制"
+                      icon={SlidersHorizontalIcon}
+                    />
+                    <Shortcut
+                      to={semesterPath(semester.id, "preparation")}
+                      title="排课准备检查"
+                      description="检查资料完整性和规则可行性"
+                      icon={ListChecksIcon}
+                    />
+                  </div>
+                </section>
+              </aside>
+            )}
           </div>
-        )
-      })}
+        </TabsContent>
+      </Tabs>
     </section>
   )
 }
 
-function SummaryRow({ label, value }: { label: string; value: string }) {
+function TimetableSummary({ summary }: { summary: DashboardSummary }) {
+  const stale = summary.current_version_is_stale
+  const hasVersion = summary.current_version_id !== null
+  const percent = summary.required
+    ? Math.min(100, Math.round((summary.scheduled / summary.required) * 100))
+    : 0
   return (
-    <div className="flex items-center justify-between gap-4 py-4 text-sm">
-      <dt className="font-medium">{label}</dt>
-      <dd className="text-right text-muted-foreground">{value}</dd>
+    <div className="border-t bg-background p-6 md:p-7 lg:border-t-0 lg:border-l">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-medium text-muted-foreground">当前选定课表</h3>
+        <span
+          className={`text-xs ${stale ? "text-[var(--timetable-notice-foreground)]" : "text-muted-foreground"}`}
+        >
+          {!hasVersion ? "尚未设置" : stale ? "资料已变化" : "资料版本一致"}
+        </span>
+      </div>
+      <p className="mt-3 break-words text-lg font-semibold">
+        {summary.current_version_name ?? "等待第一份课表"}
+      </p>
+      {stale ? (
+        <>
+          <dl className="mt-5 grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <dt className="text-muted-foreground">现有已排记录</dt>
+              <dd className="mt-1 font-medium tabular-nums">{summary.scheduled} 节</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">最新任课需求</dt>
+              <dd className="mt-1 font-medium tabular-nums">{summary.required} 节 / 周</dd>
+            </div>
+          </dl>
+          <p className="mt-5 flex items-start gap-2 rounded-lg bg-[var(--timetable-notice-background)] px-3 py-2.5 text-xs leading-6 text-[var(--timetable-notice-foreground)]">
+            <FileClockIcon className="mt-1 size-3.5 shrink-0" aria-hidden="true" />
+            这些记录来自旧方案，更新后需重新校验排课进度与冲突。
+          </p>
+        </>
+      ) : (
+        <>
+          <div className="mt-5 flex flex-wrap items-baseline justify-between gap-2 text-sm">
+            <span className="text-muted-foreground">排课进度</span>
+            <span className="tabular-nums">
+              <strong className="text-lg font-semibold">{summary.scheduled}</strong>
+              <span className="text-muted-foreground"> / {summary.required} 节</span>
+            </span>
+          </div>
+          <div
+            role="progressbar"
+            aria-label="排课完成率"
+            aria-valuenow={percent}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted"
+          >
+            <div className="h-full rounded-full bg-primary" style={{ width: `${percent}%` }} />
+          </div>
+          <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-muted-foreground">
+            {hasVersion ? (
+              <>
+                <span>{summary.remaining > 0 ? `待排 ${summary.remaining} 节` : "课时已排完"}</span>
+                <span>{summary.current_version_hard_conflict_count} 个硬冲突</span>
+                <span>{summary.current_version_soft_warning_count} 项提醒</span>
+              </>
+            ) : (
+              <span>设置当前课表后显示校验结果</span>
+            )}
+          </div>
+        </>
+      )}
     </div>
   )
 }
 
-function daysBetween(from: Date, to: Date) {
-  const fromDay = new Date(from.getFullYear(), from.getMonth(), from.getDate()).getTime()
-  const toDay = new Date(to.getFullYear(), to.getMonth(), to.getDate()).getTime()
-  return Math.round((toDay - fromDay) / 86_400_000)
+function PreparationSummary({
+  semester,
+  summary,
+}: {
+  semester: Semester
+  summary: DashboardSummary
+}) {
+  const items = [
+    {
+      label: "学期班级",
+      note: `${summary.class_count} 个班级`,
+      done: summary.class_count > 0,
+      to: semesterPath(semester.id, "setup"),
+    },
+    {
+      label: "作息设置",
+      note: summary.template_ready ? "已设置" : "未设置",
+      done: summary.template_ready,
+      to: semesterPath(semester.id, "setup"),
+    },
+    {
+      label: "任课关系",
+      note: `${summary.confirmed_count} / ${summary.assignment_count} 条已确认`,
+      done: summary.assignment_count > 0 && summary.assignment_count === summary.confirmed_count,
+      to: semesterPath(semester.id, "assignments"),
+    },
+  ]
+  const complete = items.filter((item) => item.done).length
+  return (
+    <details className="group border-b pb-4" open={complete !== items.length}>
+      <summary className="flex cursor-pointer list-none items-center gap-2 rounded py-1 text-sm focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
+        <h2 className="flex-1 text-base font-semibold">排课准备</h2>
+        <span className="text-xs text-muted-foreground">
+          {complete} / {items.length} 项已就绪
+        </span>
+        <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-open:rotate-180 motion-reduce:transition-none" />
+      </summary>
+      <div className="mt-3 divide-y">
+        {items.map((item) => (
+          <Link
+            key={item.label}
+            to={item.to}
+            className="flex items-center gap-3 rounded py-3 text-sm outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {item.done ? (
+              <CheckIcon
+                className="size-4 text-emerald-700 dark:text-emerald-400"
+                aria-label="已就绪"
+              />
+            ) : (
+              <CircleIcon className="size-4 text-muted-foreground" aria-label="待完成" />
+            )}
+            <span>{item.label}</span>
+            <span className="ml-auto text-xs text-muted-foreground">{item.note}</span>
+          </Link>
+        ))}
+      </div>
+    </details>
+  )
+}
+
+function TaskRow({ task }: { task: DashboardTask }) {
+  return (
+    <Link
+      to={task.href}
+      className="group/task flex items-center gap-4 rounded py-5 outline-none hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <div className="min-w-0 flex-1">
+        <h3 className="text-sm font-medium">{task.title}</h3>
+        <p className="mt-1 text-sm leading-6 text-muted-foreground">{task.description}</p>
+        <span className="mt-2 inline-block text-xs font-medium">{task.action}</span>
+      </div>
+      <ArrowRightIcon
+        className="size-4 shrink-0 text-muted-foreground group-hover/task:text-foreground"
+        aria-hidden="true"
+      />
+    </Link>
+  )
+}
+function Shortcut({
+  to,
+  title,
+  description,
+  icon: Icon,
+}: {
+  to: string
+  title: string
+  description: string
+  icon: typeof ListChecksIcon
+}) {
+  return (
+    <Link
+      to={to}
+      className="flex items-center gap-3 rounded py-3 outline-none hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+      <span className="flex-1">
+        <span className="text-sm font-medium">{title}</span>
+        <span className="mt-0.5 block text-xs text-muted-foreground">{description}</span>
+      </span>
+      <ArrowRightIcon className="size-3.5 text-muted-foreground" aria-hidden="true" />
+    </Link>
+  )
+}
+function NoSemester() {
+  const { user } = useAuth()
+  return (
+    <section className="mx-auto max-w-4xl px-6 py-12">
+      <CalendarDaysIcon className="mb-6 size-8 text-muted-foreground" />
+      <h1 className="text-2xl font-semibold">开始准备一个学期</h1>
+      <p className="mt-3 text-sm leading-7 text-muted-foreground">
+        {user?.role === "viewer"
+          ? "尚未设置当前学期，请联系教务管理员。"
+          : "选择已有学期，或创建学年和学期，再配置班级、作息与任课关系。"}
+      </p>
+      <div className="mt-6 flex flex-wrap items-center gap-3">
+        <SemesterSwitcher />
+        {user?.role !== "viewer" && (
+          <Button nativeButton={false} render={<Link to="/years" />}>
+            管理学年学期
+            <ArrowRightIcon />
+          </Button>
+        )}
+      </div>
+    </section>
+  )
 }

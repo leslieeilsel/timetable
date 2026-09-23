@@ -553,12 +553,11 @@ export function createChatTools(
             "teacher_change",
             "room_change",
             "cancel",
-            "makeup",
             "activity",
           ]),
         ),
       },
-      "指定日期范围的临时调课、互换、换教师、换教室、停课、补课和活动记录，包含原安排、调整后的安排、原因及状态。q 检索相关班级、教师、课程或说明，默认包含取消记录。",
+      "指定日期范围的临时调课、互换、换教师、换教室、停课和活动记录，包含原安排、调整后的安排、原因及状态。q 检索相关班级、教师、课程或说明，默认包含取消记录。",
     ),
     readList(
       "list_long_term_changes",

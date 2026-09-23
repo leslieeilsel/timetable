@@ -77,7 +77,7 @@ class TimetableController
         $query = TimetableEntry::query()->where('semester_id', $semester->id)
             ->where('timetable_version_id', $versionId)->with([
                 'teachingAssignment:id,weekly_items', 'schoolClass:id,name', 'teachingGroup:id,name', 'schoolClasses:id,name',
-                'teacher:id,name', 'teachers:id,name', 'course:id,name,short_name',
+                'teacher:id,name', 'teachers:id,name', 'course:id,name,short_name,color',
                 'actualRoom:id,name', 'item:id,name,start_time,end_time,sort_order',
             ])->orderBy('weekday')->orderBy('item_id');
         if ($resourceId !== null) {

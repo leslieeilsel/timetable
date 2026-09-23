@@ -1,5 +1,6 @@
-import { useParams } from "react-router"
+import { useMatch } from "react-router"
 import { useSchoolContext } from "@/lib/queries"
+import { useWorkingSemesterId } from "@/lib/working-semester"
 import type { Role, TimetableVersion } from "@/lib/types"
 
 export type SemesterDestination =
@@ -9,6 +10,7 @@ export type SemesterDestination =
   | "constraints"
   | "generate"
   | "timetable"
+  | "planning"
   | "adjustments"
   | "long-term"
   | "leaves"
@@ -19,7 +21,8 @@ const currentSemesterEntries: Record<SemesterDestination, string> = {
   assignments: "/scheduling/assignments",
   constraints: "/scheduling/constraints",
   generate: "/scheduling/generate",
-  timetable: "/scheduling/timetable",
+  timetable: "/semester/timetable",
+  planning: "/scheduling/planning",
   adjustments: "/daily/adjustments",
   "long-term": "/daily/long-term",
   leaves: "/daily/leaves",
@@ -30,7 +33,7 @@ const destinationByCurrentEntry = new Map<string, SemesterDestination>([
     ([destination, path]) => [path, destination as SemesterDestination] as const,
   ),
   ["/semester/assignments", "assignments"],
-  ["/semester/timetable", "timetable"],
+  ["/scheduling/timetable", "planning"],
 ])
 
 const schedulingDestinations = new Set<SemesterDestination>([
@@ -39,7 +42,7 @@ const schedulingDestinations = new Set<SemesterDestination>([
   "assignments",
   "constraints",
   "generate",
-  "timetable",
+  "planning",
 ])
 
 const dailyDestinations = new Set<SemesterDestination>(["adjustments", "long-term", "leaves"])
@@ -66,7 +69,7 @@ export function semesterDestinationForPath(path: string): SemesterDestination | 
   const currentDestination = destinationByCurrentEntry.get(pathname)
   if (currentDestination) return currentDestination
   const match =
-    /^\/semesters\/[1-9]\d*\/(setup|preparation|assignments|constraints|generate|timetable|adjustments|long-term|leaves)$/.exec(
+    /^\/semesters\/[1-9]\d*\/(setup|preparation|assignments|constraints|generate|timetable|planning|adjustments|long-term|leaves)$/.exec(
       pathname,
     )
   return (match?.[1] as SemesterDestination | undefined) ?? null
@@ -130,8 +133,10 @@ export function timetableVersionsForRole<T extends Pick<TimetableVersion, "statu
 }
 
 export function useResolvedSemesterId() {
-  const params = useParams()
+  const match = useMatch("/semesters/:semesterId/*")
   const context = useSchoolContext()
-  const semesterId = resolveSemesterId(params.semesterId, context.data?.current_semester?.id)
-  return { semesterId, context, isExplicitSemester: params.semesterId !== undefined }
+  const selectedId = useWorkingSemesterId()
+  const routeId = match?.params.semesterId
+  const semesterId = resolveSemesterId(routeId, selectedId ?? context.data?.current_semester?.id)
+  return { semesterId, context, isExplicitSemester: routeId !== undefined }
 }

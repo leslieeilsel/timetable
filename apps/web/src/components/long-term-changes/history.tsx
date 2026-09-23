@@ -29,7 +29,15 @@ import {
   AdjustmentRecordRow,
 } from "@/components/adjustments/workbench"
 
-export function LongTermHistory({ semesterId, canEdit }: { semesterId: number; canEdit: boolean }) {
+export function LongTermHistory({
+  semesterId,
+  canEdit,
+  onNew,
+}: {
+  semesterId: number
+  canEdit: boolean
+  onNew?: () => void
+}) {
   const client = useQueryClient()
   const detailRef = useRef<HTMLDivElement>(null)
   const [search, setSearch] = useState("")
@@ -113,129 +121,135 @@ export function LongTermHistory({ semesterId, canEdit }: { semesterId: number; c
   }
   return (
     <>
-      <AdjustmentHistoryToolbar
-        search={search}
-        onSearch={setSearch}
-        onSubmit={() => {
-          setQ(search.trim())
-          setPage(1)
-        }}
-        status={status}
-        statuses={[
-          ["all", "全部状态"],
-          ["upcoming", "尚未生效"],
-          ["active", "正在生效"],
-          ["ended", "已结束"],
-          ["restored", "取消 / 恢复安排"],
-        ]}
-        onStatus={(value) => {
-          setStatus(value)
-          setPage(1)
-        }}
-        from={from}
-        to={to}
-        onFrom={(value) => {
-          setFrom(value)
-          setPage(1)
-        }}
-        onTo={(value) => {
-          setTo(value)
-          setPage(1)
-        }}
-        onClear={clearFilters}
-        refreshing={records.isFetching}
-        onRefresh={() => void records.refetch()}
-      />
-      {records.isError ? (
-        <div role="alert" className="py-10 text-center">
-          <p>{apiMessage(records.error)}</p>
-          <Button variant="outline" className="mt-3" onClick={() => void records.refetch()}>
-            重新加载
-          </Button>
-        </div>
-      ) : records.isLoading ? (
-        <p className="py-12 text-center text-muted-foreground">正在加载调整记录…</p>
-      ) : (
-        <AdjustmentRecordList>
-          {records.data?.data.map((record) => {
-            const first = record.changes[0]
-            const count = new Set(record.changes.map((change) => change.before.entry_key)).size
-            return (
-              <AdjustmentRecordRow
-                key={record.id}
-                type={weeklyDetail(record.changes).type}
-                title={[
-                  ...new Set(
-                    record.changes.map(
-                      ({ before }) => `${before.target_name} · ${before.course_name}`,
+      <div className="surface-panel overflow-hidden">
+        <AdjustmentHistoryToolbar
+          search={search}
+          onSearch={setSearch}
+          onSubmit={() => {
+            setQ(search.trim())
+            setPage(1)
+          }}
+          status={status}
+          statuses={[
+            ["all", "全部状态"],
+            ["upcoming", "尚未生效"],
+            ["active", "正在生效"],
+            ["ended", "已结束"],
+            ["restored", "取消 / 恢复安排"],
+          ]}
+          onStatus={(value) => {
+            setStatus(value)
+            setPage(1)
+          }}
+          from={from}
+          to={to}
+          onFrom={(value) => {
+            setFrom(value)
+            setPage(1)
+          }}
+          onTo={(value) => {
+            setTo(value)
+            setPage(1)
+          }}
+          onClear={clearFilters}
+          refreshing={records.isFetching}
+          onRefresh={() => void records.refetch()}
+          onNew={onNew}
+          newLabel="发起持续调课"
+        />
+        {records.isError ? (
+          <div role="alert" className="py-10 text-center">
+            <p>{apiMessage(records.error)}</p>
+            <Button variant="outline" className="mt-3" onClick={() => void records.refetch()}>
+              重新加载
+            </Button>
+          </div>
+        ) : records.isLoading ? (
+          <p className="py-12 text-center text-muted-foreground">正在加载调整记录…</p>
+        ) : (
+          <AdjustmentRecordList>
+            {records.data?.data.map((record) => {
+              const first = record.changes[0]
+              const count = new Set(record.changes.map((change) => change.before.entry_key)).size
+              return (
+                <AdjustmentRecordRow
+                  key={record.id}
+                  type={weeklyDetail(record.changes).type}
+                  title={[
+                    ...new Set(
+                      record.changes.map(
+                        ({ before }) => `${before.target_name} · ${before.course_name}`,
+                      ),
                     ),
-                  ),
-                ].join("；")}
-                before={first ? arrangement(first.before) : "—"}
-                after={
-                  <>
-                    {first ? arrangement(first.after) : "—"}
-                    {count > 1 && (
-                      <span className="mt-1 block text-xs text-muted-foreground">
-                        另 {count - 1} 节
-                      </span>
-                    )}
-                  </>
-                }
-                date={
-                  <>
-                    {record.effective_from}
-                    <p>至 {record.effective_to}</p>
-                  </>
-                }
-                status={recordStatus(record, today)}
-                statusDetail={record.restored_from ? `${record.restored_from} 起恢复` : undefined}
-                onClick={() => openRecord(record)}
-              />
-            )
-          })}
-          {!records.data?.data.length && (
-            <div className="px-5 py-16 text-center">
-              <p className="text-sm font-medium">
-                {q || status !== "all" || from || to ? "当前条件下没有调课事项" : "还没有调课记录"}
-              </p>
-              <p className="mt-2 text-sm text-muted-foreground">
-                {q || status !== "all" || from || to
-                  ? "可以清空筛选或查看全部事项。"
-                  : "需要调整每周课程时，点击右上方“新建调课”。"}
-              </p>
-            </div>
-          )}
-        </AdjustmentRecordList>
-      )}
-      {pagination && pagination.total > 0 && (
-        <div className="flex flex-wrap items-center justify-end gap-3 text-xs text-muted-foreground">
-          <span>
-            共 {pagination.total} 项
-            {pagination.last_page > 1 ? ` · ${page} / ${pagination.last_page} 页` : ""}
-          </span>
-          {pagination.last_page > 1 && (
-            <>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={page <= 1 || records.isFetching}
-                onClick={() => setPage(page - 1)}
-              >
-                上一页
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={page >= pagination.last_page || records.isFetching}
-                onClick={() => setPage(page + 1)}
-              >
-                下一页
-              </Button>
-            </>
-          )}
-        </div>
-      )}
+                  ].join("；")}
+                  before={first ? arrangement(first.before) : "—"}
+                  after={
+                    <>
+                      {first ? arrangement(first.after) : "—"}
+                      {count > 1 && (
+                        <span className="mt-1 block text-xs text-muted-foreground">
+                          另 {count - 1} 节
+                        </span>
+                      )}
+                    </>
+                  }
+                  date={
+                    <>
+                      {record.effective_from}
+                      <p>至 {record.effective_to}</p>
+                    </>
+                  }
+                  status={recordStatus(record, today)}
+                  statusDetail={record.restored_from ? `${record.restored_from} 起恢复` : undefined}
+                  onClick={() => openRecord(record)}
+                />
+              )
+            })}
+            {!records.data?.data.length && (
+              <div className="px-5 py-16 text-center">
+                <p className="text-sm font-medium">
+                  {q || status !== "all" || from || to
+                    ? "当前条件下没有调课事项"
+                    : "还没有调课记录"}
+                </p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {q || status !== "all" || from || to
+                    ? "可以清空筛选或查看全部事项。"
+                    : "需要调整每周课程时，点击筛选栏右侧“发起持续调课”。"}
+                </p>
+              </div>
+            )}
+          </AdjustmentRecordList>
+        )}
+        {pagination && pagination.total > 0 && (
+          <div className="flex flex-wrap items-center justify-end gap-3 border-t px-4 py-3 text-xs text-muted-foreground">
+            <span>
+              共 {pagination.total} 项
+              {pagination.last_page > 1 ? ` · ${page} / ${pagination.last_page} 页` : ""}
+            </span>
+            {pagination.last_page > 1 && (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={page <= 1 || records.isFetching}
+                  onClick={() => setPage(page - 1)}
+                >
+                  上一页
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={page >= pagination.last_page || records.isFetching}
+                  onClick={() => setPage(page + 1)}
+                >
+                  下一页
+                </Button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
       <Button
         variant="link"
         size="sm"

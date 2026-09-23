@@ -38,7 +38,8 @@ describe("semester routes", () => {
 
   it("recognizes scheduling and daily destinations in compatibility and explicit routes", () => {
     expect(semesterDestinationForPath("/semesters/17/generate?run=42")).toBe("generate")
-    expect(isSchedulingSemesterPath("/semesters/17/timetable")).toBe(true)
+    expect(isSchedulingSemesterPath("/semesters/17/timetable")).toBe(false)
+    expect(isSchedulingSemesterPath("/semesters/17/planning")).toBe(true)
     expect(isSchedulingSemesterPath("/semesters/17/adjustments")).toBe(false)
     expect(isDailySemesterPath("/semesters/17/adjustments")).toBe(true)
     expect(isDailySemesterPath("/daily/leaves")).toBe(true)

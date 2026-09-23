@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { AdjustmentLessonToolbar } from "@/components/adjustments/workbench"
 import { SimpleSelect } from "@/components/simple-select"
 import { weekPatternName } from "@/components/timetable-grid"
+import { courseColorStyle } from "@/lib/course-colors"
 import {
   effectiveTeacherIds,
   groupAssignments,
@@ -213,7 +214,7 @@ export function WeeklyLessonPicker({
                   课节
                 </th>
                 {source.days.map((day) => (
-                  <th key={day.weekday} className="p-3 font-medium">
+                  <th key={day.weekday} className="border-r p-3 font-medium last:border-r-0">
                     {weekdays[day.weekday]}
                   </th>
                 ))}
@@ -229,34 +230,41 @@ export function WeeklyLessonPicker({
                   {source.days.map((day) => (
                     <td
                       key={day.weekday}
-                      className="h-20 border-t border-r p-1 align-top last:border-r-0"
+                      className="h-24 border-t border-r p-0 align-top last:border-r-0"
                     >
-                      {visible
-                        .filter(
-                          (entry) => entry.weekday === day.weekday && entry.item_id === item.id,
-                        )
-                        .map((entry) =>
-                          onSelect ? (
-                            <button
-                              key={entry.id}
-                              disabled={entry.is_locked}
-                              onClick={() => onSelect(entry)}
-                              aria-label={`选择 ${weekdays[entry.weekday]} ${item.name} ${entry.course.name} ${weeklyTargetName(entry)}`}
-                              className="mb-1 w-full rounded-lg border p-2 text-left hover:enabled:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring disabled:text-muted-foreground"
-                            >
-                              {content(entry)}
-                              {entry.week_pattern !== "all" && (
-                                <p className="mt-1 text-xs text-muted-foreground">
-                                  {weekPatternName(entry)}
-                                </p>
-                              )}
-                            </button>
-                          ) : (
-                            <div key={entry.id} className="mb-1 rounded-lg border p-2">
-                              {content(entry)}
-                            </div>
-                          ),
-                        )}
+                      <div className="grid h-full divide-y divide-border">
+                        {visible
+                          .filter(
+                            (entry) => entry.weekday === day.weekday && entry.item_id === item.id,
+                          )
+                          .map((entry) =>
+                            onSelect ? (
+                              <button
+                                key={entry.id}
+                                disabled={entry.is_locked}
+                                onClick={() => onSelect(entry)}
+                                aria-label={`选择 ${weekdays[entry.weekday]} ${item.name} ${entry.course.name} ${weeklyTargetName(entry)}`}
+                                style={courseColorStyle(entry.course)}
+                                className="course-color-card timetable-lesson transition-colors disabled:text-muted-foreground"
+                              >
+                                {content(entry)}
+                                {entry.week_pattern !== "all" && (
+                                  <p className="mt-1 text-xs text-muted-foreground">
+                                    {weekPatternName(entry)}
+                                  </p>
+                                )}
+                              </button>
+                            ) : (
+                              <div
+                                key={entry.id}
+                                style={courseColorStyle(entry.course)}
+                                className="course-color-card timetable-lesson"
+                              >
+                                {content(entry)}
+                              </div>
+                            ),
+                          )}
+                      </div>
                     </td>
                   ))}
                 </tr>

@@ -511,3 +511,55 @@
     justify-content: flex-start;
   }
 }
+
+/* Subject identity is independent from conflict/change status. */
+.course-color-card {
+  background-color: color-mix(in oklab, var(--course-color) 11%, var(--background));
+  border-color: color-mix(in oklab, var(--course-color) 35%, var(--border));
+}
+.dark .course-color-card {
+  background-color: color-mix(in oklab, var(--course-color) 20%, var(--background));
+}
+.timetable-lesson {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  width: 100%;
+  min-height: 4.5rem;
+  border-radius: 0;
+  padding: 0.75rem;
+  text-align: left;
+}
+button.timetable-lesson:enabled {
+  cursor: pointer;
+}
+button.timetable-lesson:enabled:hover {
+  background-color: color-mix(in oklab, var(--course-color) 17%, var(--background));
+}
+.dark button.timetable-lesson:enabled:hover {
+  background-color: color-mix(in oklab, var(--course-color) 26%, var(--background));
+}
+button.timetable-lesson:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+.course-color-dot {
+  background-color: var(--course-color);
+}
+.course-color-dimmed {
+  opacity: 0.45;
+  filter: grayscale(1);
+}
+.course-color-dimmed:hover,
+.course-color-dimmed:focus-visible {
+  opacity: 1;
+}
+@media print {
+  .course-color-card {
+    print-color-adjust: exact;
+  }
+  .course-color-dimmed {
+    opacity: 1;
+    filter: none;
+  }
+}

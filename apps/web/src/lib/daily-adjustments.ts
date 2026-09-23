@@ -9,6 +9,15 @@ export const adjustmentLabels: Record<CalendarExceptionType, string> = {
   activity: "安排活动",
   makeup: "补课",
 }
+export const adjustmentTypes = [
+  "swap",
+  "move",
+  "teacher_change",
+  "room_change",
+  "cancel",
+  "activity",
+] as const
+
 export const dailyStatusLabels: Record<DailyTimetableRow["status"], string> = {
   base: "正常",
   moved_out: "已移出",
@@ -96,7 +105,7 @@ export function filterCount(filters: DailyFilters) {
   )
 }
 export type AdjustmentForm = {
-  type: CalendarExceptionType
+  type: Exclude<CalendarExceptionType, "makeup">
   effective_date: string
   replacement_date: string
   original_entry_id: string
@@ -104,26 +113,20 @@ export type AdjustmentForm = {
   replacement_item_id: string
   replacement_teacher_id: string
   replacement_room_id: string
-  replacement_assignment_id: string
   title: string
   reason: string
   notify_teachers: boolean
 }
-export function newAdjustment(
-  date: string,
-  source?: DailyTimetableRow,
-  itemId?: number,
-): AdjustmentForm {
+export function newAdjustment(date: string, source: DailyTimetableRow): AdjustmentForm {
   return {
-    type: source ? "swap" : "makeup",
-    effective_date: source?.date ?? date,
-    replacement_date: source?.date ?? date,
-    original_entry_id: String(source?.original_entry_id ?? ""),
+    type: "swap",
+    effective_date: date,
+    replacement_date: date,
+    original_entry_id: String(source.original_entry_id ?? ""),
     related_entry_id: "",
-    replacement_item_id: String(itemId ?? ""),
+    replacement_item_id: "",
     replacement_teacher_id: "",
     replacement_room_id: "",
-    replacement_assignment_id: "",
     title: "",
     reason: "",
     notify_teachers: true,
@@ -136,13 +139,10 @@ export function adjustmentPayload(form: AdjustmentForm) {
     reason: form.reason.trim(),
     notify_teachers: form.notify_teachers,
   }
-  if (form.type !== "makeup") body.original_entry_id = Number(form.original_entry_id)
-  if (["swap", "move", "makeup"].includes(form.type)) body.replacement_date = form.replacement_date
+  body.original_entry_id = Number(form.original_entry_id)
+  if (["swap", "move"].includes(form.type)) body.replacement_date = form.replacement_date
   if (form.type === "swap") body.related_entry_id = Number(form.related_entry_id)
-  if (["move", "makeup"].includes(form.type))
-    body.replacement_item_id = Number(form.replacement_item_id)
-  if (form.type === "makeup")
-    body.replacement_assignment_id = Number(form.replacement_assignment_id)
+  if (form.type === "move") body.replacement_item_id = Number(form.replacement_item_id)
   if (form.type === "teacher_change")
     body.replacement_teacher_id = Number(form.replacement_teacher_id)
   if (form.type === "room_change") body.replacement_room_id = Number(form.replacement_room_id)
@@ -154,14 +154,13 @@ export function adjustmentReady(form: AdjustmentForm) {
     form.reason.trim().length >= 2 &&
     form.reason.trim().length <= 1000 &&
     validDate(form.effective_date) &&
-    (form.type === "makeup" || Boolean(form.original_entry_id)) &&
+    Boolean(form.original_entry_id) &&
     (form.type !== "swap" || Boolean(form.related_entry_id)) &&
     (form.type !== "teacher_change" || Boolean(form.replacement_teacher_id)) &&
     (form.type !== "room_change" || Boolean(form.replacement_room_id)) &&
-    (form.type !== "makeup" || Boolean(form.replacement_assignment_id)) &&
     (form.type !== "activity" || Boolean(form.title.trim())) &&
-    (!["move", "makeup", "swap"].includes(form.type) || validDate(form.replacement_date)) &&
-    (!["move", "makeup"].includes(form.type) || Boolean(form.replacement_item_id))
+    (!["move", "swap"].includes(form.type) || validDate(form.replacement_date)) &&
+    (form.type !== "move" || Boolean(form.replacement_item_id))
   )
 }
 

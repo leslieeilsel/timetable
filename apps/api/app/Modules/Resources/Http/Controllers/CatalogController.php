@@ -11,6 +11,7 @@ use App\Modules\Resources\Models\Grade;
 use App\Modules\Resources\Models\Room;
 use App\Modules\Resources\Models\Teacher;
 use App\Modules\Resources\Services\CatalogImpactService;
+use App\Modules\Resources\Services\CoursePalette;
 use App\Modules\Resources\Services\HistoricalReferenceService;
 use App\Support\ApiProblemException;
 use App\Support\EtagService;
@@ -192,6 +193,7 @@ class CatalogController
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:100', 'unique:courses,name'],
+            'color' => ['sometimes', Rule::in(CoursePalette::colors())],
             'short_name' => ['nullable', 'string', 'max:50'],
             'is_active' => ['sometimes', 'boolean'],
         ]);
@@ -199,6 +201,7 @@ class CatalogController
         return $this->create($request, Course::class, [
             'name' => Normalizer::text($data['name']),
             'short_name' => Normalizer::optional($data['short_name'] ?? null),
+            'color' => $data['color'] ?? null,
             'is_active' => $data['is_active'] ?? true,
         ], 'course');
     }
@@ -207,6 +210,7 @@ class CatalogController
     {
         $data = $request->validate([
             'name' => ['sometimes', 'required', 'string', 'max:100', Rule::unique('courses')->ignore($course->id)],
+            'color' => ['sometimes', Rule::in(CoursePalette::colors())],
             'short_name' => ['sometimes', 'nullable', 'string', 'max:50'],
             'is_active' => ['sometimes', 'boolean'],
             'confirm_open_impact' => ['sometimes', 'boolean'],
@@ -372,8 +376,10 @@ class CatalogController
             $before = $this->serialize($locked);
             $locked->fill($data);
             if ($locked->isDirty()) {
+                // Appearance changes must not invalidate generated timetable versions.
+                $colorOnly = $type === 'course' && array_keys($locked->getDirty()) === ['color'];
                 $locked->save();
-                $settings->increment('catalog_revision');
+                $settings->increment($colorOnly ? 'appearance_revision' : 'catalog_revision');
                 $settings->refresh();
                 $this->audit->record($request, $actor, $historicalCorrection ? 'historical_correction' : 'update', $type, $locked->getKey(), $before, $this->serialize($locked));
             }

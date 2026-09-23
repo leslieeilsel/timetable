@@ -227,7 +227,7 @@ function PreparationContent({
               nativeButton={false}
               render={<Link to={generationPath} />}
             >
-              进入方案生成
+              开始自动排课
               <ArrowRightIcon />
             </Button>
           </div>

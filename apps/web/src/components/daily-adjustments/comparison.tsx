@@ -74,7 +74,7 @@ export function AdjustmentComparison({
           <DialogHeader>
             <DialogTitle>周课表</DialogTitle>
             <DialogDescription>
-              蓝色是原课，绿色是已选择的交换课程。这里显示调整前的实际安排。
+              蓝色描边为原课，绿色描边为已选交换课程。这里显示调整前的实际安排。
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-wrap items-center gap-2">
@@ -114,7 +114,6 @@ export function AdjustmentComparison({
               canEdit={false}
               readOnly
               onSelect={() => {}}
-              onEmpty={() => {}}
             />
           )}
         </DialogContent>

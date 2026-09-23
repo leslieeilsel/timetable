@@ -1,3 +1,4 @@
+import { SchedulingWorkflow } from "@/components/scheduling-workflow"
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link } from "react-router"
@@ -184,6 +185,7 @@ export function SemesterSetupPage() {
   if (!semesterId && !context.isLoading)
     return (
       <>
+        <SchedulingWorkflow />
         <PageHeader title="学期配置" />
         <EmptyList title="尚未设置当前学期" description="请从学年管理中开放学期并设为当前学期。" />
       </>
@@ -203,6 +205,7 @@ export function SemesterSetupPage() {
 
   return (
     <>
+      <SchedulingWorkflow />
       <PageHeader
         title={`${current.academic_year?.name ?? "当前学年"} · ${current.name}配置`}
         description="先确定参与排课的班级和固定教室，再维护统一作息。"

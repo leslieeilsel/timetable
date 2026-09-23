@@ -1,27 +1,20 @@
+import { AdjustmentScopeDialog } from "@/components/adjustments/adjustment-scope-dialog"
 import { useEffect, useRef, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { Link } from "react-router"
-import { CalendarClock, MoreHorizontal } from "lucide-react"
 import { toast } from "sonner"
 import { api, apiAllPages } from "@/lib/api"
 import { useAuth } from "@/lib/auth"
 import { useResolvedSemesterId } from "@/lib/semester"
 import { enumParam, useHashPreservingSearchParams } from "@/lib/url-state"
-import {
-  clampDate,
-  localDate,
-  newAdjustment,
-  validDate,
-  type AdjustmentForm,
-} from "@/lib/daily-adjustments"
+import { newAdjustment, validDate, type AdjustmentForm } from "@/lib/daily-adjustments"
 import type {
   ClassSetting,
   DailyTimetableRow,
+  DailyTimetable,
   Room,
   ScheduleTemplate,
   Semester,
   Teacher,
-  TeachingAssignment,
 } from "@/lib/types"
 import { AdjustmentPanel } from "@/components/daily-adjustments/adjustment-panel"
 import { AdjustmentHistory } from "@/components/daily-adjustments/adjustment-history"
@@ -35,12 +28,6 @@ import {
 } from "@/components/adjustments/workbench"
 import { Button } from "@/components/ui/button"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -51,14 +38,19 @@ import {
 
 type Editor = {
   id: number
-  source: DailyTimetableRow | null
+  source: DailyTimetableRow
   form: AdjustmentForm
   published?: boolean
 }
 function readDraft(key: string): Editor | null {
   try {
     const value = JSON.parse(localStorage.getItem(key) ?? "null")
-    return value?.id && validDate(value.form?.effective_date) ? value : null
+    return value?.id &&
+      value.source?.original_entry_id &&
+      value.form?.type !== "makeup" &&
+      validDate(value.form?.effective_date)
+      ? value
+      : null
   } catch {
     return null
   }
@@ -80,7 +72,6 @@ function hasChanges(editor: Editor) {
     editor.form.related_entry_id ||
     editor.form.replacement_teacher_id ||
     editor.form.replacement_room_id ||
-    editor.form.replacement_assignment_id ||
     editor.form.replacement_item_id ||
     (editor.source && editor.form.type !== "swap"),
   )
@@ -92,6 +83,8 @@ export function DailyAdjustmentsPage() {
   const client = useQueryClient()
   const [params, setParams] = useHashPreservingSearchParams()
   const stage = enumParam(params, "step", ["records", "source"], "records")
+  const [scopeRow, setScopeRow] = useState<DailyTimetableRow | null>(null)
+  const linkedEntryHandled = useRef("")
   const [editor, setEditor] = useState<Editor | null>(null)
   const [draft, setDraft] = useState<Editor | null>(null)
   const [editorBusy, setEditorBusy] = useState(false)
@@ -112,8 +105,11 @@ export function DailyAdjustmentsPage() {
       window.removeEventListener("beforeunload", persist)
     }
   }, [])
+  const previousStorageKey = useRef(storageKey)
   useEffect(() => {
     setDraft(readDraft(storageKey))
+    if (previousStorageKey.current === storageKey) return
+    previousStorageKey.current = storageKey
     setEditor(null)
     setEditorBusy(false)
     setClosePrompt(false)
@@ -145,17 +141,40 @@ export function DailyAdjustmentsPage() {
     queryFn: () => apiAllPages<Room>("/api/v1/rooms"),
     enabled: working,
   })
-  const assignments = useQuery({
-    queryKey: ["teaching-assignments", semesterId, "confirmed", "daily-operations"],
-    queryFn: () =>
-      apiAllPages<TeachingAssignment>(
-        `/api/v1/semesters/${semesterId}/teaching-assignments?status=confirmed`,
-      ),
-    enabled: semesterId !== null && editor?.form.type === "makeup",
-  })
   const canEdit = Boolean(
     current?.status === "open" && (user?.role === "admin" || user?.role === "scheduler"),
   )
+  const linkedDate = params.get("date")
+  const linkedEntry = params.get("entry")
+  const linkedLesson = useQuery({
+    queryKey: ["daily-timetable", semesterId, linkedDate],
+    queryFn: () =>
+      api<DailyTimetable>(`/api/v1/semesters/${semesterId}/daily-timetable?date=${linkedDate}`),
+    enabled: canEdit && stage === "source" && Boolean(linkedEntry) && validDate(linkedDate),
+  })
+  useEffect(() => {
+    if (!canEdit || stage !== "source" || !linkedEntry || !linkedLesson.data) return
+    const key = `${semesterId}:${linkedDate}:${linkedEntry}`
+    if (linkedEntryHandled.current === key) return
+    linkedEntryHandled.current = key
+    const row = linkedLesson.data.data.rows.find(
+      (item) =>
+        String(item.original_entry_id) === linkedEntry &&
+        !item.exception_id &&
+        !item.substitution_id &&
+        !item.is_cancelled,
+    )
+    if (row) setEditor({ id: Date.now(), source: row, form: newAdjustment(row.date, row) })
+    else toast.info("这节课已有变化，请重新选择课程")
+    setParams(
+      (previous) => {
+        const next = new URLSearchParams(previous)
+        next.delete("entry")
+        return next
+      },
+      { replace: true },
+    )
+  }, [canEdit, stage, linkedEntry, linkedDate, linkedLesson.data, semesterId, setParams])
   const refresh = async () => {
     await Promise.all([
       client.invalidateQueries({ queryKey: ["daily-timetable", semesterId] }),
@@ -194,62 +213,39 @@ export function DailyAdjustmentsPage() {
     if (editor && !editor.published && hasChanges(editor)) setClosePrompt(true)
     else finishClose()
   }
-  const start = (source: DailyTimetableRow | null, date: string, itemId?: number) => {
+  const start = (source: DailyTimetableRow, date: string) => {
     if (!canEdit) return
-    setEditor({ id: Date.now(), source, form: newAdjustment(date, source ?? undefined, itemId) })
+    setEditor({ id: Date.now(), source, form: newAdjustment(date, source) })
   }
   if (!semesterId && !context.isLoading) return <p className="p-6">请先选择学期。</p>
   if (semester.isLoading || (!current && !semester.isError)) return <LoadingState />
   if (semester.isError || !current) return <ErrorState retry={() => void semester.refetch()} />
-  const resourcesFailed =
-    [template, settings, teachers, rooms].some((query) => query.isError) ||
-    (editor?.form.type === "makeup" && assignments.isError)
-  const resourcesLoading =
-    [template, settings, teachers, rooms].some((query) => query.isLoading) ||
-    (editor?.form.type === "makeup" && assignments.isLoading)
+  const resourcesFailed = [template, settings, teachers, rooms].some((query) => query.isError)
+  const resourcesLoading = [template, settings, teachers, rooms].some((query) => query.isLoading)
   return (
     <>
       <div className={adjustmentPageClass}>
         {!working ? (
           <>
-            <AdjustmentPageHeader
-              title="临时调课"
-              description="调整指定日期的课程，查看每次调整的执行情况。"
-              onNew={canEdit ? () => navigate("source") : undefined}
-            >
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={<Button variant="ghost" size="icon-sm" aria-label="更多调课操作" />}
-                >
-                  <MoreHorizontal />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem
-                    disabled={!canEdit}
-                    onClick={() =>
-                      start(null, clampDate(localDate(), current.start_date, current.end_date))
-                    }
-                  >
-                    安排补课
-                  </DropdownMenuItem>
-                  <DropdownMenuItem render={<Link to={`/semesters/${semesterId}/leaves`} />}>
-                    <CalendarClock />
-                    请假与代课
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </AdjustmentPageHeader>
+            <AdjustmentPageHeader title="调课与代课" description="换课、代课、停课或更换教室。" />
             {!canEdit && <p className="text-sm text-muted-foreground">当前仅可查看调整记录。</p>}
             {draft && canEdit && (
               <AdjustmentDraftNotice
-                description={`${draft.source ? `${draft.source.course_name} · ${draft.source.target_name}` : "补课安排"} · ${draft.form.effective_date}`}
+                description={`${draft.source.course_name} · ${draft.source.target_name} · ${draft.form.effective_date}`}
                 onContinue={() => setEditor(draft)}
                 onDelete={() => {
                   if (storeDraft(storageKey, null)) setDraft(null)
                 }}
               />
             )}
-            <AdjustmentHistory semesterId={semesterId!} canEdit={canEdit} onChanged={refresh} />
+            <AdjustmentHistory
+              key={params.get("date") ?? "all-dates"}
+              semesterId={semesterId!}
+              canEdit={canEdit}
+              onChanged={refresh}
+              onNew={canEdit ? () => navigate("source") : undefined}
+              initialDate={validDate(params.get("date")) ? params.get("date")! : undefined}
+            />
           </>
         ) : (
           <>
@@ -260,7 +256,6 @@ export function DailyAdjustmentsPage() {
                   void settings.refetch()
                   void teachers.refetch()
                   void rooms.refetch()
-                  if (editor?.form.type === "makeup") void assignments.refetch()
                 }}
               />
             ) : resourcesLoading ? (
@@ -281,7 +276,6 @@ export function DailyAdjustmentsPage() {
                       .filter((setting) => setting.status === "active")
                       .map((setting) => setting.school_class) ?? []
                   }
-                  assignments={assignments.data?.data ?? []}
                   onClose={() => close()}
                   onChangeSource={() => close("source")}
                   onBusyChange={setEditorBusy}
@@ -310,14 +304,21 @@ export function DailyAdjustmentsPage() {
                 rooms={rooms.data?.data ?? []}
                 items={template.data?.data.items ?? []}
                 onBack={() => close()}
-                onSelect={(row) => start(row, row.date)}
-                onMakeup={(date, itemId) => start(null, date, itemId)}
+                onSelect={setScopeRow}
                 canEdit={canEdit}
               />
             )}
           </>
         )}
       </div>
+      {scopeRow && (
+        <AdjustmentScopeDialog
+          semester={current}
+          row={scopeRow}
+          onClose={() => setScopeRow(null)}
+          onSingle={(row) => start(row, row.date)}
+        />
+      )}
       <Dialog open={closePrompt} onOpenChange={setClosePrompt}>
         <DialogContent>
           <DialogHeader>

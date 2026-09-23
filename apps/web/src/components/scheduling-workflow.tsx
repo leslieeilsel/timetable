@@ -1,122 +1,69 @@
-import { useQuery } from "@tanstack/react-query"
-import { CheckIcon, ChevronRightIcon, CircleAlertIcon } from "lucide-react"
+import { ChevronRightIcon } from "lucide-react"
 import { Link, useLocation } from "react-router"
-import { api } from "@/lib/api"
 import {
   semesterDestinationForPath,
   semesterPathOrCurrent,
   useResolvedSemesterId,
   type SemesterDestination,
 } from "@/lib/semester"
-import type { PreparationCheck } from "@/lib/types"
-import { workflowStepState } from "@/lib/scheduling-workflow"
 import { cn } from "@/lib/utils"
 
-type WorkflowStep = {
-  number: number
-  label: string
-  destination: SemesterDestination
-  activeDestinations: SemesterDestination[]
-}
-
-const steps: WorkflowStep[] = [
-  {
-    number: 1,
-    label: "排课准备",
-    destination: "preparation",
-    activeDestinations: ["preparation", "assignments", "constraints"],
-  },
-  {
-    number: 2,
-    label: "方案生成",
-    destination: "generate",
-    activeDestinations: ["generate"],
-  },
-  {
-    number: 3,
-    label: "课表调整与诊断",
-    destination: "timetable",
-    activeDestinations: ["timetable"],
-  },
-]
+const steps: { label: string; destination: SemesterDestination; active: SemesterDestination[] }[] =
+  [
+    {
+      label: "教学安排",
+      destination: "preparation",
+      active: ["preparation", "assignments", "setup"],
+    },
+    { label: "排课规则", destination: "constraints", active: ["constraints"] },
+    { label: "编排课表", destination: "generate", active: ["generate"] },
+    { label: "检查并发布", destination: "planning", active: ["planning"] },
+  ]
 
 export function SchedulingWorkflow() {
   const { pathname } = useLocation()
   const { semesterId } = useResolvedSemesterId()
-  const activeDestination = semesterDestinationForPath(pathname)
-  const preparation = useQuery({
-    queryKey: ["preparation-check", semesterId],
-    queryFn: () => api<PreparationCheck>(`/api/v1/semesters/${semesterId}/preparation-check`),
-    enabled: semesterId !== null,
-  })
-
+  const destination = semesterDestinationForPath(pathname)
   return (
-    <nav
-      aria-label="排课流程"
-      aria-busy={preparation.isLoading || undefined}
-      className="overflow-x-auto border-b bg-muted/30 px-4 md:px-7"
-    >
-      <ol className="flex min-w-max items-center py-2.5">
-        {steps.map((step, index) => {
-          const active =
-            activeDestination !== null && step.activeDestinations.includes(activeDestination)
-          const to = semesterPathOrCurrent(semesterId, step.destination)
-          const state = workflowStepState(step.number, preparation.data?.data.checks)
-          const completed = state === "complete" && !active
-          const blocking = state === "blocking" && !active
-          const warning = state === "warning" && !active
-          const stateLabel = completed
-            ? "已完成"
-            : blocking
-              ? "存在阻塞问题"
-              : warning
-                ? "有待处理提醒"
-                : "未完成"
-          return (
-            <li key={step.destination} className="flex items-center">
-              {index > 0 && (
-                <ChevronRightIcon
-                  className="mx-2 size-3.5 text-muted-foreground/60"
-                  aria-hidden="true"
-                />
-              )}
-              <Link
-                to={to}
-                aria-current={active ? "step" : undefined}
-                data-state={active ? "active" : state}
-                className={cn(
-                  "flex h-8 touch-manipulation items-center gap-2 rounded-lg px-2.5 text-sm outline-none transition-[background-color,color] duration-150 focus-visible:ring-3 focus-visible:ring-ring/20 max-md:h-12",
-                  active
-                    ? "bg-primary/10 font-semibold text-primary"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                  blocking && "text-destructive hover:bg-destructive/10 hover:text-destructive",
-                  warning && "text-amber-700 hover:bg-amber-50 hover:text-amber-800",
-                )}
-              >
-                <span
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b px-4 py-3 md:px-7">
+      <nav aria-label="排课流程" className="min-w-0 overflow-x-auto">
+        <ol className="flex min-w-max items-center gap-2">
+          {steps.map((step, index) => {
+            const active = destination !== null && step.active.includes(destination)
+            return (
+              <li key={step.destination} className="flex items-center gap-2">
+                {index > 0 && <ChevronRightIcon className="size-3.5 text-muted-foreground/50" />}
+                <Link
+                  to={semesterPathOrCurrent(semesterId, step.destination)}
+                  aria-current={active ? "step" : undefined}
                   className={cn(
-                    "flex size-5 items-center justify-center rounded-full border text-[11px] font-semibold tabular-nums",
-                    active && "border-primary bg-primary text-primary-foreground",
-                    completed && "border-emerald-500 bg-emerald-500 text-white",
-                    blocking && "border-destructive/40 bg-destructive/10 text-destructive",
-                    warning && "border-amber-400 bg-amber-100 text-amber-800",
+                    "flex items-center gap-2 rounded-lg px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring",
+                    active
+                      ? "bg-muted font-semibold"
+                      : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
                   )}
                 >
-                  {completed ? (
-                    <CheckIcon className="size-3" aria-hidden="true" />
-                  ) : blocking || warning ? (
-                    <CircleAlertIcon className="size-3" aria-hidden="true" />
-                  ) : (
-                    step.number
-                  )}
-                </span>
-                {step.label}
-                <span className="sr-only">，{active ? "当前步骤" : stateLabel}</span>
-              </Link>
-            </li>
-          )
-        })}
-      </ol>
-    </nav>
+                  <span
+                    className={cn(
+                      "flex size-5 items-center justify-center rounded-full text-xs",
+                      active ? "bg-foreground text-background" : "bg-muted text-muted-foreground",
+                    )}
+                  >
+                    {index + 1}
+                  </span>
+                  {step.label}
+                </Link>
+              </li>
+            )
+          })}
+        </ol>
+      </nav>
+      <Link
+        className="shrink-0 text-sm text-muted-foreground hover:text-foreground"
+        to={semesterPathOrCurrent(semesterId, "timetable")}
+      >
+        查看已发布课表 →
+      </Link>
+    </div>
   )
 }

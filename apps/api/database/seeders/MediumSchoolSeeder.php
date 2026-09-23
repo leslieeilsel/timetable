@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\User;
+use App\Modules\Resources\Models\Course;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
@@ -239,12 +240,12 @@ class MediumSchoolSeeder extends Seeder
             ['name' => '班会', 'short_name' => '班会'], ['name' => '校本课程', 'short_name' => '校本'],
         ];
         foreach ($courses as $course) {
-            DB::table('courses')->updateOrInsert(
+            Course::query()->updateOrCreate(
                 ['name' => $course['name']],
                 ['short_name' => $course['short_name'], 'is_active' => true, 'updated_at' => $timestamp, 'created_at' => $timestamp],
             );
         }
-        DB::table('courses')->updateOrInsert(
+        Course::query()->updateOrCreate(
             ['name' => '书法（已停用）'],
             ['short_name' => '书法', 'is_active' => false, 'updated_at' => $timestamp, 'created_at' => $timestamp],
         );

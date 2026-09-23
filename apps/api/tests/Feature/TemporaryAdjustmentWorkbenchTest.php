@@ -194,18 +194,18 @@ it('uses current restored resource details in withdrawal messages while preservi
         ->and($cancelled[0]['after']['teacher_names'])->toBe(['胡静（已更正）']);
 });
 
-it('keeps preview, actual timetable and messages consistent for replacement resources', function (string $type) {
+it('keeps preview, actual timetable and messages consistent for replacement resources', function () {
     $entry = DB::table('timetable_entries')->find($this->fixture['entry_id']);
     $roomId = DB::table('rooms')->insertGetId(['name' => '备用教室', 'type' => 'classroom', 'is_active' => true, 'created_at' => now(), 'updated_at' => now()]);
-    $payload = ['type' => $type, 'effective_date' => '2026-09-07', 'replacement_date' => '2026-09-07', 'replacement_item_id' => $this->fixture['item_ids'][1], 'replacement_teacher_id' => $this->fixture['substitute_teacher_id'], 'replacement_room_id' => $roomId, 'reason' => '调整教师与教室'];
-    $payload[$type === 'move' ? 'original_entry_id' : 'replacement_assignment_id'] = $type === 'move' ? $entry->id : $entry->teaching_assignment_id;
+    $payload = ['type' => 'move', 'effective_date' => '2026-09-07', 'replacement_date' => '2026-09-07', 'replacement_item_id' => $this->fixture['item_ids'][1], 'replacement_teacher_id' => $this->fixture['substitute_teacher_id'], 'replacement_room_id' => $roomId, 'reason' => '调整教师与教室'];
+    $payload['original_entry_id'] = $entry->id;
     $this->postJson($this->base.'/calendar-exceptions/preview', $payload)->assertOk()->assertJsonPath('data.changes.0.after.teacher_id', $this->fixture['substitute_teacher_id'])->assertJsonPath('data.changes.0.after.room_id', $roomId);
     $stored = workbenchWrite($this, '/calendar-exceptions', $payload)->assertCreated();
     $actual = collect(workbenchRows($this, '2026-09-07'))->firstWhere('exception_id', $stored->json('data.id'));
     expect($actual['teacher_id'])->toBe($this->fixture['substitute_teacher_id'])->and($actual['room_id'])->toBe($roomId);
     $message = DB::table('timetable_change_messages')->where('teacher_id', $this->fixture['substitute_teacher_id'])->first();
     expect(json_decode($message->changes, true, 512, JSON_THROW_ON_ERROR)[0]['after']['room_id'])->toBe($roomId);
-})->with(['move', 'makeup']);
+});
 
 it('searches both sides of adjustment records before pagination and combines filters', function () {
     $stored = workbenchWrite($this, '/calendar-exceptions', [...$this->swap, 'reason' => '唯一目标事项'])->assertCreated();

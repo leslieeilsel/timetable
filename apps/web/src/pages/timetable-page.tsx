@@ -1,4 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { SchedulingWorkflow } from "@/components/scheduling-workflow"
+import { PublishTimetableDialog } from "@/components/publish-timetable-dialog"
+import type { GradeValidation } from "@/lib/grade-timetable"
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useNavigate } from "react-router"
 import {
@@ -33,7 +36,7 @@ import {
   fillPendingScope,
 } from "@/lib/timetable-state"
 import { mergeSearchParams, useHashPreservingSearchParams } from "@/lib/url-state"
-import { cn } from "@/lib/utils"
+import { useSchoolToday } from "@/lib/semester-phase"
 import type {
   ClassSetting,
   ScheduleDay,
@@ -49,6 +52,7 @@ import type {
 } from "@/lib/types"
 import { EmptyList, ErrorState, Field, LoadingState, PageHeader } from "@/components/page"
 import { BulkTimetableExportDialog } from "@/components/bulk-timetable-export-dialog"
+import { GradeTimetable } from "@/components/grade-timetable"
 import {
   AssignmentPicker,
   ClassPicker,
@@ -210,20 +214,35 @@ type TimetableEditAction =
       position: TimetablePosition
       weekPattern: TimetableEntry["week_pattern"]
     }
-export function TimetablePage() {
+export function TimetablePage({
+  readOnly = false,
+  viewModeControl,
+}: {
+  readOnly?: boolean
+  viewModeControl?: ReactNode
+}) {
   const { user } = useAuth()
   const { semesterId, context } = useResolvedSemesterId()
   const client = useQueryClient()
   const navigate = useNavigate()
   const [params, setParams] = useHashPreservingSearchParams()
-  const [view, setView] = useState<View>("class")
-  const [resourceId, setResourceId] = useState("")
+  const today = useSchoolToday(context.data?.timezone)
+  const [gradeMode, setGradeMode] = useState(() => params.get("view") === "grade")
+  const [gradeVisited, setGradeVisited] = useState(() => params.get("view") === "grade")
+  const [gradeToolbarContainer, setGradeToolbarContainer] = useState<HTMLDivElement | null>(null)
+  const [returnGrade, setReturnGrade] = useState("")
+  const [view, setView] = useState<View>(() =>
+    params.get("view") === "teacher" ? "teacher" : params.get("view") === "room" ? "room" : "class",
+  )
+  const [resourceId, setResourceId] = useState(() => params.get("resource") ?? "")
   const [selectedVersionId, setSelectedVersionId] = useState(() => params.get("version") ?? "")
   const [full, setFull] = useState(false)
   const [history, setHistory] = useState<TimetableEditAction[]>([])
   const [historyIndex, setHistoryIndex] = useState(0)
   const [historyBusy, setHistoryBusy] = useState(false)
   const [replanStarting, setReplanStarting] = useState(false)
+  const [draftCreating, setDraftCreating] = useState(false)
+  const [publishOpen, setPublishOpen] = useState(false)
   const [compareOpen, setCompareOpen] = useState(false)
   const [bulkExportOpen, setBulkExportOpen] = useState(false)
   const [slot, setSlot] = useState<{
@@ -258,13 +277,22 @@ export function TimetablePage() {
   })
   const availableVersions = useMemo(() => versions.data?.data ?? [], [versions.data?.data])
   const selectableVersions = useMemo(
-    () => timetableVersionsForRole(availableVersions, user?.role),
-    [availableVersions, user?.role],
+    () =>
+      readOnly
+        ? availableVersions.filter(
+            (version) => version.id === semester.data?.data.current_timetable_version_id,
+          )
+        : timetableVersionsForRole(availableVersions, user?.role),
+    [availableVersions, user?.role, readOnly, semester.data?.data.current_timetable_version_id],
+  )
+  const selectedVersion = selectableVersions.find(
+    (version) => String(version.id) === selectedVersionId,
   )
   const selectedVersionExists = selectableVersions.some(
     (version) => String(version.id) === selectedVersionId,
   )
   const canDefaultToNoVersion =
+    !readOnly &&
     (user?.role === "admin" || user?.role === "scheduler") &&
     versions.isSuccess &&
     availableVersions.length === 0
@@ -342,14 +370,26 @@ export function TimetablePage() {
     setSelectedVersionId((current) =>
       resolveTimetableVersionSelection(
         availableVersions,
-        params.get("version") ?? current,
+        readOnly
+          ? ""
+          : (params.get("version") ??
+              (current ||
+                String(
+                  availableVersions.find(
+                    (version) =>
+                      version.status === "draft" &&
+                      semester.data?.data &&
+                      !isTimetableVersionStale(semester.data.data, version),
+                  )?.id ?? "",
+                ))),
         semester.data?.data.current_timetable_version_id,
-        user?.role,
+        readOnly ? "viewer" : user?.role,
       ),
     )
   }, [
     availableVersions,
-    semester.data?.data.current_timetable_version_id,
+    readOnly,
+    semester.data?.data,
     user?.role,
     versions.isSuccess,
     versions.isFetching,
@@ -377,7 +417,29 @@ export function TimetablePage() {
         `/api/v1/semesters/${semesterId}/timetable?view=${view}&resource_id=${resourceId}&mode=${full ? "full" : "official"}${selectedVersionId ? `&version_id=${selectedVersionId}` : ""}`,
       ),
     enabled:
-      semesterId !== null && Boolean(resourceId) && versions.isSuccess && versionSelectionReady,
+      !gradeMode &&
+      semesterId !== null &&
+      Boolean(resourceId) &&
+      versions.isSuccess &&
+      versionSelectionReady,
+  })
+  const validation = useQuery({
+    queryKey: [
+      "timetable-validation",
+      semesterId,
+      selectedVersion?.id,
+      semester.data?.data.input_revision,
+      semester.data?.data.timetable_revision,
+    ],
+    queryFn: () =>
+      api<GradeValidation>(
+        `/api/v1/semesters/${semesterId}/timetable/validation?version_id=${selectedVersion!.id}`,
+      ),
+    enabled:
+      !gradeMode &&
+      !!selectedVersion &&
+      !!semester.data &&
+      !isTimetableVersionStale(semester.data.data, selectedVersion),
   })
   const completeness = useQuery({
     queryKey: ["completeness", semesterId, selectedVersionId],
@@ -403,6 +465,7 @@ export function TimetablePage() {
       client.invalidateQueries({ queryKey: ["teaching-assignments", semesterId] }),
       client.invalidateQueries({ queryKey: ["completeness", semesterId] }),
       client.invalidateQueries({ queryKey: ["timetable-versions", semesterId] }),
+      client.invalidateQueries({ queryKey: ["timetable-validation", semesterId] }),
     ])
   }, [client, semesterId])
   const recordAction = useCallback(
@@ -414,7 +477,7 @@ export function TimetablePage() {
   )
   const applyHistory = useCallback(
     async (direction: "undo" | "redo") => {
-      if (!semesterId || !selectedVersionId || historyBusy) return
+      if (gradeMode || !semesterId || !selectedVersionId || historyBusy) return
       const action = direction === "undo" ? history[historyIndex - 1] : history[historyIndex]
       const etag = timetable.data?.etag
       if (!action || !etag) return
@@ -489,6 +552,7 @@ export function TimetablePage() {
       }
     },
     [
+      gradeMode,
       history,
       historyBusy,
       historyIndex,
@@ -500,6 +564,7 @@ export function TimetablePage() {
   )
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (gradeMode) return
       const target = event.target
       if (
         target instanceof HTMLInputElement ||
@@ -522,7 +587,7 @@ export function TimetablePage() {
     }
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [applyHistory, history.length, historyIndex])
+  }, [applyHistory, gradeMode, history.length, historyIndex])
   if (semesterId === null) {
     if (context.isLoading) return <LoadingState label="正在载入学期…" />
     return (
@@ -540,13 +605,22 @@ export function TimetablePage() {
     versions.isLoading
   )
     return <LoadingState />
-  if (semester.isError || versions.isError || !semester.data)
-    return <ErrorState retry={() => void semester.refetch()} />
+  if (semester.isError || versions.isError || settings.isError || !semester.data)
+    return (
+      <ErrorState
+        retry={() => {
+          void semester.refetch()
+          void versions.refetch()
+          void settings.refetch()
+        }}
+      />
+    )
   const current = semester.data.data
-  const selectedVersion = selectableVersions.find(
-    (version) => String(version.id) === selectedVersionId,
-  )
-  const canMutate = user?.role !== "viewer" && current.status === "open"
+
+  const canMutate =
+    !readOnly &&
+    Boolean(user && ["admin", "scheduler"].includes(user.role)) &&
+    current.status === "open"
   const remaining = completeness.data?.reduce((sum, item) => sum + item.remaining, 0) ?? 0
   const scheduled = completeness.data?.reduce((sum, item) => sum + item.scheduled, 0) ?? 0
   const required = completeness.data?.reduce((sum, item) => sum + item.required, 0) ?? 0
@@ -564,7 +638,17 @@ export function TimetablePage() {
   )
   const fillScope = fillPendingScope(remaining, resourcePendingItems, scheduled, Number(resourceId))
   const fillLabel = fillScope.type === "all" ? "自动补齐全部待排课程" : "自动补齐当前班级"
-  const hardConflictCount = selectedVersion?.hard_conflict_count ?? 0
+  const canFillCurrent =
+    canMutate &&
+    !gradeMode &&
+    view === "class" &&
+    assignmentsReady &&
+    completeness.isSuccess &&
+    !!selectedVersion &&
+    resourcePendingItems > 0
+  const showGenerationAction = canMutate && !!selectedVersion && (versionIsStale || canFillCurrent)
+  const hardConflictCount =
+    validation.data?.data.hard_conflicts.length ?? selectedVersion?.hard_conflict_count ?? 0
   const softWarningCount = selectedVersion?.soft_warning_count ?? 0
   const resourceIndex = resources.findIndex((item) => String(item.id) === resourceId)
   const moveResource = (direction: -1 | 1) => {
@@ -575,7 +659,8 @@ export function TimetablePage() {
   const xlsxExportUrl = `/api/v1/semesters/${semesterId}/timetable/export.xlsx?${exportQuery}`
   const createDraft = async () => {
     const etag = timetable.data?.etag ?? semester.data.etag
-    if (!etag) return
+    if (!etag || draftCreating) return
+    setDraftCreating(true)
     try {
       const result = await api<TimetableVersion>(
         `/api/v1/semesters/${semesterId}/timetable-versions`,
@@ -595,6 +680,8 @@ export function TimetablePage() {
       await refresh()
     } catch (error) {
       toast.error(apiMessage(error))
+    } finally {
+      setDraftCreating(false)
     }
   }
   const startClassGeneration = async ({
@@ -651,8 +738,9 @@ export function TimetablePage() {
     <>
       <PageHeader
         title={`${current.academic_year ? `${current.academic_year.name} · ` : ""}${current.name}课表`}
-        description="二维网格只用于真实排课；切换班级、教师和教室可从不同角度检查结果。"
+        description="切换年级、班级、教师和教室，从不同角度查看与检查排课结果。"
       />
+      {!readOnly && <SchedulingWorkflow />}
       <div className="p-4 md:p-7">
         {params.get("created") && params.get("version") === selectedVersionId && (
           <div
@@ -673,375 +761,373 @@ export function TimetablePage() {
         >
           <div className="flex flex-col gap-3 p-3 lg:p-4 xl:flex-row xl:items-center xl:justify-between">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <Tabs value={view} onValueChange={(value) => setView(value as View)}>
+              <Tabs
+                value={gradeMode ? "grade" : view}
+                onValueChange={(value) => {
+                  setGradeMode(value === "grade")
+                  if (value === "grade") setGradeVisited(true)
+                  else setView(value as View)
+                  setReturnGrade("")
+                  setSlot(null)
+                  setParams(
+                    (current) => mergeSearchParams(current, { view: value, resource: null }),
+                    { replace: true },
+                  )
+                }}
+              >
                 <TabsList>
                   <TabsTrigger value="class">班级</TabsTrigger>
+                  <TabsTrigger value="grade">年级</TabsTrigger>
                   <TabsTrigger value="teacher">教师</TabsTrigger>
                   <TabsTrigger value="room">教室</TabsTrigger>
                 </TabsList>
               </Tabs>
-              <span className="hidden h-5 w-px bg-border sm:block" aria-hidden="true" />
-              <SimpleSelect
-                className="min-w-52 max-w-[min(36rem,calc(100vw-2rem))]"
-                contentClassName="w-max min-w-(--anchor-width) max-w-[calc(100vw-2rem)]"
-                value={selectedVersionId}
-                label="选择课表版本"
-                surface="filter"
-                onValueChange={selectVersion}
-              >
-                {user?.role === "viewer" && !selectedVersionId && (
-                  <option value="">暂无已发布的当前课表</option>
-                )}
-                {user?.role !== "viewer" && selectableVersions.length === 0 && (
-                  <option value="">尚未创建课表版本</option>
-                )}
-                {selectableVersions.map((version) => (
-                  <option key={version.id} value={version.id}>
-                    v{version.version_no} · {version.name} · {versionStatusName(version.status)}
-                    {isTimetableVersionStale(current, version) ? " · 数据已变化" : ""}
-                  </option>
-                ))}
-              </SimpleSelect>
-              {selectedVersion && selectedVersion.status !== "draft" && (
-                <Badge variant="outline">只读版本</Badge>
+              {viewModeControl && (
+                <>
+                  <span className="hidden h-5 w-px bg-border sm:block" aria-hidden="true" />
+                  {viewModeControl}
+                </>
               )}
-            </div>
-            <div
-              className="flex flex-wrap items-center gap-2 xl:justify-end"
-              role="group"
-              aria-label="版本操作"
-            >
-              {canMutate && (!selectedVersion || selectedVersion.status !== "draft") && (
-                <Button onClick={() => void createDraft()}>
-                  <FilePlus2Icon />
-                  创建调整草稿
-                </Button>
-              )}
-              <Button
-                variant="outline"
-                disabled={!selectedVersion || selectableVersions.length < 2}
-                onClick={() => setCompareOpen(true)}
-              >
-                <ArrowRightLeftIcon />
-                比较版本
-              </Button>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-3 border-t bg-muted/30 p-3 lg:p-4 xl:flex-row xl:items-center xl:justify-between">
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <div
-                className="flex min-w-0 items-center gap-1"
-                role="group"
-                aria-label={`切换${view === "class" ? "班级" : view === "teacher" ? "教师" : "教室"}`}
-              >
-                <Button
-                  variant="outline"
-                  size="icon"
-                  aria-label="上一个资源"
-                  disabled={resourceIndex <= 0}
-                  onClick={() => moveResource(-1)}
-                >
-                  <ChevronLeftIcon />
-                </Button>
-                {view === "class" ? (
-                  <ClassPicker
-                    className="min-w-0 flex-1 sm:min-w-64 sm:flex-none"
-                    classes={(settings.data?.data ?? []).map((item) => item.school_class)}
-                    value={resourceId}
-                    onValueChange={setResourceId}
-                  />
-                ) : view === "teacher" ? (
-                  <TeacherPicker
-                    className="min-w-0 flex-1 sm:min-w-64 sm:flex-none"
-                    teachers={teachersWithAssignmentCourses(assignments.data?.data ?? [])}
-                    value={resourceId}
-                    onValueChange={setResourceId}
-                  />
-                ) : (
-                  <RoomPicker
-                    className="min-w-0 flex-1 sm:min-w-64 sm:flex-none"
-                    rooms={rooms.data?.data ?? []}
-                    value={resourceId}
-                    onValueChange={setResourceId}
-                  />
-                )}
-                <Button
-                  variant="outline"
-                  size="icon"
-                  aria-label="下一个资源"
-                  disabled={resourceIndex < 0 || resourceIndex >= resources.length - 1}
-                  onClick={() => moveResource(1)}
-                >
-                  <ChevronRightIcon />
-                </Button>
-              </div>
-              <label className="flex h-8 cursor-pointer items-center gap-2 rounded-xl px-2 text-sm transition-colors hover:bg-muted/50">
-                <Switch checked={full} onCheckedChange={(checked) => setFull(Boolean(checked))} />
-                完整作息
-              </label>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 xl:justify-end">
-              <dl className="flex min-h-8 items-center divide-x divide-border rounded-xl border bg-background px-1 text-xs whitespace-nowrap">
-                <div className="flex items-baseline gap-1 px-2">
-                  <dt className="text-muted-foreground">已排</dt>
-                  <dd className="font-semibold text-emerald-700 tabular-nums dark:text-emerald-400">
-                    {scheduled}/{required}
-                  </dd>
-                </div>
-                <div className="flex items-baseline gap-1 px-2">
-                  <dt className="text-muted-foreground">未排</dt>
-                  <dd className="font-semibold tabular-nums">{remaining}</dd>
-                </div>
-                <div className="flex items-baseline gap-1 px-2">
-                  <dt className="text-muted-foreground">冲突</dt>
-                  <dd
-                    className={cn(
-                      "font-semibold tabular-nums",
-                      hardConflictCount > 0
-                        ? "text-destructive"
-                        : "text-emerald-700 dark:text-emerald-400",
-                    )}
+              {!readOnly && (
+                <>
+                  <span className="hidden h-5 w-px bg-border sm:block" aria-hidden="true" />
+                  <SimpleSelect
+                    className="min-w-52 max-w-[min(36rem,calc(100vw-2rem))]"
+                    contentClassName="w-max min-w-(--anchor-width) max-w-[calc(100vw-2rem)]"
+                    value={selectedVersionId}
+                    label="选择课表版本"
+                    surface="filter"
+                    onValueChange={selectVersion}
                   >
-                    {hardConflictCount}
-                  </dd>
-                </div>
-                <div className="flex items-baseline gap-1 px-2">
-                  <dt className="text-muted-foreground">提醒</dt>
-                  <dd
-                    className={cn(
-                      "font-semibold tabular-nums",
-                      softWarningCount > 0
-                        ? "text-amber-700 dark:text-amber-300"
-                        : "text-muted-foreground",
+                    {user?.role === "viewer" && !selectedVersionId && (
+                      <option value="">暂无已发布的当前课表</option>
                     )}
-                  >
-                    {softWarningCount}
-                  </dd>
-                </div>
-              </dl>
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={<Button variant="outline" disabled={!versionSelectionReady} />}
-                >
-                  <DownloadIcon />
-                  导出
-                  <ChevronDownIcon className="text-muted-foreground" />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-max min-w-52">
-                  <DropdownMenuGroup>
-                    <DropdownMenuLabel>导出当前</DropdownMenuLabel>
-                    <DropdownMenuItem
-                      disabled={!resourceId}
-                      className="whitespace-nowrap"
-                      onClick={() => window.location.assign(xlsxExportUrl)}
-                    >
-                      当前
-                      {view === "class" ? "班级" : view === "teacher" ? "教师" : "教室"}
-                      课表（Excel · A4 竖向）
-                    </DropdownMenuItem>
-                  </DropdownMenuGroup>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuGroup>
-                    <DropdownMenuLabel>批量导出</DropdownMenuLabel>
-                    <DropdownMenuItem
-                      className="whitespace-nowrap"
-                      onClick={() => setBulkExportOpen(true)}
-                    >
-                      选择班级和教师…
-                    </DropdownMenuItem>
-                  </DropdownMenuGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </div>
-        </section>
-        {canEdit && (
-          <div className="mb-3 flex min-h-11 flex-wrap items-center gap-2 border-b pb-3">
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={historyBusy || historyIndex === 0}
-              title="撤销（Ctrl/Cmd+Z）"
-              onClick={() => void applyHistory("undo")}
-            >
-              <Undo2Icon />
-              撤销
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={historyBusy || historyIndex >= history.length}
-              title="重做（Shift+Ctrl/Cmd+Z）"
-              onClick={() => void applyHistory("redo")}
-            >
-              <Redo2Icon />
-              重做
-            </Button>
-            {view === "class" && selectedVersionId && (
-              <>
-                <span className="mx-1 h-4 w-px bg-border" aria-hidden="true" />
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={
-                    replanStarting ||
-                    historyBusy ||
-                    scheduled === 0 ||
-                    remaining > resourcePendingItems
-                  }
-                  title={
-                    scheduled === 0 || remaining > resourcePendingItems
-                      ? "请先补齐课表，再仅重排当前班级"
-                      : undefined
-                  }
-                  onClick={() => void startLocalReplan()}
-                >
-                  {replanStarting ? (
-                    <LoaderCircleIcon className="animate-spin" />
-                  ) : (
-                    <SparklesIcon />
+                    {user?.role !== "viewer" && selectableVersions.length === 0 && (
+                      <option value="">尚未创建课表版本</option>
+                    )}
+                    {selectableVersions.map((version) => (
+                      <option key={version.id} value={version.id}>
+                        {versionOptionLabel(version)}
+                      </option>
+                    ))}
+                  </SimpleSelect>
+                  {selectedVersion && selectedVersion.status !== "draft" && !versionIsStale && (
+                    <Badge variant="outline" title="创建调整草稿后可修改课程安排">
+                      只读
+                    </Badge>
                   )}
-                  仅重排当前班级
-                </Button>
-              </>
-            )}
-            <span className="ml-auto text-xs text-muted-foreground">
-              {historyBusy
-                ? "正在恢复课表…"
-                : historyIndex > 0
-                  ? "最近操作：" + history[historyIndex - 1].label
-                  : "本次编辑可逐步撤销"}
-            </span>
-          </div>
-        )}
-        {selectedVersion && versionIsStale && (
-          <div className="mb-3 flex flex-col gap-3 rounded-lg border border-[var(--timetable-notice-border)] bg-[var(--timetable-notice-background)] px-4 py-3 text-sm text-[var(--timetable-notice-foreground)] lg:flex-row lg:items-center">
-            <AlertTriangleIcon className="size-5 shrink-0 text-[var(--timetable-notice-accent)]" />
-            <div className="min-w-0 flex-1">
-              <p className="font-medium">此课表生成后，任课或排课规则又发生了变化</p>
-              <p className="mt-0.5 text-[var(--timetable-notice-muted)]">
-                它仍可作为历史快照查看，但不代表当前完整课表
-                {remaining > 0 ? `；当前还有 ${remaining} 节课程待排。` : "。"}
-              </p>
+                </>
+              )}
             </div>
-            {canMutate && (
-              <div className="flex shrink-0 flex-wrap gap-2">
-                {selectedVersion.status !== "draft" && (
-                  <Button size="sm" variant="outline" onClick={() => void createDraft()}>
-                    <FilePlus2Icon />
-                    创建调整草稿
+            {!readOnly && (
+              <div
+                className="flex flex-wrap items-center gap-2 xl:justify-end"
+                role="group"
+                aria-label="版本操作"
+              >
+                {canMutate && (!selectedVersion || selectedVersion.status !== "draft") && (
+                  <Button
+                    variant="outline"
+                    disabled={draftCreating || replanStarting}
+                    onClick={() => void createDraft()}
+                  >
+                    {draftCreating ? (
+                      <LoaderCircleIcon className="animate-spin" />
+                    ) : (
+                      <FilePlus2Icon />
+                    )}
+                    {draftCreating ? "正在创建…" : "开始编排"}
                   </Button>
                 )}
-                {view === "class" && resourcePendingItems > 0 ? (
+                <Button
+                  variant="outline"
+                  disabled={!selectedVersion || selectableVersions.length < 2}
+                  onClick={() => setCompareOpen(true)}
+                >
+                  <ArrowRightLeftIcon />
+                  比较版本
+                </Button>
+                {canMutate && selectedVersion?.status === "draft" && (
                   <Button
-                    size="sm"
-                    disabled={replanStarting}
-                    onClick={() => void fillPendingForCurrentClass()}
+                    disabled={replanStarting || draftCreating || historyBusy}
+                    onClick={() => setPublishOpen(true)}
+                  >
+                    检查并发布
+                  </Button>
+                )}
+                {showGenerationAction && (
+                  <Button
+                    disabled={replanStarting || draftCreating}
+                    onClick={() =>
+                      canFillCurrent
+                        ? void fillPendingForCurrentClass()
+                        : void navigate(semesterPath(semesterId, "generate"))
+                    }
                   >
                     {replanStarting ? (
                       <LoaderCircleIcon className="animate-spin" />
                     ) : (
                       <SparklesIcon />
                     )}
-                    {fillLabel}
-                  </Button>
-                ) : (
-                  <Button
-                    size="sm"
-                    onClick={() => void navigate(semesterPath(semesterId, "generate"))}
-                  >
-                    <SparklesIcon />
-                    重新生成完整方案
+                    {canFillCurrent ? fillLabel : "重新排课"}
                   </Button>
                 )}
               </div>
             )}
           </div>
-        )}
-        {selectedVersion && !versionIsStale && remaining > 0 && (
-          <div className="mb-3 flex flex-col gap-3 rounded-lg border border-[var(--timetable-notice-border)] bg-[var(--timetable-notice-background)] px-4 py-3 text-sm text-[var(--timetable-notice-foreground)] lg:flex-row lg:items-center">
-            <AlertTriangleIcon className="size-5 shrink-0 text-[var(--timetable-notice-accent)]" />
-            <div className="min-w-0 flex-1">
-              <p className="font-medium">这份课表还没有排完整</p>
-              <p className="mt-0.5 text-[var(--timetable-notice-muted)]">
-                还有 {remaining} 节课程待排；标有“可安排”的空白课节可以手工检查，也可以自动补齐。
-              </p>
-            </div>
-            {canMutate && view === "class" && resourcePendingItems > 0 && (
-              <Button
-                size="sm"
-                disabled={replanStarting}
-                onClick={() => void fillPendingForCurrentClass()}
-              >
-                {replanStarting ? <LoaderCircleIcon className="animate-spin" /> : <SparklesIcon />}
-                {fillLabel}
-              </Button>
-            )}
-          </div>
-        )}
-        {!versionSelectionReady ? (
-          <div className="overflow-hidden rounded-2xl border bg-background">
-            <EmptyList
-              title="暂无已发布的当前课表"
-              description="当前没有可默认打开的版本；如有历史版本，可从上方版本列表显式选择查看。"
-            />
-          </div>
-        ) : !resourceId ? (
-          <div className="overflow-hidden rounded-2xl border bg-background">
-            <EmptyList title="没有可查看的资源" description="请先配置班级、任课关系或教室。" />
-          </div>
-        ) : timetable.isLoading ? (
-          <LoadingState />
-        ) : timetable.isError || !timetable.data ? (
-          <ErrorState retry={() => void timetable.refetch()} />
-        ) : (
-          <>
-            {selectedVersion &&
-              selectedVersion.status !== "draft" &&
-              canMutate &&
-              !versionIsStale && (
-                <div className="mb-3 rounded-lg border border-[var(--timetable-notice-border)] bg-[var(--timetable-notice-background)] px-4 py-3 text-sm text-[var(--timetable-notice-foreground)]">
-                  <span>当前是只读版本。创建调整草稿后才能移动、锁定或新增课程。</span>
+
+          <div ref={setGradeToolbarContainer} hidden={!gradeMode} />
+          {!gradeMode && (
+            <div className="flex flex-col gap-3 border-t bg-muted/30 p-3 lg:p-4 xl:flex-row xl:items-center xl:justify-between">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <div
+                  className="flex min-w-0 items-center gap-1"
+                  role="group"
+                  aria-label={`切换${view === "class" ? "班级" : view === "teacher" ? "教师" : "教室"}`}
+                >
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    aria-label="上一个资源"
+                    disabled={resourceIndex <= 0}
+                    onClick={() => moveResource(-1)}
+                  >
+                    <ChevronLeftIcon />
+                  </Button>
+                  {view === "class" ? (
+                    <ClassPicker
+                      className="min-w-0 flex-1 sm:min-w-64 sm:flex-none"
+                      classes={(settings.data?.data ?? []).map((item) => item.school_class)}
+                      value={resourceId}
+                      onValueChange={setResourceId}
+                    />
+                  ) : view === "teacher" ? (
+                    <TeacherPicker
+                      className="min-w-0 flex-1 sm:min-w-64 sm:flex-none"
+                      teachers={teachersWithAssignmentCourses(assignments.data?.data ?? [])}
+                      value={resourceId}
+                      onValueChange={setResourceId}
+                    />
+                  ) : (
+                    <RoomPicker
+                      className="min-w-0 flex-1 sm:min-w-64 sm:flex-none"
+                      rooms={rooms.data?.data ?? []}
+                      value={resourceId}
+                      onValueChange={setResourceId}
+                    />
+                  )}
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    aria-label="下一个资源"
+                    disabled={resourceIndex < 0 || resourceIndex >= resources.length - 1}
+                    onClick={() => moveResource(1)}
+                  >
+                    <ChevronRightIcon />
+                  </Button>
                 </div>
-              )}
-            <div data-print-area>
-              <div data-print-heading className="hidden border-b pb-3">
-                <h1 className="text-xl font-semibold">
-                  {current.academic_year?.name} · {current.name} · {resources[resourceIndex]?.name}
-                  课表
-                </h1>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {view === "class" ? "班级" : view === "teacher" ? "教师" : "教室"}视角 ·
-                  {full ? "完整作息" : "正式课程"} · 版本 v{selectedVersion?.version_no ?? "—"} ·
-                  打印时间 {new Date().toLocaleString("zh-CN")}
-                </p>
+                <label className="flex h-8 cursor-pointer items-center gap-2 rounded-xl px-2 text-sm transition-colors hover:bg-muted/50">
+                  <Switch checked={full} onCheckedChange={(checked) => setFull(Boolean(checked))} />
+                  完整作息
+                </label>
               </div>
-              <TimetableGrid
-                data={timetable.data.data}
-                editable={canEdit}
-                pendingCount={resourcePendingItems}
-                onSlot={setSlot}
-              />
+
+              <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+                {!readOnly && selectedVersion && !versionIsStale && completeness.isSuccess && (
+                  <div
+                    className="flex min-h-8 flex-wrap items-center gap-3 px-1 text-xs text-muted-foreground"
+                    aria-label="全校课表进度"
+                  >
+                    <span>
+                      全校已排{" "}
+                      <span className="font-medium text-foreground tabular-nums">
+                        {scheduled}/{required}
+                      </span>{" "}
+                      节
+                    </span>
+                    {remaining > 0 && <span>待排 {remaining} 节</span>}
+                    {hardConflictCount > 0 && (
+                      <span className="text-destructive">{hardConflictCount} 个冲突</span>
+                    )}
+                    {softWarningCount > 0 && <span>{softWarningCount} 条提醒</span>}
+                  </div>
+                )}
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={<Button variant="outline" disabled={!versionSelectionReady} />}
+                  >
+                    <DownloadIcon />
+                    导出
+                    <ChevronDownIcon className="text-muted-foreground" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-max min-w-52">
+                    <DropdownMenuGroup>
+                      <DropdownMenuLabel>导出当前</DropdownMenuLabel>
+                      <DropdownMenuItem
+                        disabled={!resourceId}
+                        className="whitespace-nowrap"
+                        onClick={() => window.location.assign(xlsxExportUrl)}
+                      >
+                        当前
+                        {view === "class" ? "班级" : view === "teacher" ? "教师" : "教室"}
+                        课表（Excel · A4 竖向）
+                      </DropdownMenuItem>
+                    </DropdownMenuGroup>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuGroup>
+                      <DropdownMenuLabel>批量导出</DropdownMenuLabel>
+                      <DropdownMenuItem
+                        className="whitespace-nowrap"
+                        onClick={() => setBulkExportOpen(true)}
+                      >
+                        选择班级和教师…
+                      </DropdownMenuItem>
+                    </DropdownMenuGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </div>
-            <p className="mt-4 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-              <span className="inline-flex items-center gap-2">
-                <LockIcon className="size-4" /> 已锁定课程不会被移动
-              </span>
-              <span className="h-4 w-px bg-border" aria-hidden="true" />
-              <span>
-                {!assignmentsReady
-                  ? "正在载入待排课程与编辑状态…"
-                  : canEdit && resourcePendingItems > 0
-                    ? `当前资源还有 ${resourcePendingItems} 节待排；标有“可安排”的空白课节可检查并安排`
-                    : canEdit
-                      ? "当前资源已排完整，其余空白是正常空堂"
-                      : versionIsStale
-                        ? "输入数据已变化，旧版本不能继续手工编辑；请自动补齐或重新生成"
-                        : "空白格表示该课节未安排课程；只读版本不能直接编辑"}
-              </span>
-            </p>
+          )}
+        </section>
+        {!gradeMode && returnGrade && (
+          <Button
+            variant="ghost"
+            className="mb-4"
+            onClick={() => {
+              setGradeMode(true)
+              setParams((current) => mergeSearchParams(current, { view: "grade" }), {
+                replace: true,
+              })
+            }}
+          >
+            <ChevronLeftIcon />
+            返回{returnGrade}总览
+          </Button>
+        )}
+        {gradeVisited && (
+          <GradeTimetable
+            toolbarContainer={gradeToolbarContainer}
+            visible={gradeMode}
+            semester={current}
+            version={selectedVersion}
+            settings={settings.data?.data ?? []}
+            assignments={assignments.data?.data ?? []}
+            assignmentsReady={assignmentsReady}
+            full={full}
+            today={today}
+            onFullChange={setFull}
+            onOpenClass={(classId, gradeName) => {
+              setView("class")
+              setResourceId(String(classId))
+              setGradeMode(false)
+              setReturnGrade(gradeName)
+              setParams((current) => mergeSearchParams(current, { view: null }), { replace: true })
+            }}
+          />
+        )}
+        {!gradeMode && (
+          <>
+            {canEdit && (
+              <div className="mb-3 flex min-h-11 flex-wrap items-center gap-2 border-b pb-3">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={historyBusy || historyIndex === 0}
+                  title="撤销（Ctrl/Cmd+Z）"
+                  onClick={() => void applyHistory("undo")}
+                >
+                  <Undo2Icon />
+                  撤销
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={historyBusy || historyIndex >= history.length}
+                  title="重做（Shift+Ctrl/Cmd+Z）"
+                  onClick={() => void applyHistory("redo")}
+                >
+                  <Redo2Icon />
+                  重做
+                </Button>
+                {view === "class" && selectedVersionId && (
+                  <>
+                    <span className="mx-1 h-4 w-px bg-border" aria-hidden="true" />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={
+                        replanStarting ||
+                        historyBusy ||
+                        scheduled === 0 ||
+                        remaining > resourcePendingItems
+                      }
+                      title={
+                        scheduled === 0 || remaining > resourcePendingItems
+                          ? "请先补齐课表，再仅重排当前班级"
+                          : undefined
+                      }
+                      onClick={() => void startLocalReplan()}
+                    >
+                      {replanStarting ? (
+                        <LoaderCircleIcon className="animate-spin" />
+                      ) : (
+                        <SparklesIcon />
+                      )}
+                      仅重排当前班级
+                    </Button>
+                  </>
+                )}
+                <span className="ml-auto text-xs text-muted-foreground">
+                  {historyBusy
+                    ? "正在恢复课表…"
+                    : historyIndex > 0
+                      ? "最近操作：" + history[historyIndex - 1].label
+                      : "本次编辑可逐步撤销"}
+                </span>
+              </div>
+            )}
+            {!versionSelectionReady ? (
+              <div className="overflow-hidden rounded-2xl border bg-background">
+                <EmptyList
+                  title="暂无已发布的当前课表"
+                  description={
+                    readOnly
+                      ? "本学期课表发布后，会显示在这里。"
+                      : "可开始手工编排，或先生成一份课表。"
+                  }
+                />
+              </div>
+            ) : !resourceId ? (
+              <div className="overflow-hidden rounded-2xl border bg-background">
+                <EmptyList title="没有可查看的资源" description="请先配置班级、任课关系或教室。" />
+              </div>
+            ) : timetable.isPending ? (
+              <LoadingState />
+            ) : timetable.isError || !timetable.data ? (
+              <ErrorState retry={() => void timetable.refetch()} />
+            ) : (
+              <div data-print-area>
+                <div data-print-heading className="hidden border-b pb-3">
+                  <h1 className="text-xl font-semibold">
+                    {current.academic_year?.name} · {current.name} ·{" "}
+                    {resources[resourceIndex]?.name}
+                    课表
+                  </h1>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {view === "class" ? "班级" : view === "teacher" ? "教师" : "教室"}视角 ·
+                    {full ? "完整作息" : "正式课程"} · 版本 v{selectedVersion?.version_no ?? "—"} ·
+                    打印时间 {new Date().toLocaleString("zh-CN")}
+                  </p>
+                </div>
+                <TimetableGrid
+                  data={timetable.data.data}
+                  editable={canEdit}
+                  pendingCount={resourcePendingItems}
+                  conflicts={versionIsStale ? [] : validation.data?.data.hard_conflicts}
+                  onSlot={setSlot}
+                />
+              </div>
+            )}
           </>
         )}
       </div>
@@ -1062,6 +1148,19 @@ export function TimetablePage() {
         onSaved={refresh}
         onOperation={recordAction}
       />
+      {!readOnly && selectedVersion && (
+        <PublishTimetableDialog
+          key={selectedVersion.id}
+          open={publishOpen}
+          onClose={() => setPublishOpen(false)}
+          semester={current}
+          version={selectedVersion}
+          onPublished={async () => {
+            await refresh()
+            await client.invalidateQueries({ queryKey: ["daily-timetable", current.id] })
+          }}
+        />
+      )}
       <VersionComparisonDialog
         open={compareOpen}
         semesterId={current.id}
@@ -1164,7 +1263,7 @@ function VersionComparisonDialog({
               >
                 {alternatives.map((version) => (
                   <option key={version.id} value={version.id}>
-                    v{version.version_no} · {version.name} · {versionStatusName(version.status)}
+                    {versionOptionLabel(version)}
                   </option>
                 ))}
               </SimpleSelect>
@@ -1308,8 +1407,13 @@ function versionEntryLabel(entry: TimetableVersionComparisonEntry) {
   return `${weekdayName[entry.weekday]} ${entry.item_name} · ${entry.teacher_names.join("、")} · ${entry.room_name}${entry.is_locked ? " · 已锁定" : ""}`
 }
 
+function versionOptionLabel(version: TimetableVersion) {
+  const status = versionStatusName(version.status)
+  return `v${version.version_no} · ${version.name}${version.name.includes(status) ? "" : ` · ${status}`}`
+}
+
 function versionStatusName(status: TimetableVersion["status"]) {
-  return status === "draft" ? "草稿" : status === "active" ? "当前" : "历史"
+  return status === "draft" ? "正在编排" : status === "active" ? "已发布" : "历史"
 }
 
 function remapHistoryEntry(

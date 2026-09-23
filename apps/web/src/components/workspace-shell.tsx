@@ -1,18 +1,12 @@
 import { useEffect, type ReactNode } from "react"
-import { useQuery } from "@tanstack/react-query"
 import { Link, Outlet, useLocation } from "react-router"
 import { ChevronDownIcon, MoonIcon, SunIcon, type LucideIcon } from "lucide-react"
 import { useTheme } from "next-themes"
 import { AppSidebar } from "@/components/app-sidebar"
-import {
-  dailyNavigationItems,
-  resourceNavigationItems,
-  schedulingNavigationItems,
-} from "@/components/app-navigation"
+import { resourceNavigationItems, schedulingNavigationItems } from "@/components/app-navigation"
 import { WorkspaceUserMenu } from "@/components/workspace-user-menu"
+import { useSchoolToday } from "@/lib/semester-phase"
 import { useAuth } from "@/lib/auth"
-import { api } from "@/lib/api"
-import type { Semester } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import {
   isDailySemesterPath,
@@ -48,21 +42,23 @@ const labels: Record<string, string> = {
   rooms: "教室",
   years: "学年学期",
   semester: "当前学期",
-  scheduling: "排课中心",
-  preparation: "排课准备",
+  scheduling: "学期排课",
+  preparation: "教学安排",
   assignments: "任课关系",
-  constraints: "规则与约束",
-  generate: "方案生成",
+  constraints: "排课规则",
+  generate: "自动排课",
   setup: "学期配置",
-  timetable: "课表调整与诊断",
-  daily: "日常运行",
-  adjustments: "临时调课",
-  "long-term": "长期调课",
+  timetable: "查看课表",
+  planning: "检查并发布",
+  daily: "调课与代课",
+  adjustments: "调课与代课",
+  "long-term": "持续调课",
   leaves: "请假与代课",
   users: "用户管理",
   settings: "系统设置",
   "change-password": "修改密码",
   ai: "AI 助手",
+  dashboard: "学期工作台",
 }
 
 export function WorkspaceShell({ children }: { children?: ReactNode }) {
@@ -70,40 +66,23 @@ export function WorkspaceShell({ children }: { children?: ReactNode }) {
   const { user } = useAuth()
   const { resolvedTheme, setTheme } = useTheme()
   const isDark = resolvedTheme === "dark"
-  const { semesterId } = useResolvedSemesterId()
+  const { semesterId, context } = useResolvedSemesterId()
   const parts = pathname.split("/").filter(Boolean)
   const part = parts.at(-1)
   const isAiPage = parts[0] === "ai"
   const isResourcePage = pathname.startsWith("/resources/")
   const isSemesterSetup = semesterDestinationForPath(pathname) === "setup"
-  const isSemesterPage = isSchedulingSemesterPath(pathname) && !isSemesterSetup
+  const isSemesterPage = isSchedulingSemesterPath(pathname)
   const isDailyPage = isDailySemesterPath(pathname)
-  const schedulingMenuItems = schedulingNavigationItems
-    .filter((item) => user?.role !== "viewer" || item.destination === "timetable")
-    .map((item) => ({
-      ...item,
-      to: semesterPathOrCurrent(semesterId, item.destination),
-    }))
-  const dailyMenuItems = dailyNavigationItems.map((item) => ({
+  const schedulingMenuItems = schedulingNavigationItems.map((item) => ({
     ...item,
     to: semesterPathOrCurrent(semesterId, item.destination),
   }))
   const isYearDetail = parts[0] === "years" && parts.length > 1
-  const setupSemester = useQuery({
-    queryKey: ["semester", semesterId],
-    queryFn: () => api<Semester>(`/api/v1/semesters/${semesterId}`),
-    enabled: isSemesterSetup && semesterId !== null,
-  })
-  const setupYearId = setupSemester.data?.data.academic_year_id
-  const now = new Date()
-  const today = new Intl.DateTimeFormat("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  })
-    .format(now)
-    .replaceAll("/", "-")
-  const weekday = new Intl.DateTimeFormat("zh-CN", { weekday: "short" }).format(now)
+  const today = useSchoolToday(context.data?.timezone)
+  const weekday = new Intl.DateTimeFormat("zh-CN", { weekday: "short", timeZone: "UTC" }).format(
+    new Date(`${today}T00:00:00Z`),
+  )
 
   useEffect(() => {
     document.getElementById("main-content")?.scrollTo({ top: 0, left: 0 })
@@ -124,7 +103,7 @@ export function WorkspaceShell({ children }: { children?: ReactNode }) {
         <AppSidebar />
         <SidebarInset id="main-content" tabIndex={-1}>
           {!isAiPage && (
-            <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b border-border/50 bg-background px-4 lg:px-5">
+            <header className="sticky top-0 z-20 flex min-h-14 shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-border/50 bg-background px-4 py-2 lg:px-5">
               <SidebarTrigger className="-ml-1 rounded-full border bg-background md:hidden" />
               <Breadcrumb className="min-w-0 flex-1 overflow-hidden">
                 <BreadcrumbList className="flex-nowrap overflow-hidden">
@@ -144,7 +123,7 @@ export function WorkspaceShell({ children }: { children?: ReactNode }) {
                     <>
                       <BreadcrumbItem>
                         <BreadcrumbMenu
-                          label="排课中心"
+                          label="学期排课"
                           items={schedulingMenuItems}
                           pathname={pathname}
                         />
@@ -152,14 +131,14 @@ export function WorkspaceShell({ children }: { children?: ReactNode }) {
                       <BreadcrumbSeparator />
                     </>
                   )}
-                  {isDailyPage && (
+                  {isDailyPage && part !== "adjustments" && (
                     <>
                       <BreadcrumbItem>
-                        <BreadcrumbMenu
-                          label="日常运行"
-                          items={dailyMenuItems}
-                          pathname={pathname}
-                        />
+                        <BreadcrumbLink
+                          render={<Link to={semesterPathOrCurrent(semesterId, "adjustments")} />}
+                        >
+                          调课与代课
+                        </BreadcrumbLink>
                       </BreadcrumbItem>
                       <BreadcrumbSeparator />
                     </>
@@ -168,24 +147,6 @@ export function WorkspaceShell({ children }: { children?: ReactNode }) {
                     <>
                       <BreadcrumbItem>
                         <BreadcrumbLink render={<Link to="/years" />}>学年学期</BreadcrumbLink>
-                      </BreadcrumbItem>
-                      <BreadcrumbSeparator />
-                    </>
-                  )}
-                  {isSemesterSetup && (
-                    <>
-                      <BreadcrumbItem>
-                        <BreadcrumbLink render={<Link to="/years" />}>学年学期</BreadcrumbLink>
-                      </BreadcrumbItem>
-                      <BreadcrumbSeparator />
-                      <BreadcrumbItem>
-                        {setupYearId ? (
-                          <BreadcrumbLink render={<Link to={`/years/${setupYearId}`} />}>
-                            学年详情
-                          </BreadcrumbLink>
-                        ) : (
-                          <span className="text-muted-foreground">学年详情</span>
-                        )}
                       </BreadcrumbItem>
                       <BreadcrumbSeparator />
                     </>
@@ -216,7 +177,7 @@ export function WorkspaceShell({ children }: { children?: ReactNode }) {
                 >
                   {isDark ? <SunIcon /> : <MoonIcon />}
                 </Button>
-                <div className="hidden items-center gap-2 text-sm whitespace-nowrap text-muted-foreground lg:flex">
+                <div className="hidden items-center gap-2 text-sm whitespace-nowrap text-muted-foreground 2xl:flex">
                   <time dateTime={today}>
                     {today} {weekday}
                   </time>
@@ -228,6 +189,7 @@ export function WorkspaceShell({ children }: { children?: ReactNode }) {
             </header>
           )}
           <div
+            key={semesterId}
             className={cn("min-w-0 flex-1 bg-background", isAiPage && "min-h-0 overflow-hidden")}
           >
             {children ?? <Outlet />}

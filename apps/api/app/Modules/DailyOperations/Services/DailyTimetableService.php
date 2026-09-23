@@ -156,6 +156,9 @@ class DailyTimetableService
         $type = $data['type'] instanceof CalendarExceptionType
             ? $data['type']
             : CalendarExceptionType::from($data['type']);
+        if ($type === CalendarExceptionType::Makeup) {
+            throw new ApiProblemException('DAILY_EXCEPTION_TYPE_UNSUPPORTED', '不再支持此调整类型，请选择原课程发起调课', 422);
+        }
         $data['type'] = $type->value;
         $effective = $this->dateContext($semester, (string) $data['effective_date']);
         $version = $this->versionForDate($semester, $effective['date']);
@@ -168,13 +171,9 @@ class DailyTimetableService
         $related = isset($data['related_entry_id'])
             ? $this->entryForVersion($targetVersion, (int) $data['related_entry_id'])
             : null;
-        $assignment = isset($data['replacement_assignment_id'])
-            ? TeachingAssignment::query()->with($this->assignmentRelations())
-                ->where('semester_id', $semester->id)->findOrFail((int) $data['replacement_assignment_id'])
-            : null;
-        $this->assertPayloadForType($type, $original, $related, $assignment, $data);
+        $this->assertPayloadForType($type, $original, $related, $data);
         if (isset($data['replacement_teacher_id'])) {
-            $courseId = $original->course_id ?? $assignment?->course_id;
+            $courseId = $original?->course_id;
             if ($courseId === null) {
                 throw new ApiProblemException('DAILY_REPLACEMENT_COURSE_REQUIRED', '无法确认临时教师对应的课程', 422);
             }
@@ -271,25 +270,6 @@ class DailyTimetableService
                 [$original->id],
                 $timetables[$effective['date']]['rows'],
             );
-        } elseif ($type === CalendarExceptionType::Makeup && $assignment !== null) {
-            $item = $this->targetItem($semester, (int) $data['replacement_item_id']);
-            $conflicts = $this->candidateConflicts(
-                $semester,
-                $target['date'],
-                $item,
-                $this->candidateFromAssignment($assignment, $data),
-                [],
-                $timetables[$target['date']]['rows'],
-            );
-            $affected[] = [
-                'entry_id' => null,
-                'date' => $target['date'],
-                'target' => $assignment->school_class_id !== null
-                    ? $assignment->schoolClass->name
-                    : $assignment->teachingGroup->name,
-                'course' => $assignment->course->name,
-                'teacher' => $assignment->teacher->name,
-            ];
         }
         $conflicts = collect($conflicts)
             ->unique(fn (array $conflict): string => $conflict['type'].':'.$conflict['message'])
@@ -304,7 +284,7 @@ class DailyTimetableService
             ->values()
             ->all();
         $allowed = $conflicts === [];
-        $changes = $this->exceptionChanges($original, $related, $assignment, $semester, $data);
+        $changes = $this->exceptionChanges($original, $related, null, $semester, $data);
         $teacherIds = collect($changes)->flatMap(fn (array $change): array => [
             ...($change['before']['teacher_ids'] ?? []), ...($change['after']['teacher_ids'] ?? []),
         ])->unique()->values()->all();
@@ -1114,7 +1094,6 @@ class DailyTimetableService
         CalendarExceptionType $type,
         ?TimetableEntry $original,
         ?TimetableEntry $related,
-        ?TeachingAssignment $assignment,
         array $data,
     ): void {
         $requiresOriginal = in_array($type, [
@@ -1128,12 +1107,8 @@ class DailyTimetableService
         if ($type === CalendarExceptionType::Swap && $related === null) {
             throw new ApiProblemException('DAILY_RELATED_ENTRY_REQUIRED', '交换课程必须选择另一节课', 422);
         }
-        if ($type === CalendarExceptionType::Makeup && $assignment === null) {
-            throw new ApiProblemException('DAILY_ASSIGNMENT_REQUIRED', '补课必须选择任课关系', 422);
-        }
-        if (in_array($type, [CalendarExceptionType::Move, CalendarExceptionType::Makeup], true)
-            && empty($data['replacement_item_id'])) {
-            throw new ApiProblemException('DAILY_REPLACEMENT_ITEM_REQUIRED', '移动或补课必须选择目标课节', 422);
+        if ($type === CalendarExceptionType::Move && empty($data['replacement_item_id'])) {
+            throw new ApiProblemException('DAILY_REPLACEMENT_ITEM_REQUIRED', '移动课程必须选择目标课节', 422);
         }
         if ($type === CalendarExceptionType::TeacherChange && empty($data['replacement_teacher_id'])) {
             throw new ApiProblemException('DAILY_REPLACEMENT_TEACHER_REQUIRED', '临时换教师必须选择教师', 422);
@@ -1176,29 +1151,6 @@ class DailyTimetableService
             'room_id' => isset($data['replacement_room_id'])
                 ? (int) $data['replacement_room_id']
                 : $entry->actual_room_id,
-        ];
-    }
-
-    /**
-     * @param  array<string, mixed>  $data
-     * @return array{class_ids: list<int>, teacher_ids: list<int>, room_id: int}
-     */
-    private function candidateFromAssignment(TeachingAssignment $assignment, array $data): array
-    {
-        $classIds = $assignment->school_class_id !== null
-            ? [$assignment->school_class_id]
-            : $assignment->teachingGroup?->schoolClasses->pluck('id')->map(fn ($id): int => (int) $id)->all() ?? [];
-        $teacherIds = [
-            isset($data['replacement_teacher_id']) ? (int) $data['replacement_teacher_id'] : $assignment->teacher_id,
-            ...$assignment->collaborators->pluck('id')->map(fn ($id): int => (int) $id)->all(),
-        ];
-
-        return [
-            'class_ids' => array_values(array_unique($classIds)),
-            'teacher_ids' => array_values(array_unique($teacherIds)),
-            'room_id' => isset($data['replacement_room_id'])
-                ? (int) $data['replacement_room_id']
-                : $this->rooms->resolve($assignment),
         ];
     }
 

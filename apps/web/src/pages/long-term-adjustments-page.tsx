@@ -1,3 +1,5 @@
+import { useHashPreservingSearchParams } from "@/lib/url-state"
+import { clampDate, validDate } from "@/lib/daily-adjustments"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { CheckCircle2Icon } from "lucide-react"
@@ -112,17 +114,26 @@ function LongTermWorkbench({
   const draftKey = `long-term-changes:${userId}:${semester.id}:draft`
   const [saved, setSaved] = useState<SavedDraft | null>(() => readDraft(draftKey))
   const draftId = useRef(String(Date.now()))
-  const [step, setStep] = useState(0)
-  const [view, setView] = useState("teacher")
+  const [params, setParams] = useHashPreservingSearchParams()
+  const [step, setStep] = useState(() => (params.get("step") === "source" ? 1 : 0))
+  const [view, setView] = useState(() => (params.get("object") === "class" ? "class" : "teacher"))
   const [selection, setSelection] = useState<LongTermSelection>({
     entryId: 0,
     scope: "entry",
     action: "swap",
   })
-  const [resourceId, setResourceId] = useState("")
-  const [from, setFrom] = useState(() => defaultStart(semester))
+  const [resourceId, setResourceId] = useState(() => params.get("resource") ?? "")
+  const [from, setFrom] = useState(() =>
+    validDate(params.get("date"))
+      ? clampDate(
+          params.get("date")!,
+          localDate() > semester.start_date ? localDate() : semester.start_date,
+          semester.end_date,
+        )
+      : defaultStart(semester),
+  )
   const [to, setTo] = useState(semester.end_date)
-  const [customEnd, setCustomEnd] = useState(false)
+  const [customEnd, setCustomEnd] = useState(() => params.get("scope") === "range")
   const [reason, setReason] = useState("")
   const [notify, setNotify] = useState(true)
   const [operations, setOperations] = useState<ChangeOperation[]>([])
@@ -173,6 +184,10 @@ function LongTermWorkbench({
     setFrom(value)
     if (to < value) setTo(value)
   }
+  const selectedEntryId = params.get("entry")
+  const linkedEntry = availableSource.data?.data.entries.find(
+    (entry) => String(entry.id) === selectedEntryId,
+  )
   const selectCourse = (entry: LongTermEntry, scope: LongTermSelection["scope"] = "entry") => {
     if (!availableSource.data) return
     setSource(availableSource.data)
@@ -329,6 +344,7 @@ function LongTermWorkbench({
   }
   const exit = () => {
     setStep(0)
+    setParams({}, { replace: true })
     setSource(null)
     setOperations([])
     setPreview(null)
@@ -397,17 +413,14 @@ function LongTermWorkbench({
   }
   return (
     <div className={adjustmentPageClass}>
-      <div className={step === 0 ? "space-y-4" : adjustmentContentClass}>
+      <div className={step === 0 ? "space-y-5" : adjustmentContentClass}>
         {step === 0 ? (
-          <AdjustmentPageHeader
-            title="长期调课"
-            description="调整生效期间的每周课程，查看每次调整的执行情况。"
-            onNew={canEdit ? () => (saved ? setLeave("new") : startNew()) : undefined}
-          />
+          <AdjustmentPageHeader title="调课与代课" description="查看持续生效的课程调整。" />
         ) : (
           <AdjustmentStepHeader
             step={step}
-            description={`长期调课 · ${from} 至 ${to}，按周执行。`}
+            title={step === 1 && linkedEntry ? "确认生效时间" : undefined}
+            description={`持续调课 · ${from} 至 ${to}，按周执行。`}
             onBack={step < 4 ? () => (patches.length ? setLeave("home") : exit()) : undefined}
             busy={busy}
           />
@@ -444,7 +457,11 @@ function LongTermWorkbench({
                 }}
               />
             )}
-            <LongTermHistory semesterId={semester.id} canEdit={canEdit} />
+            <LongTermHistory
+              semesterId={semester.id}
+              canEdit={canEdit}
+              onNew={canEdit ? () => (saved ? setLeave("new") : startNew()) : undefined}
+            />
           </>
         )}
         {step > 0 && step < 4 && !canEdit && (
@@ -454,6 +471,50 @@ function LongTermWorkbench({
         )}
         {step === 1 && (
           <div className="space-y-5 rounded-xl border bg-card p-5 lg:p-7">
+            {linkedEntry && (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-muted/40 p-4">
+                <div>
+                  <p className="text-sm font-medium">
+                    {linkedEntry.course.name} ·{" "}
+                    {linkedEntry.school_classes.map((item) => item.name).join("、")}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    每周{["", "一", "二", "三", "四", "五", "六", "日"][linkedEntry.weekday]} ·{" "}
+                    {linkedEntry.item.name}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    onClick={() =>
+                      setParams(
+                        (previous) => {
+                          const next = new URLSearchParams(previous)
+                          next.delete("entry")
+                          return next
+                        },
+                        { replace: true },
+                      )
+                    }
+                  >
+                    重选课程
+                  </Button>
+                  <Button
+                    disabled={
+                      !canEdit ||
+                      availableSource.isFetching ||
+                      from < minDate ||
+                      from > to ||
+                      to > semester.end_date
+                    }
+                    onClick={() => selectCourse(linkedEntry)}
+                  >
+                    设置新安排
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {resources.isError ? (
               <ErrorState retry={() => void resources.refetch()} />
             ) : resources.isLoading ? (
@@ -463,17 +524,19 @@ function LongTermWorkbench({
                 <div
                   className={`flex flex-wrap items-center gap-3 ${resourceId ? "border-b pb-5" : ""}`}
                 >
-                  <AdjustmentObjectPicker
-                    kind={view}
-                    resource={resourceId}
-                    onChange={(kind, id) => {
-                      setView(kind)
-                      setResourceId(id)
-                    }}
-                    classes={data.classes}
-                    teachers={data.teachers}
-                    rooms={data.rooms}
-                  />
+                  {!linkedEntry && (
+                    <AdjustmentObjectPicker
+                      kind={view}
+                      resource={resourceId}
+                      onChange={(kind, id) => {
+                        setView(kind)
+                        setResourceId(id)
+                      }}
+                      classes={data.classes}
+                      teachers={data.teachers}
+                      rooms={data.rooms}
+                    />
+                  )}
                   <span className="text-xs text-muted-foreground">从</span>
                   <DatePicker
                     label="开始生效日期"
@@ -514,6 +577,7 @@ function LongTermWorkbench({
                 ) : availableSource.isError ? (
                   <ErrorState retry={() => void availableSource.refetch()} />
                 ) : (
+                  !linkedEntry &&
                   availableSource.data && (
                     <WeeklyLessonPicker
                       key={`${view}:${resourceId}:${from}`}

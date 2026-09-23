@@ -3,7 +3,6 @@ import {
   ArrowLeft,
   ArrowLeftRight,
   CircleMinus,
-  CalendarPlus,
   Flag,
   ArrowRight,
   CalendarDays,
@@ -24,8 +23,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { SimpleSelect } from "@/components/simple-select"
 import { DatePicker } from "@/components/date-picker"
+import { ListToolbar } from "@/components/list-toolbar"
 import { ClassPicker, RoomPicker, TeacherPicker } from "@/components/resource-picker"
-import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "@/components/ui/popover"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,9 +34,10 @@ import {
 import type { Room, SchoolClass, Teacher } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { recordStatusColor, recordTypeTone } from "./record-appearance"
+import { AdjustmentNavigation } from "./adjustment-navigation"
 
 export const adjustmentPageClass =
-  "mx-auto flex min-h-[calc(100svh-3.5rem)] w-full max-w-[1440px] flex-col gap-5 bg-muted/20 p-4 md:p-6"
+  "flex min-h-[calc(100svh-3.5rem)] w-full flex-col gap-5 p-4 md:p-7"
 export const adjustmentContentClass = "w-full space-y-6"
 
 export function AdjustmentLessonToolbar({
@@ -94,31 +94,17 @@ export function AdjustmentLessonToolbar({
 export function AdjustmentPageHeader({
   title,
   description,
-  onNew,
-  children,
 }: {
   title: string
   description: string
-  onNew?: () => void
-  children?: ReactNode
 }) {
   return (
-    <header className="flex flex-wrap items-center justify-between gap-3">
-      <div>
-        <h1 tabIndex={-1} className="text-xl font-semibold outline-none">
-          {title}
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+    <header>
+      <div className="sr-only">
+        <h1 tabIndex={-1}>{title}</h1>
+        <p>{description}</p>
       </div>
-      <div className="flex items-center gap-2">
-        {children}
-        {onNew && (
-          <Button onClick={onNew}>
-            <Plus />
-            新建调课
-          </Button>
-        )}
-      </div>
+      <AdjustmentNavigation />
     </header>
   )
 }
@@ -141,7 +127,7 @@ export function AdjustmentStepHeader({
     heading.current?.focus()
   }, [step])
   return (
-    <header className="-mx-4 -mt-4 flex min-h-14 flex-wrap items-center justify-between gap-2 border-b bg-background px-4 py-2 md:-mx-6 md:-mt-6 md:px-6">
+    <header className="-mx-4 -mt-4 flex min-h-14 flex-wrap items-center justify-between gap-2 border-b bg-background px-4 py-2 md:-mx-7 md:-mt-7 md:px-7">
       <h1 ref={heading} tabIndex={-1} className="sr-only">
         {title ?? ["", "选择课程", "设置新安排", "核对发布", "调课已发布"][step]}
       </h1>
@@ -664,6 +650,8 @@ export function AdjustmentHistoryToolbar({
   onRefresh,
   children,
   extraActive = false,
+  onNew,
+  newLabel = "发起调课",
 }: {
   search: string
   onSearch: (value: string) => void
@@ -680,96 +668,93 @@ export function AdjustmentHistoryToolbar({
   onRefresh: () => void
   children?: ReactNode
   extraActive?: boolean
+  onNew?: () => void
+  newLabel?: string
 }) {
-  const filtered = Boolean(from || to || extraActive)
+  const filtered = Boolean(search || status !== "all" || from || to || extraActive)
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-2 border-b pb-3">
-        <form
-          className="relative min-w-48 flex-1 sm:max-w-sm"
-          onSubmit={(event) => {
-            event.preventDefault()
-            onSubmit()
-          }}
-        >
-          <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-muted-foreground" />
-          <Input
-            aria-label="搜索调课记录"
-            type="search"
-            className="pl-9"
-            placeholder="搜索班级、老师、课程或原因"
-            maxLength={100}
-            value={search}
-            onChange={(event) => onSearch(event.target.value)}
-          />
-        </form>
-        <SimpleSelect label="调课记录状态" value={status} onValueChange={onStatus}>
-          {statuses.map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </SimpleSelect>
-        <Popover>
-          <PopoverTrigger render={<Button variant={filtered ? "secondary" : "outline"} />}>
-            <SlidersHorizontal />
-            筛选{filtered ? " · 已设置" : ""}
-          </PopoverTrigger>
-          <PopoverContent align="end" className="w-80 space-y-1 rounded-xl">
-            <PopoverTitle className="text-sm">按生效日期筛选</PopoverTitle>
-            <p className="text-xs text-muted-foreground">查找与这个日期区间有交集的调整。</p>
-            {children}
-            <DatePicker
-              label="筛选开始日期"
-              placeholder="开始日期"
-              value={from}
-              max={to || undefined}
-              onValueChange={onFrom}
-              className="w-full"
-            />
-            <DatePicker
-              label="筛选结束日期"
-              placeholder="结束日期"
-              value={to}
-              min={from || undefined}
-              onValueChange={onTo}
-              className="w-full"
-            />
-            <Button variant="ghost" size="sm" onClick={onClear}>
-              清空筛选
-            </Button>
-          </PopoverContent>
-        </Popover>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="刷新调课记录"
-          disabled={refreshing}
-          onClick={onRefresh}
-        >
-          <RefreshCw />
-        </Button>
-      </div>
-      {(search || status !== "all" || filtered) && (
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <span>
-            {statuses.find(([value]) => value === status)?.[1]}
-            {from || to ? ` · ${from || "不限开始"} 至 ${to || "不限结束"}` : ""}
-            {search && ` · ${search}`}
-          </span>
-          <Button variant="link" size="sm" onClick={onClear}>
-            清空筛选
+    <ListToolbar
+      actions={
+        <>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="刷新调课记录"
+            disabled={refreshing}
+            onClick={onRefresh}
+          >
+            <RefreshCw />
           </Button>
-        </div>
+          {onNew && (
+            <Button onClick={onNew}>
+              <Plus />
+              {newLabel}
+            </Button>
+          )}
+        </>
+      }
+    >
+      <form
+        className="relative min-w-48 flex-1 sm:max-w-80"
+        onSubmit={(event) => {
+          event.preventDefault()
+          onSubmit()
+        }}
+      >
+        <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-muted-foreground" />
+        <Input
+          aria-label="搜索调课记录"
+          type="search"
+          surface="filter"
+          className="pl-9"
+          placeholder="搜索班级、老师、课程或原因"
+          maxLength={100}
+          value={search}
+          onChange={(event) => onSearch(event.target.value)}
+        />
+      </form>
+      <SimpleSelect label="调课记录状态" value={status} onValueChange={onStatus} surface="filter">
+        {statuses.map(([value, label]) => (
+          <option key={value} value={value}>
+            {label}
+          </option>
+        ))}
+      </SimpleSelect>
+      {children}
+      <div className="flex flex-wrap items-center gap-2">
+        <DatePicker
+          label="筛选开始日期"
+          placeholder="开始日期"
+          value={from}
+          max={to || undefined}
+          onValueChange={onFrom}
+          className="w-40"
+          surface="filter"
+        />
+        <span className="text-sm text-muted-foreground">至</span>
+        <DatePicker
+          label="筛选结束日期"
+          placeholder="结束日期"
+          value={to}
+          min={from || undefined}
+          onValueChange={onTo}
+          className="w-40"
+          surface="filter"
+        />
+      </div>
+      {filtered && (
+        <Button variant="ghost" size="sm" onClick={onClear}>
+          清空筛选
+        </Button>
       )}
-    </div>
+    </ListToolbar>
   )
 }
 
 export function AdjustmentRecordList({ children }: { children: ReactNode }) {
   return (
-    <div className="overflow-hidden rounded-lg border bg-card">
-      <div className="hidden grid-cols-[88px_minmax(120px,1fr)_minmax(180px,1.5fr)_140px_88px_16px] gap-4 border-b bg-muted/30 px-4 py-2 text-xs text-muted-foreground xl:grid">
+    <div>
+      <div className="hidden grid-cols-[88px_minmax(120px,1fr)_minmax(180px,1.5fr)_140px_88px_16px] gap-4 border-b bg-muted px-4 py-2.5 text-sm font-medium xl:grid">
         <span>类型</span>
         <span>课程</span>
         <span>原安排 → 新安排</span>
@@ -810,8 +795,6 @@ export function AdjustmentRecordRow({
       换教室: DoorOpen,
       停课: CircleMinus,
       安排活动: Flag,
-      安排补课: CalendarPlus,
-      补课: CalendarPlus,
     }[type] || SlidersHorizontal
   return (
     <button

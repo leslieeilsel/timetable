@@ -1989,6 +1989,19 @@ export interface components {
              */
             effective_from: string;
         };
+        /** @description 新建时 name 必填；不传 color 时自动分配。仅修改颜色不会使课表版本过期，但会更新目录 ETag 的 appearance 修订。 */
+        CourseWritePayload: {
+            name?: string;
+            short_name?: string | null;
+            /**
+             * @description 持久化学科颜色；允许值由 contracts/course-colors.json 色板定义。允许手动选择已使用的颜色。
+             * @example #3973C6
+             */
+            color?: string;
+            is_active?: boolean;
+            confirm_open_impact?: boolean;
+            impact_hash?: string;
+        };
         /** @description 各操作的字段由对应业务端点校验；客户端生成的 paths 类型保留端点与并发头约束。 */
         WritePayload: {
             [key: string]: unknown;
@@ -2008,7 +2021,10 @@ export interface components {
             mode: "official" | "full";
             version_id?: number;
         } | unknown | unknown;
-        /** @enum {string} */
+        /**
+         * @description makeup 仅用于读取历史记录，不再支持创建或预览。
+         * @enum {string}
+         */
         CalendarExceptionType: "move" | "swap" | "teacher_change" | "room_change" | "cancel" | "makeup" | "activity";
         /** @enum {string} */
         OperationalStatus: "draft" | "active" | "cancelled";
@@ -2025,13 +2041,13 @@ export interface components {
             effective_date: string;
             /**
              * Format: date
-             * @description 交换目标课程的实际日期；移动或补课的目标日期。省略时使用 effective_date。
+             * @description 交换目标课程的实际日期；移动课程的目标日期。省略时使用 effective_date。
              */
             replacement_date?: string | null;
-            type: components["schemas"]["CalendarExceptionType"];
-            original_entry_id?: number | null;
+            /** @enum {string} */
+            type: "move" | "swap" | "teacher_change" | "room_change" | "cancel" | "activity";
+            original_entry_id: number;
             related_entry_id?: number | null;
-            replacement_assignment_id?: number | null;
             replacement_teacher_id?: number | null;
             replacement_room_id?: number | null;
             replacement_item_id?: number | null;
@@ -5513,7 +5529,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["WritePayload"];
+                "application/json": components["schemas"]["CourseWritePayload"];
             };
         };
         responses: {
@@ -5564,7 +5580,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": components["schemas"]["WritePayload"];
+                "application/json": components["schemas"]["CourseWritePayload"];
             };
         };
         responses: {

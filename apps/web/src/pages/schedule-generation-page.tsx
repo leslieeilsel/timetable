@@ -183,7 +183,7 @@ export function ScheduleGenerationPage() {
     if (context.isLoading) return <LoadingState label="正在载入学期…" />
     return (
       <>
-        <PageHeader title="方案生成" />
+        <PageHeader title="自动排课" />
         <EmptyList title="尚未设置当前学期" description="请先设置当前开放学期。" />
       </>
     )
@@ -254,10 +254,19 @@ export function ScheduleGenerationPage() {
   return (
     <>
       <PageHeader
-        title="方案生成"
+        title="自动排课"
         description="按本次排课需求生成候选课表。生成后先预览，确认采用后才会影响当前课表。"
       />
       <SchedulingWorkflow />
+      <div className="flex justify-end px-4 pt-4 md:px-7">
+        <Button
+          variant="outline"
+          nativeButton={false}
+          render={<Link to={semesterPath(semesterId, "planning")} />}
+        >
+          手工编排课表
+        </Button>
+      </div>
       <div className="mx-auto w-full max-w-[1480px] space-y-5 p-4 md:p-6">
         {runId ? (
           activeRun.isLoading ? (
@@ -580,7 +589,7 @@ export function ScheduleGenerationPage() {
             client.invalidateQueries({ queryKey: ["timetable-versions", semesterId] }),
           ])
           void navigate(
-            `${semesterPath(semesterId ?? 0, "timetable")}?version=${version.id}&created=${version.status === "active" ? "current" : "draft"}`,
+            `${semesterPath(semesterId ?? 0, "planning")}?version=${version.id}&created=${version.status === "active" ? "current" : "draft"}`,
           )
         }}
       />

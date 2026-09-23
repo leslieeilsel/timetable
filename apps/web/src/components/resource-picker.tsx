@@ -752,6 +752,47 @@ export function TeacherPicker({
   )
 }
 
+export function GradePicker({
+  grades,
+  ...props
+}: CommonPickerProps & {
+  grades: Array<{ id: number; name: string; classCount: number }>
+}) {
+  const byId = new Map(grades.map((grade) => [String(grade.id), grade]))
+  return (
+    <ResourcePicker
+      {...props}
+      items={grades.map((grade) => ({
+        value: String(grade.id),
+        label: grade.name,
+        searchText: grade.name,
+        pinyinSource: grade.name,
+        status: "本学期已配置",
+        statusTone: "success",
+      }))}
+      title="选择年级"
+      description="选择本学期参与排课的年级，查看各班课表"
+      ariaLabel="选择年级"
+      placeholder="请选择年级"
+      searchPlaceholder="搜索年级名称"
+      countLabel={(count) => `${count} 个年级`}
+      columns={[
+        {
+          key: "name",
+          label: "年级",
+          className: "min-w-52",
+          render: (item) => <span className="font-medium">{item.label}</span>,
+        },
+        {
+          key: "classes",
+          label: "班级数量",
+          render: (item) => `${byId.get(item.value)?.classCount ?? 0} 个班`,
+        },
+      ]}
+    />
+  )
+}
+
 export function ClassPicker({
   classes,
   statusById,

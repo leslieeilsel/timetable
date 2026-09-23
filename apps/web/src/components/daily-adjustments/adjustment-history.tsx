@@ -9,7 +9,7 @@ import {
   RecordDetailMeta,
   RecordDetailFooter,
 } from "@/components/adjustments/record-detail"
-import { adjustmentLabels, describeAdjustment } from "@/lib/daily-adjustments"
+import { adjustmentLabels, adjustmentTypes, describeAdjustment } from "@/lib/daily-adjustments"
 import type { CalendarException, PaginationMeta } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { SimpleSelect } from "@/components/simple-select"
@@ -32,10 +32,14 @@ export function AdjustmentHistory({
   semesterId,
   canEdit,
   onChanged,
+  initialDate,
+  onNew,
 }: {
   semesterId: number
   canEdit: boolean
   onChanged: () => Promise<void>
+  initialDate?: string
+  onNew?: () => void
 }) {
   const detailRef = useRef<HTMLDivElement>(null)
   const [search, setSearch] = useState("")
@@ -43,8 +47,8 @@ export function AdjustmentHistory({
   const [page, setPage] = useState(1)
   const [status, setStatus] = useState("all")
   const [type, setType] = useState("all")
-  const [from, setFrom] = useState("")
-  const [to, setTo] = useState("")
+  const [from, setFrom] = useState(initialDate ?? "")
+  const [to, setTo] = useState(initialDate ?? "")
   const [detailId, setDetailId] = useState<number | null>(null)
   const [selected, setSelected] = useState<CalendarException | null>(null)
   const [busy, setBusy] = useState(false)
@@ -102,125 +106,129 @@ export function AdjustmentHistory({
   }
   return (
     <section className="space-y-3" aria-label="调整事项">
-      <AdjustmentHistoryToolbar
-        search={search}
-        onSearch={setSearch}
-        onSubmit={() => {
-          setQ(search.trim())
-          setPage(1)
-        }}
-        status={status}
-        statuses={[
-          ["all", "全部状态"],
-          ["active", "已发布"],
-          ["cancelled", "已撤回"],
-        ]}
-        onStatus={(value) => {
-          setStatus(value)
-          setPage(1)
-        }}
-        from={from}
-        to={to}
-        onFrom={(value) => {
-          setFrom(value)
-          setPage(1)
-        }}
-        onTo={(value) => {
-          setTo(value)
-          setPage(1)
-        }}
-        onClear={clearFilters}
-        refreshing={history.isFetching}
-        onRefresh={() => void history.refetch()}
-        extraActive={type !== "all"}
-      >
-        <SimpleSelect
-          label="调整记录类型"
-          value={type}
-          onValueChange={(value) => {
-            setType(value)
+      <div className="surface-panel overflow-hidden">
+        <AdjustmentHistoryToolbar
+          search={search}
+          onSearch={setSearch}
+          onSubmit={() => {
+            setQ(search.trim())
             setPage(1)
           }}
+          status={status}
+          statuses={[
+            ["all", "全部状态"],
+            ["active", "已发布"],
+            ["cancelled", "已撤回"],
+          ]}
+          onStatus={(value) => {
+            setStatus(value)
+            setPage(1)
+          }}
+          from={from}
+          to={to}
+          onFrom={(value) => {
+            setFrom(value)
+            setPage(1)
+          }}
+          onTo={(value) => {
+            setTo(value)
+            setPage(1)
+          }}
+          onClear={clearFilters}
+          refreshing={history.isFetching}
+          onRefresh={() => void history.refetch()}
+          extraActive={type !== "all"}
+          onNew={onNew}
         >
-          <option value="all">全部调整类型</option>
-          {Object.entries(adjustmentLabels).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </SimpleSelect>
-      </AdjustmentHistoryToolbar>
-      {history.isError ? (
-        <ErrorState retry={() => void history.refetch()} />
-      ) : history.isLoading ? (
-        <LoadingState label="正在加载调课事项…" />
-      ) : (
-        <AdjustmentRecordList>
-          {history.data?.data.map((record) => {
-            const summary = describeAdjustment(record)
-            return (
-              <AdjustmentRecordRow
-                key={record.id}
-                type={record.type === "move" ? "改时间" : adjustmentLabels[record.type]}
-                title={summary.title}
-                detail={summary.teacher}
-                before={summary.before}
-                after={summary.after}
-                date={
-                  <>
-                    {record.effective_date}
-                    {record.replacement_date &&
-                      record.replacement_date !== record.effective_date && (
-                        <p>另含 {record.replacement_date}</p>
-                      )}
-                  </>
-                }
-                status={record.status === "active" ? "已发布" : "已撤回"}
-                onClick={() => setDetailId(record.id)}
-              />
-            )
-          })}
-          {!history.data?.data.length && (
-            <div className="px-5 py-16 text-center">
-              <p className="text-sm font-medium">
-                {activeFilters || status !== "all" ? "当前条件下没有调课事项" : "还没有调课记录"}
-              </p>
-              <p className="mt-2 text-sm text-muted-foreground">
-                {activeFilters || status !== "all"
-                  ? "可以清空筛选或查看全部事项。"
-                  : "需要调整课程时，点击右上方“新建调课”。"}
-              </p>
-            </div>
-          )}
-        </AdjustmentRecordList>
-      )}
-      {meta && meta.total > 0 && (
-        <div className="flex flex-wrap items-center justify-end gap-3 text-xs text-muted-foreground">
-          <span>
-            共 {meta.total} 项{meta.last_page > 1 ? ` · ${page} / ${meta.last_page} 页` : ""}
-          </span>
-          {meta.last_page > 1 && (
-            <>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={page <= 1 || history.isFetching}
-                onClick={() => setPage(page - 1)}
-              >
-                上一页
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={page >= meta.last_page || history.isFetching}
-                onClick={() => setPage(page + 1)}
-              >
-                下一页
-              </Button>
-            </>
-          )}
-        </div>
-      )}
+          <SimpleSelect
+            label="调整记录类型"
+            surface="filter"
+            value={type}
+            onValueChange={(value) => {
+              setType(value)
+              setPage(1)
+            }}
+          >
+            <option value="all">全部调整类型</option>
+            {adjustmentTypes.map((value) => (
+              <option key={value} value={value}>
+                {adjustmentLabels[value]}
+              </option>
+            ))}
+          </SimpleSelect>
+        </AdjustmentHistoryToolbar>
+        {history.isError ? (
+          <ErrorState retry={() => void history.refetch()} />
+        ) : history.isLoading ? (
+          <LoadingState label="正在加载调课事项…" />
+        ) : (
+          <AdjustmentRecordList>
+            {history.data?.data.map((record) => {
+              const summary = describeAdjustment(record)
+              return (
+                <AdjustmentRecordRow
+                  key={record.id}
+                  type={record.type === "move" ? "改时间" : adjustmentLabels[record.type]}
+                  title={summary.title}
+                  detail={summary.teacher}
+                  before={summary.before}
+                  after={summary.after}
+                  date={
+                    <>
+                      {record.effective_date}
+                      {record.replacement_date &&
+                        record.replacement_date !== record.effective_date && (
+                          <p>另含 {record.replacement_date}</p>
+                        )}
+                    </>
+                  }
+                  status={record.status === "active" ? "已发布" : "已撤回"}
+                  onClick={() => setDetailId(record.id)}
+                />
+              )
+            })}
+            {!history.data?.data.length && (
+              <div className="px-5 py-16 text-center">
+                <p className="text-sm font-medium">
+                  {activeFilters || status !== "all" ? "当前条件下没有调课事项" : "还没有调课记录"}
+                </p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {activeFilters || status !== "all"
+                    ? "可以清空筛选或查看全部事项。"
+                    : "需要调整课程时，点击筛选栏右侧“发起调课”。"}
+                </p>
+              </div>
+            )}
+          </AdjustmentRecordList>
+        )}
+        {meta && meta.total > 0 && (
+          <div className="flex flex-wrap items-center justify-end gap-3 border-t px-4 py-3 text-xs text-muted-foreground">
+            <span>
+              共 {meta.total} 项{meta.last_page > 1 ? ` · ${page} / ${meta.last_page} 页` : ""}
+            </span>
+            {meta.last_page > 1 && (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={page <= 1 || history.isFetching}
+                  onClick={() => setPage(page - 1)}
+                >
+                  上一页
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={page >= meta.last_page || history.isFetching}
+                  onClick={() => setPage(page + 1)}
+                >
+                  下一页
+                </Button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
       <Dialog open={Boolean(detail)} onOpenChange={(open) => !open && setDetailId(null)}>
         <DialogContent
           ref={detailRef}

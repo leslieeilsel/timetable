@@ -246,10 +246,10 @@ class CalendarExceptionController
         $data = $request->validate([
             'effective_date' => ['required', 'date_format:Y-m-d'],
             'replacement_date' => ['sometimes', 'nullable', 'date_format:Y-m-d'],
-            'type' => ['required', Rule::enum(CalendarExceptionType::class)],
-            'original_entry_id' => ['sometimes', 'nullable', 'integer', 'exists:timetable_entries,id'],
+            'type' => ['required', Rule::enum(CalendarExceptionType::class)->except([CalendarExceptionType::Makeup])],
+            'original_entry_id' => ['required', 'integer', 'exists:timetable_entries,id'],
             'related_entry_id' => ['sometimes', 'nullable', 'integer', 'different:original_entry_id', 'exists:timetable_entries,id'],
-            'replacement_assignment_id' => ['sometimes', 'nullable', 'integer', 'exists:teaching_assignments,id'],
+            'replacement_assignment_id' => ['prohibited'],
             'replacement_teacher_id' => ['sometimes', 'nullable', 'integer', Rule::exists('teachers', 'id')->where('is_active', true)],
             'replacement_room_id' => ['sometimes', 'nullable', 'integer', Rule::exists('rooms', 'id')->where('is_active', true)],
             'replacement_item_id' => ['sometimes', 'nullable', 'integer', 'exists:items,id'],
@@ -261,7 +261,6 @@ class CalendarExceptionController
         $fields = match ($data['type']) {
             'swap' => ['original_entry_id', 'related_entry_id', 'replacement_date'],
             'move' => ['original_entry_id', 'replacement_date', 'replacement_item_id', 'replacement_teacher_id', 'replacement_room_id'],
-            'makeup' => ['replacement_assignment_id', 'replacement_date', 'replacement_item_id', 'replacement_teacher_id', 'replacement_room_id'],
             'teacher_change' => ['original_entry_id', 'replacement_teacher_id'],
             'room_change' => ['original_entry_id', 'replacement_room_id'],
             'activity' => ['original_entry_id', 'title'],

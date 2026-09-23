@@ -13,11 +13,7 @@ import {
   SettingsIcon,
   UsersIcon,
 } from "lucide-react"
-import {
-  dailyNavigationItems,
-  resourceNavigationItems,
-  schedulingNavigationItems,
-} from "@/components/app-navigation"
+import { resourceNavigationItems } from "@/components/app-navigation"
 import { useAuth } from "@/lib/auth"
 import { useSystemBranding } from "@/lib/queries"
 import type { Role } from "@/lib/types"
@@ -71,41 +67,40 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const branding = useSystemBranding()
   const { pathname } = useLocation()
   const { user } = useAuth()
+  const { semesterId } = useResolvedSemesterId()
   const primaryItems =
     user && ["admin", "scheduler"].includes(user.role)
-      ? [...primary, { title: "AI 助手", to: "/ai", icon: SparklesIcon }]
+      ? [
+          ...primary,
+          {
+            title: "AI 助手",
+            to: semesterId ? `/ai?semester_id=${semesterId}` : "/ai",
+            icon: SparklesIcon,
+          },
+        ]
       : primary
-  const { semesterId } = useResolvedSemesterId()
   const sidebar = useSidebar()
   const resourcesActive = pathname.startsWith("/resources") || pathname.startsWith("/years")
   const schedulingActive = isSchedulingSemesterPath(pathname)
   const dailyActive = isDailySemesterPath(pathname)
-  const schedulingMenuItems = schedulingNavigationItems.map((item) => ({
-    ...item,
-    to: semesterPathOrCurrent(semesterId, item.destination),
-  }))
-  const dailyMenuItems = dailyNavigationItems.map((item) => ({
-    ...item,
-    to: semesterPathOrCurrent(semesterId, item.destination),
-  }))
   const [resourcesOpen, setResourcesOpen] = useState(true)
-  const [schedulingOpen, setSchedulingOpen] = useState(true)
-  const [dailyOpen, setDailyOpen] = useState(true)
   useEffect(() => {
     if (resourcesActive) setResourcesOpen(true)
   }, [resourcesActive])
-  useEffect(() => {
-    if (schedulingActive) setSchedulingOpen(true)
-  }, [schedulingActive])
-  useEffect(() => {
-    if (dailyActive) setDailyOpen(true)
-  }, [dailyActive])
-  const group = (label: string, items: typeof primary, tail?: React.ReactNode) => (
+  const group = (
+    label: string,
+    items: Array<(typeof primary)[number] & { active?: boolean }>,
+    tail?: React.ReactNode,
+  ) => (
     <SidebarGroup>
       <SidebarGroupLabel>{label}</SidebarGroupLabel>
       <SidebarMenu>
         {items.map((item) => {
-          const isActive = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to)
+          const isActive =
+            item.active ??
+            (item.to === "/"
+              ? pathname === "/" || /^\/semesters\/\d+\/dashboard$/.test(pathname)
+              : pathname.startsWith(item.to.split("?")[0]))
           return (
             <SidebarMenuItem key={item.to}>
               <SidebarMenuButton
@@ -149,84 +144,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <CollapsibleContent>
         <SidebarMenuSub>
           {resourceNavigationItems.map((item) => (
-            <SidebarMenuSubItem key={item.to}>
-              <SidebarMenuSubButton
-                isActive={pathname === item.to}
-                render={
-                  <Link
-                    to={item.to}
-                    aria-current={pathname === item.to ? "page" : undefined}
-                    onClick={() => sidebar.setOpenMobile(false)}
-                  />
-                }
-              >
-                <item.icon />
-                <span>{item.title}</span>
-              </SidebarMenuSubButton>
-            </SidebarMenuSubItem>
-          ))}
-        </SidebarMenuSub>
-      </CollapsibleContent>
-    </Collapsible>
-  )
-  const schedulingMenu = (
-    <Collapsible
-      open={schedulingOpen}
-      onOpenChange={(open) => {
-        setSchedulingOpen(open)
-        if (open && sidebar.state === "collapsed") sidebar.setOpen(true)
-      }}
-      className="group/collapsible group-data-[collapsible=icon]:hidden"
-      render={<SidebarMenuItem />}
-    >
-      <CollapsibleTrigger
-        render={<SidebarMenuButton tooltip="排课中心" isActive={schedulingActive} />}
-      >
-        <CalendarCogIcon />
-        <span>排课中心</span>
-        <ChevronDownIcon className="ml-auto transition-transform duration-200 group-data-[open]/collapsible:rotate-180 group-data-[collapsible=icon]:hidden motion-reduce:transition-none" />
-      </CollapsibleTrigger>
-      <CollapsibleContent>
-        <SidebarMenuSub>
-          {schedulingMenuItems.map((item) => (
-            <SidebarMenuSubItem key={item.to}>
-              <SidebarMenuSubButton
-                isActive={pathname === item.to}
-                render={
-                  <Link
-                    to={item.to}
-                    aria-current={pathname === item.to ? "page" : undefined}
-                    onClick={() => sidebar.setOpenMobile(false)}
-                  />
-                }
-              >
-                <item.icon />
-                <span>{item.title}</span>
-              </SidebarMenuSubButton>
-            </SidebarMenuSubItem>
-          ))}
-        </SidebarMenuSub>
-      </CollapsibleContent>
-    </Collapsible>
-  )
-  const dailyMenu = (
-    <Collapsible
-      open={dailyOpen}
-      onOpenChange={(open) => {
-        setDailyOpen(open)
-        if (open && sidebar.state === "collapsed") sidebar.setOpen(true)
-      }}
-      className="group/collapsible group-data-[collapsible=icon]:hidden"
-      render={<SidebarMenuItem />}
-    >
-      <CollapsibleTrigger render={<SidebarMenuButton tooltip="日常运行" isActive={dailyActive} />}>
-        <CalendarCheck2Icon />
-        <span>日常运行</span>
-        <ChevronDownIcon className="ml-auto transition-transform duration-200 group-data-[open]/collapsible:rotate-180 group-data-[collapsible=icon]:hidden motion-reduce:transition-none" />
-      </CollapsibleTrigger>
-      <CollapsibleContent>
-        <SidebarMenuSub>
-          {dailyMenuItems.map((item) => (
             <SidebarMenuSubItem key={item.to}>
               <SidebarMenuSubButton
                 isActive={pathname === item.to}
@@ -320,27 +237,29 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarHeader className="shrink-0 px-2 pt-3 pb-2">{sidebarHeader}</SidebarHeader>
       <SidebarContent role="navigation" aria-label="主导航">
         {group("日常工作", primaryItems)}
-        {user?.role !== "viewer" &&
-          group(
-            "当前学期",
-            [],
-            <>
-              {schedulingMenu}
-              <CollapsedModuleMenu
-                title="排课中心"
-                icon={CalendarCogIcon}
-                items={schedulingMenuItems}
-                isActive={schedulingActive}
-              />
-              {dailyMenu}
-              <CollapsedModuleMenu
-                title="日常运行"
-                icon={CalendarCheck2Icon}
-                items={dailyMenuItems}
-                isActive={dailyActive}
-              />
-            </>,
-          )}
+        {group("教务工作", [
+          {
+            title: "查看课表",
+            to: semesterPathOrCurrent(semesterId, "timetable"),
+            icon: BookOpenTextIcon,
+          },
+          ...(user && ["admin", "scheduler"].includes(user.role)
+            ? [
+                {
+                  title: "学期排课",
+                  to: semesterPathOrCurrent(semesterId, "preparation"),
+                  icon: CalendarCogIcon,
+                  active: schedulingActive,
+                },
+                {
+                  title: "调课与代课",
+                  to: semesterPathOrCurrent(semesterId, "adjustments"),
+                  icon: CalendarCheck2Icon,
+                  active: dailyActive,
+                },
+              ]
+            : []),
+        ])}
         {user?.role !== "viewer" &&
           group(
             "基础资料",
@@ -355,14 +274,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               />
             </>,
           )}
-        {user?.role === "viewer" &&
-          group("当前课表", [
-            {
-              title: "课表查看",
-              to: semesterPathOrCurrent(semesterId, "timetable"),
-              icon: BookOpenTextIcon,
-            },
-          ])}
         {user?.role === "admin" &&
           group("系统", [
             { title: "用户管理", to: "/users", icon: UsersIcon },

@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button"
 import { WorkspaceShell } from "@/components/workspace-shell"
 import { WorkspaceLoadingState } from "@/components/workspace-loading-state"
 import { useAuth } from "@/lib/auth"
+import { WorkingSemesterProvider } from "@/lib/working-semester"
 
 export function ProtectedWorkspace() {
   const { user, loading, logout } = useAuth()
@@ -30,5 +31,9 @@ export function ProtectedWorkspace() {
     )
   }
 
-  return <WorkspaceShell />
+  return (
+    <WorkingSemesterProvider key={user.id} userId={user.id}>
+      <WorkspaceShell />
+    </WorkingSemesterProvider>
+  )
 }
