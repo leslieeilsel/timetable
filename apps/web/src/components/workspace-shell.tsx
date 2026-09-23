@@ -43,13 +43,14 @@ const labels: Record<string, string> = {
   years: "学年学期",
   semester: "当前学期",
   scheduling: "学期排课",
-  preparation: "教学安排",
-  assignments: "任课关系",
+  preparation: "排课准备",
+  assignments: "任课与课时",
   constraints: "排课规则",
+  "fixed-placements": "固定安排",
   generate: "自动排课",
-  setup: "学期配置",
+  setup: "班级与作息",
   timetable: "查看课表",
-  planning: "检查并发布",
+  planning: "编排课表",
   daily: "调课与代课",
   adjustments: "调课与代课",
   "long-term": "持续调课",
@@ -71,7 +72,7 @@ export function WorkspaceShell({ children }: { children?: ReactNode }) {
   const part = parts.at(-1)
   const isAiPage = parts[0] === "ai"
   const isResourcePage = pathname.startsWith("/resources/")
-  const isSemesterSetup = semesterDestinationForPath(pathname) === "setup"
+  const isGenerationPage = semesterDestinationForPath(pathname) === "generate"
   const isSemesterPage = isSchedulingSemesterPath(pathname)
   const isDailyPage = isDailySemesterPath(pathname)
   const schedulingMenuItems = schedulingNavigationItems.map((item) => ({
@@ -143,6 +144,18 @@ export function WorkspaceShell({ children }: { children?: ReactNode }) {
                       <BreadcrumbSeparator />
                     </>
                   )}
+                  {isGenerationPage && (
+                    <>
+                      <BreadcrumbItem>
+                        <BreadcrumbLink
+                          render={<Link to={semesterPathOrCurrent(semesterId, "planning")} />}
+                        >
+                          编排课表
+                        </BreadcrumbLink>
+                      </BreadcrumbItem>
+                      <BreadcrumbSeparator />
+                    </>
+                  )}
                   {isYearDetail && (
                     <>
                       <BreadcrumbItem>
@@ -153,13 +166,7 @@ export function WorkspaceShell({ children }: { children?: ReactNode }) {
                   )}
                   <BreadcrumbItem className="min-w-0">
                     <BreadcrumbPage className="block truncate">
-                      {isSemesterSetup
-                        ? "学期配置"
-                        : isYearDetail
-                          ? "学年详情"
-                          : part
-                            ? (labels[part] ?? "工作台")
-                            : "工作台"}
+                      {isYearDetail ? "学年详情" : part ? (labels[part] ?? "工作台") : "工作台"}
                     </BreadcrumbPage>
                   </BreadcrumbItem>
                 </BreadcrumbList>

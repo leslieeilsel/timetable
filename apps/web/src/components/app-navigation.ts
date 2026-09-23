@@ -6,7 +6,7 @@ import {
   CalendarDaysIcon,
   CalendarRangeIcon,
   ClipboardListIcon,
-  GalleryVerticalEndIcon,
+  PinIcon,
   MapPinIcon,
   SettingsIcon,
   UserRoundIcon,
@@ -34,11 +34,12 @@ export const resourceNavigationItems = [
 ] satisfies NavigationItem[]
 
 export const schedulingNavigationItems = [
-  { title: "教学安排", destination: "preparation", icon: BookOpenCheckIcon },
-  { title: "任课关系", destination: "assignments", icon: ClipboardListIcon },
+  { title: "排课准备", destination: "preparation", icon: BookOpenCheckIcon },
+  { title: "班级与作息", destination: "setup", icon: CalendarDaysIcon },
+  { title: "任课与课时", destination: "assignments", icon: ClipboardListIcon },
   { title: "排课规则", destination: "constraints", icon: SettingsIcon },
-  { title: "自动排课", destination: "generate", icon: GalleryVerticalEndIcon },
-  { title: "检查并发布", destination: "planning", icon: BookOpenTextIcon },
+  { title: "固定安排", destination: "fixed-placements", icon: PinIcon },
+  { title: "编排课表", destination: "planning", icon: BookOpenTextIcon },
 ] satisfies SemesterNavigationItem[]
 
 export const dailyNavigationItems = [

@@ -1,8 +1,6 @@
-import { SchedulingWorkflow } from "@/components/scheduling-workflow"
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { Link } from "react-router"
-import { ArrowLeftIcon, ArrowRightLeftIcon, CopyIcon, PlusIcon, Settings2Icon } from "lucide-react"
+import { ArrowRightLeftIcon, CopyIcon, PlusIcon, Settings2Icon } from "lucide-react"
 import { toast } from "sonner"
 import { api, apiAllPages, apiMessage } from "@/lib/api"
 import { useResolvedSemesterId } from "@/lib/semester"
@@ -165,6 +163,7 @@ export function SemesterSetupPage() {
       client.invalidateQueries({ queryKey: ["semester", semesterId] }),
       client.invalidateQueries({ queryKey: ["class-settings", semesterId] }),
       client.invalidateQueries({ queryKey: ["schedule-template", semesterId] }),
+      client.invalidateQueries({ queryKey: ["preparation-check", semesterId] }),
     ])
   }
   const copy = async (type: "class-settings" | "schedule-template") => {
@@ -185,8 +184,7 @@ export function SemesterSetupPage() {
   if (!semesterId && !context.isLoading)
     return (
       <>
-        <SchedulingWorkflow />
-        <PageHeader title="学期配置" />
+        <PageHeader title="班级与作息" />
         <EmptyList title="尚未设置当前学期" description="请从学年管理中开放学期并设为当前学期。" />
       </>
     )
@@ -205,24 +203,8 @@ export function SemesterSetupPage() {
 
   return (
     <>
-      <SchedulingWorkflow />
-      <PageHeader
-        title={`${current.academic_year?.name ?? "当前学年"} · ${current.name}配置`}
-        description="先确定参与排课的班级和固定教室，再维护统一作息。"
-      />
-      <div className="p-5 md:p-7">
-        <div className="mb-4">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="-ml-2 text-muted-foreground"
-            nativeButton={false}
-            render={<Link to={`/years/${current.academic_year_id}`} />}
-          >
-            <ArrowLeftIcon />
-            返回学年详情
-          </Button>
-        </div>
+      <PageHeader title="班级与作息" />
+      <div className="p-4 md:p-7">
         <Tabs
           value={urlParams.get("section") === "schedule-template" ? "template" : "classes"}
           onValueChange={(value) =>

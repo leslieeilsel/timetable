@@ -94,7 +94,7 @@ export function TeachingGroupManager({
         <DialogHeader>
           <DialogTitle>教学组</DialogTitle>
           <DialogDescription>
-            合班、拆班和走班先定义所含班级，再作为一个授课对象加入任课矩阵。
+            合班、拆班和走班先定义所含班级，再为该授课对象配置任课。
           </DialogDescription>
         </DialogHeader>
         {editing !== undefined ? (

@@ -1,95 +1,52 @@
-import { useEffect, useRef, useState } from "react"
 import { Link } from "react-router"
 import { useQuery } from "@tanstack/react-query"
-import { ArrowRightIcon, CheckIcon, RefreshCwIcon } from "lucide-react"
+import { ArrowRightIcon, RefreshCwIcon } from "lucide-react"
 import { toast } from "sonner"
-import { api, apiMessage } from "@/lib/api"
-import { semesterPath, useResolvedSemesterId, withSemesterId } from "@/lib/semester"
-import type { PreparationCheck, PreparationCheckItem } from "@/lib/types"
-import { EmptyList, ErrorState, LoadingState, PageHeader } from "@/components/page"
-import { SchedulingWorkflow } from "@/components/scheduling-workflow"
-import { Button } from "@/components/ui/button"
+import { api, apiAllPages, apiMessage } from "@/lib/api"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+  semesterPath,
+  useResolvedSemesterId,
+  withSemesterId,
+  type SemesterDestination,
+} from "@/lib/semester"
+import type { PreparationCheck, PreparationCheckItem, TimetableVersion } from "@/lib/types"
+import { EmptyList, ErrorState, LoadingState, PageHeader } from "@/components/page"
+import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
-const statusStyle = {
-  passed: {
-    label: "通过",
-    tone: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  },
-  warning: {
-    label: "提醒",
-    tone: "border-amber-200 bg-amber-50 text-amber-700",
-  },
-  blocking: {
-    label: "阻塞",
-    tone: "border-rose-200 bg-rose-50 text-rose-700",
-  },
-} as const
-
 type CheckStatus = PreparationCheckItem["status"]
-
 type PreparationCard = {
-  key: string
   title: string
-  value: string
-  status: CheckStatus
-  fixPath: string
+  destination: SemesterDestination
+  summary: string
+  checks: PreparationCheckItem[]
+  optional?: boolean
 }
 
-const statusPriority: Record<CheckStatus, number> = {
-  passed: 0,
-  warning: 1,
-  blocking: 2,
+const statusStyle: Record<CheckStatus, { label: string; tone: string }> = {
+  passed: { label: "已就绪", tone: "text-emerald-700 dark:text-emerald-400" },
+  warning: { label: "有提醒", tone: "text-amber-700 dark:text-amber-400" },
+  blocking: { label: "待处理", tone: "text-destructive" },
 }
 
 export function PreparationCheckPage() {
   const { semesterId, context } = useResolvedSemesterId()
-  const [confirmOpen, setConfirmOpen] = useState(false)
-  const [refreshState, setRefreshState] = useState<"idle" | "checking" | "success">("idle")
-  const successTimer = useRef<number | null>(null)
   const check = useQuery({
     queryKey: ["preparation-check", semesterId],
     queryFn: () => api<PreparationCheck>(`/api/v1/semesters/${semesterId}/preparation-check`),
     enabled: semesterId !== null,
   })
-  useEffect(
-    () => () => {
-      if (successTimer.current !== null) window.clearTimeout(successTimer.current)
-    },
-    [],
-  )
+  const versions = useQuery({
+    queryKey: ["timetable-versions", semesterId],
+    queryFn: () =>
+      apiAllPages<TimetableVersion>(`/api/v1/semesters/${semesterId}/timetable-versions`),
+    enabled: semesterId !== null,
+  })
+  const draft = versions.data?.data.find((version) => version.status === "draft")
   const refresh = async () => {
-    if (refreshState === "checking") return
-    if (successTimer.current !== null) window.clearTimeout(successTimer.current)
-    setConfirmOpen(false)
-    setRefreshState("checking")
-    const [result] = await Promise.all([
-      check.refetch(),
-      new Promise<void>((resolve) => window.setTimeout(resolve, 900)),
-    ])
-    if (result.isError) {
-      setRefreshState("idle")
-      toast.error(`检查失败，仍显示上一次结果：${apiMessage(result.error)}`)
-      return
-    }
-    setRefreshState("success")
-    const refreshed = result.data?.data
-    const summary = refreshed ? summarizeCards(buildPreparationCards(refreshed)) : null
-    toast.success(
-      summary ? `检查完成：${summary.passed} 项通过 · ${summary.warnings} 项提醒` : "检查完成",
-    )
-    successTimer.current = window.setTimeout(() => {
-      setRefreshState("idle")
-      successTimer.current = null
-    }, 1600)
+    const result = await check.refetch()
+    if (result.isError) toast.error(`检查失败：${apiMessage(result.error)}`)
+    else toast.success("排课准备检查已更新")
   }
 
   if (semesterId === null) {
@@ -102,321 +59,209 @@ export function PreparationCheckPage() {
     )
   }
 
+  const planningPath = semesterPath(semesterId, "planning")
+  const data = check.data?.data
+  const preparationChecks = data?.checks.filter((item) => item.key !== "current_version") ?? []
+  const blocking = preparationChecks.filter((item) => item.status === "blocking").length
+  const warnings = preparationChecks.filter((item) => item.status === "warning").length
+
   return (
     <>
-      <PageHeader title="排课准备" description="确认关键数据和规则已就绪，再进入自动排课。" />
-      <SchedulingWorkflow />
-      {check.isLoading ? (
-        <LoadingState label="正在检查排课输入…" />
-      ) : !check.data ? (
-        <ErrorState retry={() => void check.refetch()} />
-      ) : (
-        <PreparationContent
-          data={check.data.data}
-          semesterId={semesterId}
-          refreshState={refreshState}
-          onRefresh={() => setConfirmOpen(true)}
-        />
-      )}
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>重新检查排课条件？</DialogTitle>
-            <DialogDescription>
-              将重新检查当前学期的 {check.data?.data.checks.length ?? 0}{" "}
-              项排课条件，不会修改任何数据。
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmOpen(false)}>
-              取消
-            </Button>
-            <Button onClick={() => void refresh()}>
-              <RefreshCwIcon />
-              开始检查
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
-  )
-}
-
-function PreparationContent({
-  data,
-  semesterId,
-  refreshState,
-  onRefresh,
-}: {
-  data: PreparationCheck
-  semesterId: number
-  refreshState: "idle" | "checking" | "success"
-  onRefresh: () => void
-}) {
-  const checking = refreshState === "checking"
-  const generationPath = semesterPath(semesterId, "generate")
-  const cards = buildPreparationCards(data)
-  const cardSummary = summarizeCards(cards)
-  const groups = buildPreparationGroups(cards)
-  const readinessText = data.ready ? "可以生成" : "暂不可生成"
-  const summaryText = checking
-    ? `正在检查 ${cards.length} 项准备数据`
-    : [
-        `${cardSummary.passed} 项正常`,
-        cardSummary.warnings > 0 ? `${cardSummary.warnings} 项提醒` : null,
-        cardSummary.blocking > 0 ? `${cardSummary.blocking} 项阻塞` : null,
-      ]
-        .filter(Boolean)
-        .join(" · ")
-
-  return (
-    <div className="mx-auto w-full max-w-[1480px] p-4 md:p-6" aria-busy={checking}>
-      <section>
-        <div className="flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-center">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <span
-                className={cn(
-                  "size-2 rounded-full",
-                  checking
-                    ? "bg-muted-foreground motion-safe:animate-pulse"
-                    : data.ready
-                      ? "bg-emerald-500"
-                      : "bg-rose-500",
-                )}
-                aria-hidden="true"
-              />
-              <h2 className="text-base font-semibold">检查结果</h2>
-            </div>
-            <p className="mt-1.5 text-sm text-muted-foreground" aria-live="polite">
-              {checking ? (
-                summaryText
-              ) : (
-                <>
-                  {refreshState === "success" && "刚刚完成 · "}
-                  <span
-                    className={cn("font-medium", data.ready ? "text-emerald-700" : "text-rose-700")}
-                  >
-                    {readinessText}
-                  </span>
-                  {` · ${summaryText}`}
-                </>
-              )}
-            </p>
+      <PageHeader title="排课准备" />
+      <div className="space-y-5 p-4 md:p-7">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div
+            role="status"
+            aria-live="polite"
+            className="flex flex-wrap items-center gap-2 text-sm"
+          >
+            {check.isFetching ? (
+              <span className="text-muted-foreground">正在检查排课准备…</span>
+            ) : check.isError ? (
+              <span className="text-destructive">
+                {data ? "检查未更新，以下为上次结果" : "检查暂不可用"}
+              </span>
+            ) : data ? (
+              <>
+                <span
+                  className={cn(
+                    "font-medium",
+                    data.ready ? statusStyle.passed.tone : statusStyle.blocking.tone,
+                  )}
+                >
+                  {data.ready ? "准备就绪" : `${blocking} 项待处理`}
+                </span>
+                {warnings > 0 && <span className="text-muted-foreground">· {warnings} 项提醒</span>}
+              </>
+            ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className={refreshState === "success" ? "text-emerald-700" : undefined}
-              disabled={checking}
-              onClick={onRefresh}
-            >
-              {refreshState === "success" ? (
-                <CheckIcon />
-              ) : (
-                <RefreshCwIcon className={checking ? "motion-safe:animate-spin" : undefined} />
-              )}
-              {checking ? "检查中…" : refreshState === "success" ? "已更新" : "重新检查"}
+            <Button variant="outline" disabled={check.isFetching} onClick={() => void refresh()}>
+              <RefreshCwIcon className={check.isFetching ? "animate-spin" : undefined} />
+              {check.isFetching ? "检查中…" : "重新检查"}
             </Button>
+            {data && data.summary.current_version_count > 0 && (
+              <Button
+                variant="outline"
+                nativeButton={false}
+                render={<Link to={semesterPath(semesterId, "timetable")} />}
+              >
+                查看已发布课表
+              </Button>
+            )}
             <Button
-              size="sm"
-              disabled={checking || !data.ready}
-              aria-disabled={checking || !data.ready}
-              className={checking || !data.ready ? "pointer-events-none opacity-50" : undefined}
               nativeButton={false}
-              render={<Link to={generationPath} />}
+              render={<Link to={draft ? `${planningPath}?version=${draft.id}` : planningPath} />}
             >
-              开始自动排课
+              {draft ? "继续编排" : "进入编排"}
               <ArrowRightIcon />
             </Button>
           </div>
         </div>
-
-        {checking && (
-          <div
-            className="h-px overflow-hidden bg-muted"
-            role="progressbar"
-            aria-label="正在重新检查排课条件"
-          >
-            <div className="preparation-progress-indicator h-full w-1/3 bg-primary/70" />
+        {check.isLoading ? (
+          <LoadingState label="正在载入准备事项…" />
+        ) : !data ? (
+          <ErrorState retry={() => void refresh()} />
+        ) : (
+          <div className="grid items-start gap-4 lg:grid-cols-2">
+            {buildPreparationCards(data).map((card) => (
+              <PreparationCardView
+                key={card.destination}
+                card={card}
+                semesterId={semesterId}
+                checking={check.isFetching}
+                stale={check.isError}
+              />
+            ))}
           </div>
         )}
-
-        <div className="grid gap-6 pt-5 xl:grid-cols-3 xl:gap-5">
-          {groups.map((group) => (
-            <PreparationGroup
-              key={group.title}
-              title={group.title}
-              items={group.items}
-              semesterId={semesterId}
-              checking={checking}
-            />
-          ))}
-        </div>
-      </section>
-    </div>
+      </div>
+    </>
   )
 }
 
-function PreparationGroup({
-  title,
-  items,
+function PreparationCardView({
+  card,
   semesterId,
   checking,
+  stale,
 }: {
-  title: string
-  items: PreparationCard[]
+  card: PreparationCard
   semesterId: number
   checking: boolean
+  stale: boolean
 }) {
+  const status = card.checks.some((item) => item.status === "blocking")
+    ? "blocking"
+    : card.checks.some((item) => item.status === "warning")
+      ? "warning"
+      : "passed"
+  const issues = card.checks.filter((item) => item.status !== "passed")
+  const state = statusStyle[status]
+
   return (
-    <section>
-      <div className="mb-2 flex min-h-6 items-center px-1">
-        <h3 className="text-sm font-semibold text-foreground/90">{title}</h3>
-      </div>
-      <div className="space-y-2">
-        {items.map((item) => (
-          <PreparationRow key={item.key} item={item} semesterId={semesterId} checking={checking} />
-        ))}
-      </div>
+    <section className="overflow-hidden rounded-xl border bg-card">
+      <Link
+        to={semesterPath(semesterId, card.destination)}
+        className="group flex items-center justify-between gap-4 p-5 outline-none transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+      >
+        <div className="min-w-0">
+          <h2 className="font-semibold">{card.title}</h2>
+          <p className="mt-2 text-sm text-muted-foreground">{card.summary}</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-4">
+          <span
+            className={cn(
+              "text-xs",
+              checking || stale || (card.optional && status === "passed")
+                ? "text-muted-foreground"
+                : state.tone,
+            )}
+          >
+            {checking
+              ? "检查中"
+              : stale
+                ? "待复核"
+                : card.optional && status === "passed"
+                  ? "可选"
+                  : state.label}
+          </span>
+          <ArrowRightIcon
+            className="size-4 text-muted-foreground group-hover:text-foreground"
+            aria-hidden="true"
+          />
+        </div>
+      </Link>
+      {issues.length > 0 && (
+        <ul className="space-y-2 px-5 pb-4">
+          {issues.map((issue) => (
+            <li key={issue.key}>
+              <Link
+                to={withSemesterId(semesterId, issue.fix_path)}
+                title={issue.message}
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-sm text-sm underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring",
+                  stale || checking ? "text-muted-foreground" : statusStyle[issue.status].tone,
+                )}
+              >
+                {issueLabel(issue)}
+                <ArrowRightIcon className="size-3.5 shrink-0" aria-hidden="true" />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   )
 }
 
-function PreparationRow({
-  item,
-  semesterId,
-  checking,
-}: {
-  item: PreparationCard
-  semesterId: number
-  checking: boolean
-}) {
-  const state = statusStyle[item.status]
-  const targetPath = withSemesterId(semesterId, item.fixPath)
-
-  return (
-    <Link
-      to={targetPath}
-      className="grid min-h-14 grid-cols-[minmax(0,1fr)_auto_auto_1rem] items-center gap-x-3 rounded-lg border bg-card px-3.5 py-2.5 outline-none transition-colors hover:border-foreground/20 hover:bg-muted/20 focus-visible:border-ring/50 focus-visible:ring-2 focus-visible:ring-ring/20 sm:grid-cols-[minmax(0,1fr)_7rem_3.25rem_1rem]"
-    >
-      <span className="min-w-0 truncate text-sm font-medium">{item.title}</span>
-      <span className="whitespace-nowrap text-right text-sm font-semibold tabular-nums">
-        {item.value}
-      </span>
-      <span
-        className={cn(
-          "justify-self-end whitespace-nowrap rounded-md border px-1.5 py-px text-[10px] font-medium leading-4",
-          checking ? "border-border bg-muted text-muted-foreground" : state.tone,
-        )}
-      >
-        {checking ? "检查中" : state.label}
-      </span>
-      <ArrowRightIcon className="size-4 text-muted-foreground" aria-hidden="true" />
-    </Link>
-  )
-}
-
-function buildPreparationGroups(cards: PreparationCard[]) {
-  const byKey = new Map(cards.map((card) => [card.key, card]))
-  const pick = (...keys: string[]) =>
-    keys.map((key) => byKey.get(key)).filter((card): card is PreparationCard => card !== undefined)
-
-  return [
-    { title: "基础配置", items: pick("schedule_template", "class_settings") },
-    {
-      title: "教学数据",
-      items: pick("confirmed_assignments", "assignment_resources", "theoretical_capacity"),
-    },
-    { title: "规则与课表", items: pick("fixed_placements", "constraints", "current_version") },
-  ]
-}
-
 function buildPreparationCards(data: PreparationCheck): PreparationCard[] {
-  const checks = new Map(data.checks.map((item) => [item.key, item]))
-  const getCheck = (key: string) => checks.get(key)
-  const status = (key: string): CheckStatus => getCheck(key)?.status ?? "blocking"
-  const fixPath = (key: string, fallback: string) => getCheck(key)?.fix_path ?? fallback
-  const ruleStatus = worstStatus(status("constraint_integrity"), status("active_constraints"))
-
+  const checks = (...keys: string[]) => data.checks.filter((item) => keys.includes(item.key))
   return [
     {
-      key: "schedule_template",
-      title: "学期作息",
-      value: `${data.summary.active_days} 天`,
-      status: status("schedule_template"),
-      fixPath: fixPath("schedule_template", "/semester/setup?section=schedule-template"),
+      title: "班级与作息",
+      destination: "setup",
+      summary: `${data.summary.active_class_settings} 个班级 · 每周 ${data.summary.active_days} 天 · ${data.summary.available_slots_per_resource} 个可排课节`,
+      checks: checks("schedule_template", "class_settings"),
     },
     {
-      key: "class_settings",
-      title: "学期班级",
-      value: `${data.summary.active_class_settings} 个班级`,
-      status: status("class_settings"),
-      fixPath: fixPath("class_settings", "/semester/setup?section=classes"),
+      title: "任课与课时",
+      destination: "assignments",
+      summary: `${data.summary.confirmed_assignments} 条已确认任课 · 每周 ${data.summary.required_entries} 节`,
+      checks: checks("confirmed_assignments", "assignment_resources", "theoretical_capacity"),
     },
     {
-      key: "confirmed_assignments",
-      title: "任课关系",
-      value: `${data.summary.confirmed_assignments} 条`,
-      status: status("confirmed_assignments"),
-      fixPath: fixPath("confirmed_assignments", "/scheduling/assignments"),
+      title: "排课规则",
+      destination: "constraints",
+      summary: `${data.summary.active_hard_constraints} 条硬约束 · ${data.summary.active_soft_constraints} 条排课偏好`,
+      checks: checks("constraint_integrity", "active_constraints"),
     },
     {
-      key: "assignment_resources",
-      title: "授课资源",
-      value: `${data.summary.assignment_resource_issues} 项异常`,
-      status: status("assignment_resources"),
-      fixPath: fixPath("assignment_resources", "/scheduling/assignments?filter=issues"),
-    },
-    {
-      key: "theoretical_capacity",
-      title: "理论容量",
-      value: `${data.summary.available_slots_per_resource} 个槽位`,
-      status: status("theoretical_capacity"),
-      fixPath: fixPath("theoretical_capacity", "/scheduling/assignments?filter=capacity"),
-    },
-    {
-      key: "fixed_placements",
       title: "固定安排",
-      value: `${data.summary.fixed_placements} 条`,
-      status: status("fixed_placements"),
-      fixPath: fixPath("fixed_placements", "/scheduling/constraints?tab=fixed"),
-    },
-    {
-      key: "constraints",
-      title: "规则与约束",
-      value: `${data.summary.active_constraints} 条`,
-      status: ruleStatus,
-      fixPath:
-        ruleStatus === status("constraint_integrity")
-          ? fixPath("constraint_integrity", "/scheduling/constraints")
-          : fixPath("active_constraints", "/scheduling/constraints"),
-    },
-    {
-      key: "current_version",
-      title: "当前课表",
-      value: `${data.summary.current_version_count} 个基线`,
-      status: status("current_version"),
-      fixPath: fixPath("current_version", "/scheduling/timetable"),
+      destination: "fixed-placements",
+      summary:
+        data.summary.fixed_placements > 0
+          ? `${data.summary.fixed_placements} 条已启用`
+          : "未设置固定安排",
+      checks: checks("fixed_placements"),
+      optional: data.summary.fixed_placements === 0,
     },
   ]
 }
 
-function worstStatus(...statuses: CheckStatus[]): CheckStatus {
-  return statuses.reduce((worst, current) =>
-    statusPriority[current] > statusPriority[worst] ? current : worst,
-  )
-}
-
-function summarizeCards(cards: PreparationCard[]) {
-  return cards.reduce(
-    (summary, card) => {
-      if (card.status === "passed") summary.passed += 1
-      if (card.status === "warning") summary.warnings += 1
-      if (card.status === "blocking") summary.blocking += 1
-      return summary
-    },
-    { passed: 0, warnings: 0, blocking: 0 },
-  )
+function issueLabel(check: PreparationCheckItem) {
+  switch (check.key) {
+    case "assignment_resources":
+      return `${check.issue_count} 项资源异常`
+    case "theoretical_capacity":
+      return "查看课时容量问题"
+    case "fixed_placements":
+      return `${check.issue_count} 项固定安排冲突`
+    case "constraint_integrity":
+      return `${check.issue_count} 项规则需要修正`
+    case "active_constraints":
+      return "尚未设置排课偏好"
+    default:
+      return check.message
+  }
 }

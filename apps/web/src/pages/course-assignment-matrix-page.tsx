@@ -20,6 +20,7 @@ import { useResolvedSemesterId } from "@/lib/semester"
 import type {
   ClassSetting,
   Course,
+  Grade,
   PaginationMeta,
   Room,
   Semester,
@@ -29,6 +30,7 @@ import type {
   WeekPattern,
 } from "@/lib/types"
 import { AssignmentEditorDialog, type AssignmentEditorSeed } from "@/components/assignment-editor"
+import { AssignmentPreparationIssues } from "@/components/assignment-preparation-issues"
 import { GridSelectionOverlay } from "@/components/grid-selection-frame"
 import {
   buildAssignmentGroups,
@@ -40,7 +42,6 @@ import { ListToolbar, ToolbarSelect } from "@/components/list-toolbar"
 import { RoomPicker, TeacherPicker } from "@/components/resource-picker"
 import { SimpleSelect } from "@/components/simple-select"
 import { EmptyList, ErrorState, Field, LoadingState, PageHeader } from "@/components/page"
-import { SchedulingWorkflow } from "@/components/scheduling-workflow"
 import { StatusBadge } from "@/components/status-badge"
 import { TableActionButton } from "@/components/table-action-button"
 import { TablePagination } from "@/components/table-pagination"
@@ -98,7 +99,7 @@ interface AssignmentTemplate {
 }
 
 const viewLabels: Record<View, string> = {
-  matrix: "班级 × 课程矩阵",
+  matrix: "班级 × 课程",
   class: "班级视角",
   teacher: "教师视角",
   course: "课程视角",
@@ -124,9 +125,10 @@ export function CourseAssignmentMatrixPage() {
   const { semesterId, context } = useResolvedSemesterId()
   const client = useQueryClient()
   const [urlParams, setUrlParams] = useHashPreservingSearchParams()
+  const preparationFilter = enumParam(urlParams, "filter", ["issues", "capacity", ""], "")
   const [view, setView] = useState<View>(() => enumParam(urlParams, "view", viewValues, "matrix"))
   const [search, setSearch] = useState(() => urlParams.get("q") ?? "")
-  const [gradeFilter, setGradeFilter] = useState(() => numericFilterParam(urlParams, "grade", ""))
+  const [gradeFilter, setGradeFilter] = useState(() => numericFilterParam(urlParams, "grade"))
   const [courseFilter, setCourseFilter] = useState(() => numericFilterParam(urlParams, "course"))
   const [statusFilter, setStatusFilter] = useState(() =>
     enumParam(urlParams, "status", ["all", "draft", "confirmed", "inactive"], "all"),
@@ -157,6 +159,14 @@ export function CourseAssignmentMatrixPage() {
     queryFn: () => apiAllPages<ClassSetting>(`/api/v1/semesters/${semesterId}/class-settings`),
     enabled: semesterId !== null,
   })
+  const gradeCatalog = useQuery({
+    queryKey: ["grades"],
+    queryFn: () => apiAllPages<Grade>("/api/v1/grades"),
+  })
+  const gradeOrder = useMemo(
+    () => new Map((gradeCatalog.data?.data ?? []).map((grade) => [grade.id, grade.sort_order])),
+    [gradeCatalog.data?.data],
+  )
   const courses = useQuery({
     queryKey: ["courses"],
     queryFn: () => apiAllPages<Course>("/api/v1/courses"),
@@ -183,28 +193,34 @@ export function CourseAssignmentMatrixPage() {
             setting.school_class.grade,
           ]),
         ).values(),
+      ).sort(
+        (a, b) => (gradeOrder.get(a.id) ?? a.id) - (gradeOrder.get(b.id) ?? b.id) || a.id - b.id,
       ),
-    [settings.data?.data],
+    [gradeOrder, settings.data?.data],
   )
   useEffect(() => {
-    if (grades[0] && !grades.some((grade) => String(grade.id) === gradeFilter)) {
-      setGradeFilter(String(grades[0].id))
+    if (
+      settings.isSuccess &&
+      gradeFilter !== "all" &&
+      !grades.some((grade) => String(grade.id) === gradeFilter)
+    ) {
+      setGradeFilter("all")
     }
-  }, [gradeFilter, grades])
+  }, [gradeFilter, grades, settings.isSuccess])
 
   const matrixAssignments = useQuery({
     queryKey: ["teaching-assignments", semesterId, "matrix", gradeFilter],
     queryFn: () =>
       apiAllPages<TeachingAssignment>(
-        `/api/v1/semesters/${semesterId}/teaching-assignments?grade_id=${gradeFilter}`,
+        `/api/v1/semesters/${semesterId}/teaching-assignments${gradeFilter === "all" ? "" : `?grade_id=${gradeFilter}`}`,
       ),
-    enabled: semesterId !== null && Boolean(gradeFilter),
+    enabled: semesterId !== null,
   })
   const tablePath = useMemo(() => {
     const params = new URLSearchParams({ page: String(page), per_page: String(pageSize) })
     if (search.trim()) params.set("search", search.trim())
     if (statusFilter !== "all") params.set("status", statusFilter)
-    if (isDraftReview && gradeFilter) params.set("grade_id", gradeFilter)
+    if (isDraftReview && gradeFilter !== "all") params.set("grade_id", gradeFilter)
     return `/api/v1/semesters/${semesterId}/teaching-assignments?${params}`
   }, [gradeFilter, isDraftReview, page, pageSize, search, semesterId, statusFilter])
   const tableAssignments = useQuery({
@@ -215,7 +231,7 @@ export function CourseAssignmentMatrixPage() {
   const groupedPath = useMemo(() => {
     const params = new URLSearchParams()
     if (statusFilter !== "all") params.set("status", statusFilter)
-    if (view === "class" && gradeFilter) params.set("grade_id", gradeFilter)
+    if (view === "class" && gradeFilter !== "all") params.set("grade_id", gradeFilter)
     return `/api/v1/semesters/${semesterId}/teaching-assignments?${params}`
   }, [gradeFilter, semesterId, statusFilter, view])
   const groupedAssignments = useQuery({
@@ -248,7 +264,7 @@ export function CourseAssignmentMatrixPage() {
           view: view === "matrix" ? null : view,
           review: isDraftReview ? "draft" : null,
           q: search.trim() || null,
-          grade: gradeFilter || null,
+          grade: gradeFilter === "all" ? null : gradeFilter,
           course: courseFilter === "all" ? null : courseFilter,
           status: statusFilter === "all" ? null : statusFilter,
           page: page === 1 ? null : page,
@@ -319,7 +335,7 @@ export function CourseAssignmentMatrixPage() {
       .filter(
         (setting) =>
           setting.status === "active" &&
-          String(setting.school_class.grade_id) === gradeFilter &&
+          (gradeFilter === "all" || String(setting.school_class.grade_id) === gradeFilter) &&
           (!query ||
             setting.school_class.name.toLocaleLowerCase("zh-CN").includes(query) ||
             assignments.some(
@@ -330,8 +346,14 @@ export function CourseAssignmentMatrixPage() {
                   .includes(query),
             )),
       )
-      .sort((a, b) => a.school_class.name.localeCompare(b.school_class.name, "zh-CN"))
-  }, [gradeFilter, matrixAssignments.data?.data, search, settings.data?.data])
+      .sort(
+        (a, b) =>
+          (gradeOrder.get(a.school_class.grade_id) ?? a.school_class.grade_id) -
+            (gradeOrder.get(b.school_class.grade_id) ?? b.school_class.grade_id) ||
+          a.school_class.grade_id - b.school_class.grade_id ||
+          a.school_class.name.localeCompare(b.school_class.name, "zh-CN", { numeric: true }),
+      )
+  }, [gradeFilter, gradeOrder, matrixAssignments.data?.data, search, settings.data?.data])
   const assignmentMap = useMemo(
     () =>
       new Map(
@@ -377,9 +399,10 @@ export function CourseAssignmentMatrixPage() {
             groupedView,
             groupedAssignments.data?.data ?? [],
             settings.data?.data ?? [],
+            gradeOrder,
           )
         : [],
-    [groupedAssignments.data?.data, groupedView, settings.data?.data],
+    [gradeOrder, groupedAssignments.data?.data, groupedView, settings.data?.data],
   )
   const visibleAssignmentGroups = useMemo(
     () => filterAssignmentGroups(assignmentGroups, search),
@@ -398,7 +421,7 @@ export function CourseAssignmentMatrixPage() {
     (assignment) => assignment.status === "draft",
   ).length
   const groupedAssignmentCount = visibleGroupedAssignments.size
-  const draftReviewScope = view === "class" ? "本年级" : "当前学期"
+  const draftReviewScope = view === "class" && gradeFilter !== "all" ? "本年级" : "当前学期"
   const selectCell = (cell: MatrixCell, event: MouseEvent<HTMLButtonElement>) => {
     if (event.shiftKey && anchorKey) {
       const anchor = cellMap.get(anchorKey)
@@ -544,7 +567,7 @@ export function CourseAssignmentMatrixPage() {
     )
   }
   const copyPreviousGrade = async () => {
-    if (!sourceSemester || !gradeFilter || !etag) return
+    if (!sourceSemester || gradeFilter === "all" || !etag) return
     try {
       const source = await apiAllPages<TeachingAssignment>(
         `/api/v1/semesters/${sourceSemester.id}/teaching-assignments?grade_id=${gradeFilter}&status=confirmed`,
@@ -574,7 +597,7 @@ export function CourseAssignmentMatrixPage() {
   if (!semesterId && !context.isLoading)
     return (
       <>
-        <PageHeader title="任课关系" />
+        <PageHeader title="任课与课时" />
         <EmptyList title="尚未设置当前学期" description="请先设置当前开放学期。" />
       </>
     )
@@ -607,7 +630,7 @@ export function CourseAssignmentMatrixPage() {
           教学组
         </Button>
       )}
-      {sourceSemester && gradeFilter && (
+      {sourceSemester && gradeFilter !== "all" && (
         <Button variant="outline" onClick={() => void copyPreviousGrade()}>
           <CopyIcon />
           复制上学期本年级
@@ -623,11 +646,26 @@ export function CourseAssignmentMatrixPage() {
   return (
     <>
       <PageHeader
-        title="任课关系"
+        title="任课与课时"
         description="按班级和课程批量维护教师、周课时、周型、连排和教室方式。"
       />
-      <SchedulingWorkflow />
       <div className="p-4 md:p-6">
+        {semesterId && preparationFilter && (
+          <AssignmentPreparationIssues
+            semesterId={semesterId}
+            filter={preparationFilter}
+            settings={settings.data?.data ?? []}
+            teachers={teachers.data?.data ?? []}
+            rooms={rooms.data?.data ?? []}
+            disabled={current.status === "closed"}
+            onEdit={(assignment) => setEditor({ assignment })}
+            onClose={() =>
+              setUrlParams((current) => mergeSearchParams(current, { filter: null }), {
+                replace: true,
+              })
+            }
+          />
+        )}
         <div className="surface-panel overflow-hidden">
           <ListToolbar
             search={search}
@@ -646,7 +684,7 @@ export function CourseAssignmentMatrixPage() {
                     <Button
                       size="sm"
                       variant="secondary"
-                      aria-label={`查看本年级 ${gradeDrafts.length} 条待确认任课关系`}
+                      aria-label={`查看${gradeFilter === "all" ? "全部年级" : "本年级"} ${gradeDrafts.length} 条待确认任课关系`}
                       onClick={openDraftReview}
                     >
                       <CircleAlertIcon className="text-amber-600" />
@@ -656,7 +694,7 @@ export function CourseAssignmentMatrixPage() {
                   ) : (
                     <span className="inline-flex items-center gap-1.5 text-emerald-700">
                       <CheckCircle2Icon className="size-4" />
-                      本年级已全部确认
+                      {gradeFilter === "all" ? "全部年级已确认" : "本年级已全部确认"}
                     </span>
                   )}
                 </>
@@ -701,6 +739,7 @@ export function CourseAssignmentMatrixPage() {
             </ToolbarSelect>
             {(view === "matrix" || view === "class") && (
               <ToolbarSelect value={gradeFilter} onChange={setGradeFilter} label="年级">
+                <option value="all">全部年级</option>
                 {grades.map((grade) => (
                   <option key={grade.id} value={grade.id}>
                     {grade.name}
@@ -734,7 +773,7 @@ export function CourseAssignmentMatrixPage() {
             <div className="flex flex-wrap items-center gap-2 border-b bg-muted/30 px-4 py-2.5 text-sm">
               <Button size="sm" variant="ghost" onClick={closeDraftReview}>
                 <ArrowLeftIcon />
-                返回矩阵
+                返回任课表
               </Button>
               <span className="text-muted-foreground">已选 {selectedAssignmentIds.length} 条</span>
               <Button
@@ -804,13 +843,13 @@ export function CourseAssignmentMatrixPage() {
                 </div>
               )}
               {matrixAssignments.isLoading ? (
-                <LoadingState label="正在加载本年级矩阵…" />
+                <LoadingState label="正在加载任课表…" />
               ) : matrixAssignments.isError ? (
                 <ErrorState retry={() => void matrixAssignments.refetch()} />
               ) : !matrixClasses.length ? (
                 <EmptyList
-                  title="本年级还没有启用班级"
-                  description="先到学期配置中启用班级，再维护课程与任课关系。"
+                  title={gradeFilter === "all" ? "本学期还没有启用班级" : "本年级还没有启用班级"}
+                  description="先到班级与作息中启用班级，再维护课程与任课关系。"
                 />
               ) : !activeCourses.length ? (
                 <EmptyList
@@ -824,12 +863,12 @@ export function CourseAssignmentMatrixPage() {
                       aria-hidden="true"
                       className="flex items-center justify-between border-b bg-muted px-3 py-2 text-xs font-medium text-muted-foreground md:hidden"
                     >
-                      <span>左右滑动查看完整矩阵</span>
+                      <span>左右滑动查看完整任课表</span>
                       <MoveHorizontalIcon className="size-4" />
                     </div>
                     <div
                       role="region"
-                      aria-label="可横向滚动的任课矩阵"
+                      aria-label="可横向滚动的任课表"
                       tabIndex={0}
                       className="max-h-[calc(100vh-250px)] min-h-[520px] overflow-auto focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/30"
                     >
@@ -1035,11 +1074,11 @@ export function CourseAssignmentMatrixPage() {
             isDraftReview ? (
               <EmptyList
                 title={`${draftReviewScope}已全部确认`}
-                description="没有待确认任课关系，可以返回矩阵继续维护。"
+                description="没有待确认任课关系，可以返回任课表继续维护。"
                 actions={
                   <Button variant="outline" onClick={closeDraftReview}>
                     <ArrowLeftIcon />
-                    返回矩阵
+                    返回任课表
                   </Button>
                 }
               />

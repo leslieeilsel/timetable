@@ -315,7 +315,7 @@ function SemesterDashboard({
                     />
                     <Shortcut
                       to={semesterPath(semester.id, "preparation")}
-                      title="排课准备检查"
+                      title="排课准备"
                       description="检查资料完整性和规则可行性"
                       icon={ListChecksIcon}
                     />
@@ -414,16 +414,16 @@ function PreparationSummary({
       label: "学期班级",
       note: `${summary.class_count} 个班级`,
       done: summary.class_count > 0,
-      to: semesterPath(semester.id, "setup"),
+      to: `${semesterPath(semester.id, "setup")}?section=classes`,
     },
     {
       label: "作息设置",
       note: summary.template_ready ? "已设置" : "未设置",
       done: summary.template_ready,
-      to: semesterPath(semester.id, "setup"),
+      to: `${semesterPath(semester.id, "setup")}?section=schedule-template`,
     },
     {
-      label: "任课关系",
+      label: "任课与课时",
       note: `${summary.confirmed_count} / ${summary.assignment_count} 条已确认`,
       done: summary.assignment_count > 0 && summary.assignment_count === summary.confirmed_count,
       to: semesterPath(semester.id, "assignments"),

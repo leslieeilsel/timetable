@@ -8,6 +8,7 @@ export type SemesterDestination =
   | "preparation"
   | "assignments"
   | "constraints"
+  | "fixed-placements"
   | "generate"
   | "timetable"
   | "planning"
@@ -20,6 +21,7 @@ const currentSemesterEntries: Record<SemesterDestination, string> = {
   preparation: "/scheduling/preparation",
   assignments: "/scheduling/assignments",
   constraints: "/scheduling/constraints",
+  "fixed-placements": "/scheduling/fixed-placements",
   generate: "/scheduling/generate",
   timetable: "/semester/timetable",
   planning: "/scheduling/planning",
@@ -41,6 +43,7 @@ const schedulingDestinations = new Set<SemesterDestination>([
   "preparation",
   "assignments",
   "constraints",
+  "fixed-placements",
   "generate",
   "planning",
 ])
@@ -69,7 +72,7 @@ export function semesterDestinationForPath(path: string): SemesterDestination | 
   const currentDestination = destinationByCurrentEntry.get(pathname)
   if (currentDestination) return currentDestination
   const match =
-    /^\/semesters\/[1-9]\d*\/(setup|preparation|assignments|constraints|generate|timetable|planning|adjustments|long-term|leaves)$/.exec(
+    /^\/semesters\/[1-9]\d*\/(setup|preparation|assignments|constraints|fixed-placements|generate|timetable|planning|adjustments|long-term|leaves)$/.exec(
       pathname,
     )
   return (match?.[1] as SemesterDestination | undefined) ?? null

@@ -194,7 +194,7 @@ it('blocks fixed placements forbidden by an active hard rule and clears the bloc
         ->assertOk()->assertJsonPath('data.ready', false);
     $check = collect($response->json('data.checks'))->firstWhere('key', 'fixed_placements');
     expect($check['status'])->toBe('blocking')
-        ->and($check['fix_path'])->toBe('/scheduling/constraints?tab=fixed')
+        ->and($check['fix_path'])->toBe('/scheduling/fixed-placements')
         ->and($check['items'][0]['placement_id'])->toBe($placementId)
         ->and($check['items'][0]['constraint_id'])->toBe($constraintId);
 

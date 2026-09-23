@@ -66,6 +66,11 @@ const SchedulingConstraintsPage = lazy(() =>
     default: module.SchedulingConstraintsPage,
   })),
 )
+const FixedPlacementsPage = lazy(() =>
+  import("@/pages/scheduling-constraints-page").then((module) => ({
+    default: module.FixedPlacementsPage,
+  })),
+)
 const ScheduleGenerationPage = lazy(() =>
   import("@/pages/schedule-generation-page").then((module) => ({
     default: module.ScheduleGenerationPage,
@@ -246,6 +251,14 @@ export default function App() {
               }
             />
             <Route
+              path="scheduling/fixed-placements"
+              element={
+                <RequireRole roles={["admin", "scheduler"]}>
+                  <CurrentSemesterNavigate destination="fixed-placements" />
+                </RequireRole>
+              }
+            />
+            <Route
               path="scheduling/timetable"
               element={<CurrentSemesterNavigate destination="planning" />}
             />
@@ -310,6 +323,14 @@ export default function App() {
               element={
                 <RequireRole roles={["admin", "scheduler"]}>
                   <ScheduleGenerationPage />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="semesters/:semesterId/fixed-placements"
+              element={
+                <RequireRole roles={["admin", "scheduler"]}>
+                  <FixedPlacementsPage />
                 </RequireRole>
               }
             />

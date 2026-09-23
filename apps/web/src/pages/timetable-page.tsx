@@ -1,9 +1,8 @@
-import { SchedulingWorkflow } from "@/components/scheduling-workflow"
 import { PublishTimetableDialog } from "@/components/publish-timetable-dialog"
 import type { GradeValidation } from "@/lib/grade-timetable"
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { useNavigate } from "react-router"
+import { Link, useNavigate } from "react-router"
 import {
   AlertTriangleIcon,
   ArrowRightLeftIcon,
@@ -646,7 +645,7 @@ export function TimetablePage({
     completeness.isSuccess &&
     !!selectedVersion &&
     resourcePendingItems > 0
-  const showGenerationAction = canMutate && !!selectedVersion && (versionIsStale || canFillCurrent)
+  const showGenerationAction = canMutate && canFillCurrent
   const hardConflictCount =
     validation.data?.data.hard_conflicts.length ?? selectedVersion?.hard_conflict_count ?? 0
   const softWarningCount = selectedVersion?.soft_warning_count ?? 0
@@ -740,7 +739,6 @@ export function TimetablePage({
         title={`${current.academic_year ? `${current.academic_year.name} · ` : ""}${current.name}课表`}
         description="切换年级、班级、教师和教室，从不同角度查看与检查排课结果。"
       />
-      {!readOnly && <SchedulingWorkflow />}
       <div className="p-4 md:p-7">
         {params.get("created") && params.get("version") === selectedVersionId && (
           <div
@@ -858,18 +856,25 @@ export function TimetablePage({
                 {showGenerationAction && (
                   <Button
                     disabled={replanStarting || draftCreating}
-                    onClick={() =>
-                      canFillCurrent
-                        ? void fillPendingForCurrentClass()
-                        : void navigate(semesterPath(semesterId, "generate"))
-                    }
+                    onClick={() => void fillPendingForCurrentClass()}
                   >
                     {replanStarting ? (
                       <LoaderCircleIcon className="animate-spin" />
                     ) : (
                       <SparklesIcon />
                     )}
-                    {canFillCurrent ? fillLabel : "重新排课"}
+                    {fillLabel}
+                  </Button>
+                )}
+                {canMutate && (
+                  <Button
+                    variant="outline"
+                    disabled={replanStarting || draftCreating || historyBusy}
+                    nativeButton={false}
+                    render={<Link to={semesterPath(semesterId, "generate")} />}
+                  >
+                    <SparklesIcon />
+                    自动排课
                   </Button>
                 )}
               </div>

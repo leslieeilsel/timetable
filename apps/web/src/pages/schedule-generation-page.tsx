@@ -41,7 +41,6 @@ import {
   TeacherPicker,
   teachersWithAssignmentCourses,
 } from "@/components/resource-picker"
-import { SchedulingWorkflow } from "@/components/scheduling-workflow"
 import { TablePagination } from "@/components/table-pagination"
 import { TimetableGrid, type TimetableView } from "@/components/timetable-grid"
 import { Button } from "@/components/ui/button"
@@ -257,14 +256,13 @@ export function ScheduleGenerationPage() {
         title="自动排课"
         description="按本次排课需求生成候选课表。生成后先预览，确认采用后才会影响当前课表。"
       />
-      <SchedulingWorkflow />
       <div className="flex justify-end px-4 pt-4 md:px-7">
         <Button
           variant="outline"
           nativeButton={false}
           render={<Link to={semesterPath(semesterId, "planning")} />}
         >
-          手工编排课表
+          返回编排课表
         </Button>
       </div>
       <div className="mx-auto w-full max-w-[1480px] space-y-5 p-4 md:p-6">

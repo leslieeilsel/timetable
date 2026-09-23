@@ -163,7 +163,7 @@ export function AssignmentEditorDialog({
           body: JSON.stringify(body),
         },
       )
-      toast.success(assignment ? "任课关系已更新" : "任课关系已加入矩阵")
+      toast.success(assignment ? "任课关系已更新" : "任课关系已添加")
       onClose()
       await onSaved()
     } catch (error) {
@@ -431,7 +431,7 @@ export function AssignmentEditorDialog({
             }
             onClick={() => void save()}
           >
-            {saving ? "正在保存…" : assignment ? "保存修改" : "加入矩阵"}
+            {saving ? "正在保存…" : assignment ? "保存修改" : "添加任课"}
           </Button>
         </DialogFooter>
       </DialogContent>

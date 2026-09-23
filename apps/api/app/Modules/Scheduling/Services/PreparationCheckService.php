@@ -135,7 +135,7 @@ class PreparationCheckService
             $fixedIssues === [] ? 'passed' : 'blocking',
             count($fixedIssues),
             $fixedIssues === [] ? "已校验 {$fixedCount} 条固定安排。" : '固定安排存在资源冲突或违反启用的禁排规则。',
-            '/scheduling/constraints?tab=fixed',
+            '/scheduling/fixed-placements',
             $fixedIssues,
         );
 

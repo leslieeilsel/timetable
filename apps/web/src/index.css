@@ -178,15 +178,6 @@
   }
 }
 
-@keyframes preparation-progress {
-  from {
-    transform: translateX(-100%);
-  }
-  to {
-    transform: translateX(300%);
-  }
-}
-
 /* transitions.dev: shared timing and state variables. */
 :root {
   --dropdown-open-dur: 250ms;
@@ -412,11 +403,6 @@
   box-shadow: 0 1px 2px color-mix(in oklch, var(--foreground) 8%, transparent);
 }
 
-.preparation-progress-indicator {
-  animation: preparation-progress 900ms linear infinite;
-  will-change: transform;
-}
-
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -440,12 +426,6 @@
 
   .t-skeleton-pulse {
     animation: none !important;
-  }
-
-  .preparation-progress-indicator {
-    width: 100%;
-    animation: none;
-    opacity: 0.7;
   }
 }
 

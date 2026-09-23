@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { Navigate, useLocation } from "react-router"
 import { CircleHelpIcon, PlusIcon } from "lucide-react"
 import { toast } from "sonner"
 import { api, apiAllPages, apiMessage } from "@/lib/api"
@@ -15,7 +16,7 @@ import {
   supportsConstraintKindCategory,
   unsupportedConstraintReason,
 } from "@/lib/scheduling-constraint-support"
-import { useResolvedSemesterId } from "@/lib/semester"
+import { semesterPath, useResolvedSemesterId } from "@/lib/semester"
 import type {
   ClassSetting,
   Course,
@@ -33,7 +34,6 @@ import { GridSelectionOverlay } from "@/components/grid-selection-frame"
 import { ListToolbar, ToolbarSelect } from "@/components/list-toolbar"
 import { AssignmentPicker, RoomPicker } from "@/components/resource-picker"
 import { SimpleSelect } from "@/components/simple-select"
-import { SchedulingWorkflow } from "@/components/scheduling-workflow"
 import { StatusBadge } from "@/components/status-badge"
 import {
   SearchableMultiPicker,
@@ -60,7 +60,6 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import {
   Table,
@@ -75,10 +74,33 @@ import { cn } from "@/lib/utils"
 const weekdayNames = ["", "周一", "周二", "周三", "周四", "周五", "周六", "周日"]
 
 export function SchedulingConstraintsPage() {
+  const { semesterId } = useResolvedSemesterId()
+  const { search, hash } = useLocation()
+  const params = new URLSearchParams(search)
+  if (semesterId && params.get("tab") === "fixed") {
+    params.delete("tab")
+    return (
+      <Navigate
+        to={{
+          pathname: semesterPath(semesterId, "fixed-placements"),
+          search: params.toString(),
+          hash,
+        }}
+        replace
+      />
+    )
+  }
+  return <SchedulingConfigurationPage key="rules" section="rules" />
+}
+
+export function FixedPlacementsPage() {
+  return <SchedulingConfigurationPage key="fixed" section="fixed" />
+}
+
+function SchedulingConfigurationPage({ section }: { section: "rules" | "fixed" }) {
   const { semesterId, context } = useResolvedSemesterId()
   const client = useQueryClient()
   const [urlParams, setUrlParams] = useHashPreservingSearchParams()
-  const [tab, setTab] = useState(() => enumParam(urlParams, "tab", ["rules", "fixed"], "rules"))
   const [search, setSearch] = useState(() => urlParams.get("q") ?? "")
   const deferredSearch = useDeferredValue(search)
   const [kind, setKind] = useState(() =>
@@ -119,7 +141,7 @@ export function SchedulingConstraintsPage() {
     setUrlParams(
       (current) =>
         mergeSearchParams(current, {
-          tab: tab === "rules" ? null : tab,
+          tab: null,
           q: search.trim() || null,
           kind: kind === "all" ? null : kind,
           status: status === "all" ? null : status,
@@ -130,17 +152,7 @@ export function SchedulingConstraintsPage() {
         }),
       { replace: true },
     )
-  }, [
-    kind,
-    placementPage,
-    placementPageSize,
-    rulePage,
-    rulePageSize,
-    search,
-    setUrlParams,
-    status,
-    tab,
-  ])
+  }, [kind, placementPage, placementPageSize, rulePage, rulePageSize, search, setUrlParams, status])
   const rules = useQuery({
     queryKey: [
       "scheduling-constraints",
@@ -160,7 +172,7 @@ export function SchedulingConstraintsPage() {
         `/api/v1/semesters/${semesterId}/scheduling-constraints?${query}`,
       )
     },
-    enabled: semesterId !== null,
+    enabled: semesterId !== null && section === "rules",
   })
   const placements = useQuery({
     queryKey: ["fixed-placements", semesterId, placementPage, placementPageSize],
@@ -168,7 +180,7 @@ export function SchedulingConstraintsPage() {
       api<FixedPlacement[]>(
         `/api/v1/semesters/${semesterId}/fixed-placements?page=${placementPage}&per_page=${placementPageSize}`,
       ),
-    enabled: semesterId !== null,
+    enabled: semesterId !== null && section === "fixed",
   })
   const template = useQuery({
     queryKey: ["schedule-template", semesterId],
@@ -276,23 +288,16 @@ export function SchedulingConstraintsPage() {
   if (!semesterId && !context.isLoading)
     return (
       <>
-        <PageHeader title="规则与约束" />
+        <PageHeader title={section === "rules" ? "排课规则" : "固定安排"} />
         <EmptyList title="尚未设置当前学期" description="请先设置当前开放学期。" />
       </>
     )
 
   return (
     <>
-      <PageHeader title="规则与约束" description="用硬约束保证可行，用软规则决定方案质量。" />
-      <SchedulingWorkflow />
+      <PageHeader title={section === "rules" ? "排课规则" : "固定安排"} />
       <div className="space-y-4 p-4 md:p-7">
-        <Tabs value={tab} onValueChange={setTab}>
-          <TabsList>
-            <TabsTrigger value="rules">规则库</TabsTrigger>
-            <TabsTrigger value="fixed">固定安排</TabsTrigger>
-          </TabsList>
-        </Tabs>
-        {tab === "rules" ? (
+        {section === "rules" ? (
           <section className="surface-panel overflow-hidden">
             <ListToolbar
               search={search}
@@ -1362,7 +1367,7 @@ function RuleDialog({
                         <div className="rounded-2xl border border-dashed px-4 py-6 text-center">
                           <p className="text-sm font-medium">当前学期没有可排课节</p>
                           <p className="mt-1 text-xs text-muted-foreground">
-                            请先在学期配置中启用工作日和课程课节。
+                            请先在班级与作息中启用工作日和课程课节。
                           </p>
                         </div>
                       )}

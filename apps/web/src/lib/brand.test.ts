@@ -11,9 +11,9 @@ describe("pageTitleForPath", () => {
 
   it("recognizes pages with dynamic identifiers", () => {
     expect(pageTitleForPath("/years/42")).toBe("学年详情")
-    expect(pageTitleForPath("/semesters/8/setup")).toBe("学期配置")
-    expect(pageTitleForPath("/semesters/8/preparation")).toBe("教学安排")
-    expect(pageTitleForPath("/semesters/8/assignments")).toBe("任课关系")
+    expect(pageTitleForPath("/semesters/8/setup")).toBe("班级与作息")
+    expect(pageTitleForPath("/semesters/8/preparation")).toBe("排课准备")
+    expect(pageTitleForPath("/semesters/8/assignments")).toBe("任课与课时")
     expect(pageTitleForPath("/semesters/8/constraints")).toBe("排课规则")
     expect(pageTitleForPath("/semesters/8/generate")).toBe("自动排课")
     expect(pageTitleForPath("/semesters/8/timetable")).toBe("查看课表")

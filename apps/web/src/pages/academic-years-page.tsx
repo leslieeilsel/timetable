@@ -651,7 +651,7 @@ export function AcademicYearDetailPage() {
                             nativeButton={false}
                             render={<Link to={`/semesters/${semester.id}/setup`} />}
                           >
-                            配置学期
+                            班级与作息
                           </Button>
                           {semester.status === "draft" && (
                             <>

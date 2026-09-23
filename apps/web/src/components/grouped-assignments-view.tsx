@@ -78,6 +78,7 @@ export function buildAssignmentGroups(
   view: GroupedAssignmentView,
   assignments: TeachingAssignment[],
   settings: ClassSetting[],
+  gradeOrder?: ReadonlyMap<number, number>,
 ) {
   const groups = new Map<string, MutableAssignmentGroup>()
   const settingMap = new Map(settings.map((setting) => [setting.school_class_id, setting]))
@@ -108,7 +109,8 @@ export function buildAssignmentGroups(
             key: `class:${assignment.school_class.id}`,
             name: assignment.school_class.name,
             subtitle: `${assignment.school_class.grade.name} · ${setting?.fixed_room?.name ?? "未设固定教室"}`,
-            sortRank: assignment.school_class.grade_id,
+            sortRank:
+              gradeOrder?.get(assignment.school_class.grade_id) ?? assignment.school_class.grade_id,
           },
           assignment,
           null,
@@ -125,7 +127,7 @@ export function buildAssignmentGroups(
               key: `class:${schoolClass.id}`,
               name: schoolClass.name,
               subtitle: `${schoolClass.grade.name} · ${setting?.fixed_room?.name ?? "未设固定教室"}`,
-              sortRank: schoolClass.grade_id,
+              sortRank: gradeOrder?.get(schoolClass.grade_id) ?? schoolClass.grade_id,
             },
             assignment,
             `教学组 · ${assignment.teaching_group?.name ?? "未命名教学组"}`,
