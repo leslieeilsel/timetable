@@ -12,13 +12,33 @@ import type { PreparationCheck } from "@/lib/types"
 import { workflowStepState } from "@/lib/scheduling-workflow"
 import { cn } from "@/lib/utils"
 
-const steps = [
-  { number: 1, label: "准备检查", destination: "preparation" },
-  { number: 2, label: "任课关系", destination: "assignments" },
-  { number: 3, label: "规则与约束", destination: "constraints" },
-  { number: 4, label: "方案生成", destination: "generate" },
-  { number: 5, label: "课表调整与诊断", destination: "timetable" },
-] satisfies Array<{ number: number; label: string; destination: SemesterDestination }>
+type WorkflowStep = {
+  number: number
+  label: string
+  destination: SemesterDestination
+  activeDestinations: SemesterDestination[]
+}
+
+const steps: WorkflowStep[] = [
+  {
+    number: 1,
+    label: "排课准备",
+    destination: "preparation",
+    activeDestinations: ["preparation", "assignments", "constraints"],
+  },
+  {
+    number: 2,
+    label: "方案生成",
+    destination: "generate",
+    activeDestinations: ["generate"],
+  },
+  {
+    number: 3,
+    label: "课表调整与诊断",
+    destination: "timetable",
+    activeDestinations: ["timetable"],
+  },
+]
 
 export function SchedulingWorkflow() {
   const { pathname } = useLocation()
@@ -38,7 +58,8 @@ export function SchedulingWorkflow() {
     >
       <ol className="flex min-w-max items-center py-2.5">
         {steps.map((step, index) => {
-          const active = step.destination === activeDestination
+          const active =
+            activeDestination !== null && step.activeDestinations.includes(activeDestination)
           const to = semesterPathOrCurrent(semesterId, step.destination)
           const state = workflowStepState(step.number, preparation.data?.data.checks)
           const completed = state === "complete" && !active

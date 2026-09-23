@@ -11,6 +11,8 @@ use App\Modules\DailyOperations\Models\CalendarException;
 use App\Modules\DailyOperations\Models\Substitution;
 use App\Modules\DailyOperations\Services\DailyTimetableService;
 use App\Modules\DailyOperations\Services\TimetableChangeMessages;
+use App\Modules\Timetable\Models\TimetableEntry;
+use App\Modules\Timetable\Services\LessonIdentityService;
 use App\Support\ApiProblemException;
 use App\Support\EtagService;
 use App\Support\WriteGuard;
@@ -27,6 +29,7 @@ class CalendarExceptionController
         private readonly AuditLogger $audit,
         private readonly DailyTimetableService $daily,
         private readonly TimetableChangeMessages $messages,
+        private readonly LessonIdentityService $lessonIdentities,
     ) {}
 
     public function timetable(Request $request, Semester $semester): JsonResponse
@@ -148,10 +151,24 @@ class CalendarExceptionController
                     'preview' => $preview,
                 ]);
             }
+            $originalLessonInstanceId = null;
+            if (isset($data['original_entry_id'])) {
+                $originalEntry = TimetableEntry::query()
+                    ->findOrFail((int) $data['original_entry_id']);
+                $originalLessonInstanceId = $this->lessonIdentities->ensureEntryIdentity($originalEntry)->id;
+            }
+            $relatedLessonInstanceId = null;
+            if (isset($data['related_entry_id'])) {
+                $relatedEntry = TimetableEntry::query()
+                    ->findOrFail((int) $data['related_entry_id']);
+                $relatedLessonInstanceId = $this->lessonIdentities->ensureEntryIdentity($relatedEntry)->id;
+            }
             $exception = CalendarException::query()->create([
                 ...$data,
                 'semester_id' => $lockedSemester->id,
                 'timetable_version_id' => $preview['version_id'],
+                'lesson_instance_id' => $originalLessonInstanceId,
+                'related_lesson_instance_id' => $relatedLessonInstanceId,
                 'status' => OperationalStatus::Active,
                 'created_by' => $actor->id,
             ]);

@@ -7,41 +7,57 @@ function check(key: string, status: PreparationCheckItem["status"]): Preparation
 }
 
 describe("workflowStepState", () => {
-  it("keeps the assignment step blocked when any assignment is waiting for confirmation", () => {
+  it("keeps the preparation step blocked when any required input is blocked", () => {
     expect(
-      workflowStepState(2, [
+      workflowStepState(1, [
+        check("schedule_template", "passed"),
+        check("class_settings", "passed"),
         check("confirmed_assignments", "blocking"),
         check("assignment_resources", "passed"),
         check("theoretical_capacity", "passed"),
+        check("fixed_placements", "passed"),
+        check("constraint_integrity", "passed"),
+        check("active_constraints", "passed"),
       ]),
     ).toBe("blocking")
   })
 
-  it("marks a step complete only when all of its checks pass", () => {
+  it("marks preparation complete only when all preparation checks pass", () => {
     expect(
-      workflowStepState(2, [
+      workflowStepState(1, [
+        check("schedule_template", "passed"),
+        check("class_settings", "passed"),
         check("confirmed_assignments", "passed"),
         check("assignment_resources", "passed"),
         check("theoretical_capacity", "passed"),
+        check("fixed_placements", "passed"),
+        check("constraint_integrity", "passed"),
+        check("active_constraints", "passed"),
       ]),
     ).toBe("complete")
   })
 
-  it("shows rule warnings without pretending the step is complete", () => {
+  it("shows preparation warnings without pretending the step is complete", () => {
     expect(
-      workflowStepState(3, [
+      workflowStepState(1, [
+        check("schedule_template", "passed"),
+        check("class_settings", "passed"),
+        check("confirmed_assignments", "passed"),
+        check("assignment_resources", "passed"),
+        check("theoretical_capacity", "passed"),
         check("fixed_placements", "passed"),
+        check("constraint_integrity", "passed"),
         check("active_constraints", "warning"),
       ]),
     ).toBe("warning")
   })
 
   it("treats a missing current timetable as pending instead of warning", () => {
-    expect(workflowStepState(4, [check("current_version", "warning")])).toBe("pending")
+    expect(workflowStepState(2, [check("current_version", "warning")])).toBe("pending")
   })
 
   it("shows a stale or missing current timetable as a warning in the adjustment step", () => {
-    expect(workflowStepState(5, [check("current_version", "warning")])).toBe("warning")
-    expect(workflowStepState(5, [check("current_version", "passed")])).toBe("complete")
+    expect(workflowStepState(3, [check("current_version", "warning")])).toBe("warning")
+    expect(workflowStepState(3, [check("current_version", "passed")])).toBe("complete")
   })
 })

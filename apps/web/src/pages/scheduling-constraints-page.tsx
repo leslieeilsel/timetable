@@ -31,7 +31,6 @@ import type {
 import { EmptyList, ErrorState, Field, LoadingState, PageHeader } from "@/components/page"
 import { GridSelectionOverlay } from "@/components/grid-selection-frame"
 import { ListToolbar, ToolbarSelect } from "@/components/list-toolbar"
-import { AiAssistantButton } from "@/components/ai-assistant"
 import { AssignmentPicker, RoomPicker } from "@/components/resource-picker"
 import { SimpleSelect } from "@/components/simple-select"
 import { SchedulingWorkflow } from "@/components/scheduling-workflow"
@@ -303,13 +302,10 @@ export function SchedulingConstraintsPage() {
                 <span>共 {rulePagination?.total ?? rules.data?.data.length ?? 0} 条规则</span>
               }
               actions={
-                <>
-                  <AiAssistantButton semesterId={semesterId} />
-                  <Button onClick={() => setEditingRule(null)}>
-                    <PlusIcon />
-                    新增规则
-                  </Button>
-                </>
+                <Button onClick={() => setEditingRule(null)}>
+                  <PlusIcon />
+                  新增规则
+                </Button>
               }
             >
               <ToolbarSelect value={kind} onChange={setKind} label="规则类型">

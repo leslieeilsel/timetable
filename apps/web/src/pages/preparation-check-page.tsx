@@ -1,17 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { Link } from "react-router"
 import { useQuery } from "@tanstack/react-query"
-import {
-  AlertTriangleIcon,
-  ArrowRightIcon,
-  CheckIcon,
-  CheckCircle2Icon,
-  CircleAlertIcon,
-  CircleDashedIcon,
-  Clock3Icon,
-  RefreshCwIcon,
-  ShieldCheckIcon,
-} from "lucide-react"
+import { ArrowRightIcon, CheckIcon, RefreshCwIcon } from "lucide-react"
 import { toast } from "sonner"
 import { api, apiMessage } from "@/lib/api"
 import { semesterPath, useResolvedSemesterId, withSemesterId } from "@/lib/semester"
@@ -31,24 +21,34 @@ import { cn } from "@/lib/utils"
 
 const statusStyle = {
   passed: {
-    icon: CheckCircle2Icon,
     label: "通过",
     tone: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    iconTone: "text-emerald-600",
   },
   warning: {
-    icon: AlertTriangleIcon,
     label: "提醒",
     tone: "border-amber-200 bg-amber-50 text-amber-700",
-    iconTone: "text-amber-600",
   },
   blocking: {
-    icon: CircleAlertIcon,
     label: "阻塞",
     tone: "border-rose-200 bg-rose-50 text-rose-700",
-    iconTone: "text-rose-600",
   },
 } as const
+
+type CheckStatus = PreparationCheckItem["status"]
+
+type PreparationCard = {
+  key: string
+  title: string
+  value: string
+  status: CheckStatus
+  fixPath: string
+}
+
+const statusPriority: Record<CheckStatus, number> = {
+  passed: 0,
+  warning: 1,
+  blocking: 2,
+}
 
 export function PreparationCheckPage() {
   const { semesterId, context } = useResolvedSemesterId()
@@ -81,7 +81,8 @@ export function PreparationCheckPage() {
       return
     }
     setRefreshState("success")
-    const summary = result.data?.data.summary
+    const refreshed = result.data?.data
+    const summary = refreshed ? summarizeCards(buildPreparationCards(refreshed)) : null
     toast.success(
       summary ? `检查完成：${summary.passed} 项通过 · ${summary.warnings} 项提醒` : "检查完成",
     )
@@ -95,7 +96,7 @@ export function PreparationCheckPage() {
     if (context.isLoading) return <LoadingState label="正在载入学期…" />
     return (
       <>
-        <PageHeader title="准备检查" />
+        <PageHeader title="排课准备" />
         <EmptyList title="尚未设置当前学期" description="请先创建并设置一个开放学期。" />
       </>
     )
@@ -103,7 +104,7 @@ export function PreparationCheckPage() {
 
   return (
     <>
-      <PageHeader title="准备检查" description="先发现阻塞问题，再进入自动排课。" />
+      <PageHeader title="排课准备" description="确认关键数据和规则已就绪，再进入自动排课。" />
       <SchedulingWorkflow />
       {check.isLoading ? (
         <LoadingState label="正在检查排课输入…" />
@@ -152,43 +153,61 @@ function PreparationContent({
   refreshState: "idle" | "checking" | "success"
   onRefresh: () => void
 }) {
-  const state = statusStyle[data.status]
   const checking = refreshState === "checking"
-  const HeaderIcon = checking ? CircleDashedIcon : state.icon
   const generationPath = semesterPath(semesterId, "generate")
+  const cards = buildPreparationCards(data)
+  const cardSummary = summarizeCards(cards)
+  const groups = buildPreparationGroups(cards)
+  const readinessText = data.ready ? "可以生成" : "暂不可生成"
+  const summaryText = checking
+    ? `正在检查 ${cards.length} 项准备数据`
+    : [
+        `${cardSummary.passed} 项正常`,
+        cardSummary.warnings > 0 ? `${cardSummary.warnings} 项提醒` : null,
+        cardSummary.blocking > 0 ? `${cardSummary.blocking} 项阻塞` : null,
+      ]
+        .filter(Boolean)
+        .join(" · ")
+
   return (
-    <div className="space-y-4 p-4 md:p-7">
-      <div className="surface-panel overflow-hidden" aria-busy={checking}>
-        <div className="flex flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center">
-          <div className="flex min-w-0 items-center gap-3">
-            <span
-              className={cn(
-                "flex size-9 shrink-0 items-center justify-center rounded-full border",
-                checking ? "border-border bg-muted text-muted-foreground" : state.tone,
-              )}
-            >
-              <HeaderIcon className={cn("size-4.5", checking && "motion-safe:animate-spin")} />
-            </span>
-            <div className="min-w-0">
-              <p className="font-semibold">
-                {checking
-                  ? "正在重新检查排课条件"
-                  : data.ready
-                    ? "已具备自动排课条件"
-                    : `还有 ${data.summary.blocking} 项必须处理`}
-              </p>
-              <p className="truncate text-sm text-muted-foreground" aria-live="polite">
-                {checking
-                  ? `${data.checks.length} 项结果将在完成后统一更新`
-                  : refreshState === "success"
-                    ? `刚刚完成 · ${data.summary.passed} 项通过 · ${data.summary.warnings} 项提醒`
-                    : `${data.summary.passed} 项通过 · ${data.summary.warnings} 项提醒`}
-              </p>
+    <div className="mx-auto w-full max-w-[1480px] p-4 md:p-6" aria-busy={checking}>
+      <section>
+        <div className="flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-center">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span
+                className={cn(
+                  "size-2 rounded-full",
+                  checking
+                    ? "bg-muted-foreground motion-safe:animate-pulse"
+                    : data.ready
+                      ? "bg-emerald-500"
+                      : "bg-rose-500",
+                )}
+                aria-hidden="true"
+              />
+              <h2 className="text-base font-semibold">检查结果</h2>
             </div>
+            <p className="mt-1.5 text-sm text-muted-foreground" aria-live="polite">
+              {checking ? (
+                summaryText
+              ) : (
+                <>
+                  {refreshState === "success" && "刚刚完成 · "}
+                  <span
+                    className={cn("font-medium", data.ready ? "text-emerald-700" : "text-rose-700")}
+                  >
+                    {readinessText}
+                  </span>
+                  {` · ${summaryText}`}
+                </>
+              )}
+            </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
+              size="sm"
               className={refreshState === "success" ? "text-emerald-700" : undefined}
               disabled={checking}
               onClick={onRefresh}
@@ -201,6 +220,7 @@ function PreparationContent({
               {checking ? "检查中…" : refreshState === "success" ? "已更新" : "重新检查"}
             </Button>
             <Button
+              size="sm"
               disabled={checking || !data.ready}
               aria-disabled={checking || !data.ready}
               className={checking || !data.ready ? "pointer-events-none opacity-50" : undefined}
@@ -212,156 +232,191 @@ function PreparationContent({
             </Button>
           </div>
         </div>
+
         {checking && (
           <div
-            className="h-1 overflow-hidden bg-muted"
+            className="h-px overflow-hidden bg-muted"
             role="progressbar"
             aria-label="正在重新检查排课条件"
           >
-            <div className="preparation-progress-indicator h-full w-1/3 bg-primary" />
+            <div className="preparation-progress-indicator h-full w-1/3 bg-primary/70" />
           </div>
         )}
 
-        <div className="grid lg:grid-cols-[minmax(0,1fr)_18rem]">
-          <div className="divide-y">
-            {data.checks.map((item) => (
-              <CheckRow key={item.key} item={item} semesterId={semesterId} checking={checking} />
-            ))}
-          </div>
-          <aside className="border-t bg-muted/30 p-4 lg:border-t-0 lg:border-l">
-            <p className="text-xs font-semibold tracking-wide text-muted-foreground">
-              本次排课规模
-            </p>
-            <dl className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-1">
-              <Metric label="已确认任课关系" value={data.summary.confirmed_assignments} />
-              <Metric label="待安排课节" value={data.summary.required_entries} />
-              <Metric label="单资源可用槽位" value={data.summary.available_slots_per_resource} />
-              <Metric label="固定安排" value={data.summary.fixed_placements} />
-              <Metric label="启用硬约束" value={data.summary.active_hard_constraints} />
-              <Metric label="启用软规则" value={data.summary.active_soft_constraints} />
-            </dl>
-            <div className="mt-4 rounded-xl border bg-background p-3 text-sm text-muted-foreground">
-              <p className="flex items-center gap-2 font-medium text-foreground">
-                <ShieldCheckIcon className="size-4 text-primary" />
-                生成不会覆盖当前课表
-              </p>
-            </div>
-          </aside>
+        <div className="grid gap-6 pt-5 xl:grid-cols-3 xl:gap-5">
+          {groups.map((group) => (
+            <PreparationGroup
+              key={group.title}
+              title={group.title}
+              items={group.items}
+              semesterId={semesterId}
+              checking={checking}
+            />
+          ))}
         </div>
-      </div>
-
-      {data.recent_runs.length > 0 && (
-        <section className="surface-panel overflow-hidden">
-          <div className="flex min-h-12 items-center border-b px-4">
-            <Clock3Icon className="mr-2 size-4 text-muted-foreground" />
-            <h2 className="text-sm font-semibold">最近生成任务</h2>
-          </div>
-          <div className="divide-y">
-            {data.recent_runs.map((run) => (
-              <Link
-                key={run.id}
-                to={`${generationPath}?run=${run.id}`}
-                className="flex min-h-12 items-center gap-3 px-4 text-sm transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/20"
-              >
-                <span className="font-medium">任务 #{run.id}</span>
-                <span className="text-muted-foreground">{runStatus(run.status)}</span>
-                <span className="ml-auto tabular-nums text-muted-foreground">
-                  {run.progress_percent}%
-                </span>
-                <ArrowRightIcon className="size-4 text-muted-foreground" />
-              </Link>
-            ))}
-          </div>
-        </section>
-      )}
+      </section>
     </div>
   )
 }
 
-function CheckRow({
+function PreparationGroup({
+  title,
+  items,
+  semesterId,
+  checking,
+}: {
+  title: string
+  items: PreparationCard[]
+  semesterId: number
+  checking: boolean
+}) {
+  return (
+    <section>
+      <div className="mb-2 flex min-h-6 items-center px-1">
+        <h3 className="text-sm font-semibold text-foreground/90">{title}</h3>
+      </div>
+      <div className="space-y-2">
+        {items.map((item) => (
+          <PreparationRow key={item.key} item={item} semesterId={semesterId} checking={checking} />
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function PreparationRow({
   item,
   semesterId,
   checking,
 }: {
-  item: PreparationCheckItem
+  item: PreparationCard
   semesterId: number
   checking: boolean
 }) {
   const state = statusStyle[item.status]
-  const targetPath = withSemesterId(semesterId, item.fix_path)
+  const targetPath = withSemesterId(semesterId, item.fixPath)
+
   return (
-    <div className="group grid gap-3 px-4 py-4 transition-colors hover:bg-muted/30 sm:grid-cols-[2rem_minmax(0,1fr)_auto] sm:items-start">
-      {checking ? (
-        <CircleDashedIcon className="mt-0.5 size-5 text-muted-foreground" aria-hidden="true" />
-      ) : (
-        <state.icon className={cn("mt-0.5 size-5", state.iconTone)} aria-hidden="true" />
-      )}
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <h2 className="font-medium">
-            {checking ? (
-              item.label
-            ) : (
-              <Link
-                to={targetPath}
-                className="rounded-sm hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-              >
-                {item.label}
-              </Link>
-            )}
-          </h2>
-          <span
-            className={cn(
-              "rounded-full border px-2 py-0.5 text-xs font-medium",
-              checking ? "border-border bg-muted text-muted-foreground" : state.tone,
-            )}
-          >
-            {checking ? "检查中" : state.label}
-            {!checking && item.issue_count > 0 ? ` ${item.issue_count}` : ""}
-          </span>
-        </div>
-        {!checking && (
-          <p className="mt-1 text-sm leading-6 text-muted-foreground">{item.message}</p>
+    <Link
+      to={targetPath}
+      className="grid min-h-14 grid-cols-[minmax(0,1fr)_auto_auto_1rem] items-center gap-x-3 rounded-lg border bg-card px-3.5 py-2.5 outline-none transition-colors hover:border-foreground/20 hover:bg-muted/20 focus-visible:border-ring/50 focus-visible:ring-2 focus-visible:ring-ring/20 sm:grid-cols-[minmax(0,1fr)_7rem_3.25rem_1rem]"
+    >
+      <span className="min-w-0 truncate text-sm font-medium">{item.title}</span>
+      <span className="whitespace-nowrap text-right text-sm font-semibold tabular-nums">
+        {item.value}
+      </span>
+      <span
+        className={cn(
+          "justify-self-end whitespace-nowrap rounded-md border px-1.5 py-px text-[10px] font-medium leading-4",
+          checking ? "border-border bg-muted text-muted-foreground" : state.tone,
         )}
-        {!checking && item.items.length > 0 && (
-          <details className="mt-2 text-sm">
-            <summary className="cursor-pointer select-none text-primary">查看问题示例</summary>
-            <pre className="mt-2 max-h-40 overflow-auto rounded-lg bg-muted p-3 text-xs leading-5">
-              {JSON.stringify(item.items, null, 2)}
-            </pre>
-          </details>
-        )}
-      </div>
-      {!checking && (
-        <Button variant="outline" size="sm" nativeButton={false} render={<Link to={targetPath} />}>
-          {item.status === "passed" ? "查看" : "去处理"}
-          <ArrowRightIcon />
-        </Button>
-      )}
-    </div>
+      >
+        {checking ? "检查中" : state.label}
+      </span>
+      <ArrowRightIcon className="size-4 text-muted-foreground" aria-hidden="true" />
+    </Link>
   )
 }
 
-function Metric({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-xl border bg-background px-3 py-2.5">
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="mt-1 text-lg font-semibold tabular-nums">{value}</dd>
-    </div>
-  )
-}
+function buildPreparationGroups(cards: PreparationCard[]) {
+  const byKey = new Map(cards.map((card) => [card.key, card]))
+  const pick = (...keys: string[]) =>
+    keys.map((key) => byKey.get(key)).filter((card): card is PreparationCard => card !== undefined)
 
-function runStatus(status: string) {
-  return (
+  return [
+    { title: "基础配置", items: pick("schedule_template", "class_settings") },
     {
-      queued: "等待中",
-      checking: "检查输入",
-      solving: "寻找可行解",
-      optimizing: "优化质量",
-      building_candidates: "生成候选",
-      completed: "已完成",
-      failed: "失败",
-      cancelled: "已取消",
-    }[status] ?? status
+      title: "教学数据",
+      items: pick("confirmed_assignments", "assignment_resources", "theoretical_capacity"),
+    },
+    { title: "规则与课表", items: pick("fixed_placements", "constraints", "current_version") },
+  ]
+}
+
+function buildPreparationCards(data: PreparationCheck): PreparationCard[] {
+  const checks = new Map(data.checks.map((item) => [item.key, item]))
+  const getCheck = (key: string) => checks.get(key)
+  const status = (key: string): CheckStatus => getCheck(key)?.status ?? "blocking"
+  const fixPath = (key: string, fallback: string) => getCheck(key)?.fix_path ?? fallback
+  const ruleStatus = worstStatus(status("constraint_integrity"), status("active_constraints"))
+
+  return [
+    {
+      key: "schedule_template",
+      title: "学期作息",
+      value: `${data.summary.active_days} 天`,
+      status: status("schedule_template"),
+      fixPath: fixPath("schedule_template", "/semester/setup?section=schedule-template"),
+    },
+    {
+      key: "class_settings",
+      title: "学期班级",
+      value: `${data.summary.active_class_settings} 个班级`,
+      status: status("class_settings"),
+      fixPath: fixPath("class_settings", "/semester/setup?section=classes"),
+    },
+    {
+      key: "confirmed_assignments",
+      title: "任课关系",
+      value: `${data.summary.confirmed_assignments} 条`,
+      status: status("confirmed_assignments"),
+      fixPath: fixPath("confirmed_assignments", "/scheduling/assignments"),
+    },
+    {
+      key: "assignment_resources",
+      title: "授课资源",
+      value: `${data.summary.assignment_resource_issues} 项异常`,
+      status: status("assignment_resources"),
+      fixPath: fixPath("assignment_resources", "/scheduling/assignments?filter=issues"),
+    },
+    {
+      key: "theoretical_capacity",
+      title: "理论容量",
+      value: `${data.summary.available_slots_per_resource} 个槽位`,
+      status: status("theoretical_capacity"),
+      fixPath: fixPath("theoretical_capacity", "/scheduling/assignments?filter=capacity"),
+    },
+    {
+      key: "fixed_placements",
+      title: "固定安排",
+      value: `${data.summary.fixed_placements} 条`,
+      status: status("fixed_placements"),
+      fixPath: fixPath("fixed_placements", "/scheduling/constraints?tab=fixed"),
+    },
+    {
+      key: "constraints",
+      title: "规则与约束",
+      value: `${data.summary.active_constraints} 条`,
+      status: ruleStatus,
+      fixPath:
+        ruleStatus === status("constraint_integrity")
+          ? fixPath("constraint_integrity", "/scheduling/constraints")
+          : fixPath("active_constraints", "/scheduling/constraints"),
+    },
+    {
+      key: "current_version",
+      title: "当前课表",
+      value: `${data.summary.current_version_count} 个基线`,
+      status: status("current_version"),
+      fixPath: fixPath("current_version", "/scheduling/timetable"),
+    },
+  ]
+}
+
+function worstStatus(...statuses: CheckStatus[]): CheckStatus {
+  return statuses.reduce((worst, current) =>
+    statusPriority[current] > statusPriority[worst] ? current : worst,
+  )
+}
+
+function summarizeCards(cards: PreparationCard[]) {
+  return cards.reduce(
+    (summary, card) => {
+      if (card.status === "passed") summary.passed += 1
+      if (card.status === "warning") summary.warnings += 1
+      if (card.status === "blocking") summary.blocking += 1
+      return summary
+    },
+    { passed: 0, warnings: 0, blocking: 0 },
   )
 }

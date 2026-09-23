@@ -7,9 +7,8 @@ use App\Enums\TimetableVersionStatus;
 use App\Modules\AcademicCalendar\Models\AppSetting;
 use App\Modules\AcademicCalendar\Models\Semester;
 use App\Modules\Audit\Services\AuditLogger;
-use App\Modules\DailyOperations\Services\DailyTimetableService;
 use App\Modules\Timetable\Models\TimetableVersion;
-use App\Modules\Timetable\Services\TimetableEffectivePeriodService;
+use App\Modules\Timetable\Services\TimetablePublicationService;
 use App\Modules\Timetable\Services\TimetableVersionComparisonService;
 use App\Modules\Timetable\Services\TimetableVersionService;
 use App\Support\ApiProblemException;
@@ -28,8 +27,7 @@ class TimetableVersionController
         private readonly AuditLogger $audit,
         private readonly TimetableVersionService $versions,
         private readonly TimetableVersionComparisonService $comparisons,
-        private readonly TimetableEffectivePeriodService $periods,
-        private readonly DailyTimetableService $daily,
+        private readonly TimetablePublicationService $publication,
     ) {}
 
     public function index(Request $request, Semester $semester): JsonResponse
@@ -157,24 +155,13 @@ class TimetableVersionController
             [$actor, $settings, $lockedSemester] = $this->guard->semester($request, $semester, false, true);
             $locked = TimetableVersion::query()->lockForUpdate()->findOrFail($version->id);
             $before = $locked->toArray();
-            $previous = $this->versions->activate($lockedSemester, $locked);
-            $periodResult = $this->periods->publish(
-                $lockedSemester,
-                $locked,
-                $lockedSemester->start_date->toDateString(),
-                $lockedSemester->end_date->toDateString(),
-                $actor,
-                $data['reason'],
-            );
-            foreach ($periodResult['affected_dates'] as $date) {
-                $daily = $this->daily->forDate($lockedSemester, $date);
-                $this->daily->assertActualRowsConflictFree($daily['rows'], $date);
-            }
+            $publication = $this->publication->publishCurrent($lockedSemester, $locked, $actor, $data['reason']);
             $this->audit->record($request, $actor, 'activate', 'timetable_version', $locked->id, $before, [
                 ...$locked->fresh()->toArray(),
-                'previous_version_id' => $previous?->id,
+                'previous_version_id' => $publication['previous']?->id,
                 'reason' => $data['reason'],
-                'effective_period_id' => $periodResult['period']->id,
+                'effective_period_id' => $publication['period']->id,
+                'publication_impact' => $publication['impact'],
             ]);
 
             return response()->json([
@@ -182,6 +169,31 @@ class TimetableVersionController
                 'meta' => $this->meta($lockedSemester, $settings),
             ])->header('ETag', $this->etags->semester($lockedSemester, $settings));
         }, 3);
+    }
+
+    public function previewPublication(Request $request, Semester $semester, TimetableVersion $version): JsonResponse
+    {
+        $this->assertParent($semester, $version);
+        DB::beginTransaction();
+        try {
+            $lockedSemester = Semester::query()->lockForUpdate()->findOrFail($semester->id);
+            $locked = TimetableVersion::query()->lockForUpdate()->findOrFail($version->id);
+            $preview = $this->publication->preview(
+                $lockedSemester,
+                $locked,
+                $request->user(),
+                $lockedSemester->start_date->toDateString(),
+                $lockedSemester->end_date->toDateString(),
+            );
+        } finally {
+            DB::rollBack();
+        }
+        $settings = AppSetting::query()->findOrFail(1);
+
+        return response()->json([
+            'data' => $preview,
+            'meta' => $this->meta($semester, $settings),
+        ])->header('ETag', $this->etags->semester($semester, $settings));
     }
 
     public function restore(Request $request, Semester $semester, TimetableVersion $version): JsonResponse

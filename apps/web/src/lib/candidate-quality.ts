@@ -31,22 +31,31 @@ export function assessCandidateQuality(
   const dimensions = [
     [
       "教师体验",
+      "teacher_experience",
       candidate.score_breakdown.teacher_experience,
       candidateRecommendationFloor.teacherExperience,
     ],
     [
       "课程分布",
+      "course_distribution",
       candidate.score_breakdown.course_distribution,
       candidateRecommendationFloor.courseDistribution,
     ],
-    ["班级负荷", candidate.score_breakdown.class_load, candidateRecommendationFloor.classLoad],
+    [
+      "班级负荷",
+      "class_load",
+      candidate.score_breakdown.class_load,
+      candidateRecommendationFloor.classLoad,
+    ],
     [
       "连排与间隔",
+      "session_spacing",
       candidate.score_breakdown.session_spacing,
       candidateRecommendationFloor.sessionSpacing,
     ],
   ] as const
-  for (const [label, value, floor] of dimensions) {
+  for (const [label, weightKey, value, floor] of dimensions) {
+    if (candidate.score_breakdown.weights?.[weightKey] === 0) continue
     if (Number(value) < floor)
       reasons.push(`${label} ${Number(value).toFixed(1)}，低于 ${floor} 分`)
   }

@@ -28,6 +28,7 @@ class LongTermChangeService
         private readonly TimetableEffectivePeriodService $periods,
         private readonly TimetableVersionService $versions,
         private readonly DailyTimetableService $daily,
+        private readonly LessonIdentityService $lessonIdentities,
     ) {}
 
     /** @param array<string, mixed> $data
@@ -44,8 +45,12 @@ class LongTermChangeService
         $entries = $base->entries()->with(self::RELATIONS)->get()->keyBy('id');
         foreach ($data['changes'] as $input) {
             $entry = $entries->get($input['entry_id']);
-            if ($entry === null || $entry->entry_key === null) {
+            if ($entry === null) {
                 throw new ApiProblemException('LONG_TERM_ENTRY_INVALID', '选择的课程不属于开始日期对应的课表，请重新选择', 422);
+            }
+            if ($entry->lesson_instance_id === null) {
+                $this->lessonIdentities->ensureEntryIdentity($entry);
+                $entry->refresh();
             }
             $before = $this->state($entry);
             $after = $before;
@@ -60,7 +65,12 @@ class LongTermChangeService
             if ($entry->is_locked) {
                 throw new ApiProblemException('LONG_TERM_ENTRY_LOCKED', '所选课程已锁定，请先在课表工作台解锁', 409);
             }
-            $patches[] = ['key' => $entry->entry_key, 'before' => $before, 'after' => $after];
+            $patches[] = [
+                'lesson_instance_id' => $entry->lesson_instance_id,
+                'key' => $entry->entry_key,
+                'before' => $before,
+                'after' => $after,
+            ];
         }
         if ($patches === []) {
             throw new ApiProblemException('LONG_TERM_EMPTY', '请至少调整一节课的时间、老师或教室', 422);
@@ -102,7 +112,10 @@ class LongTermChangeService
                 continue;
             }
             $patches = array_map(fn (array $patch): array => [
-                'key' => $patch['key'], 'before' => $patch['after'], 'after' => $patch['before'],
+                'lesson_instance_id' => $patch['lesson_instance_id'] ?? null,
+                'key' => $patch['key'] ?? null,
+                'before' => $patch['after'],
+                'after' => $patch['before'],
             ], $segment['patches']);
             $result = $this->apply($semester, $actor, $start, $end, $patches, '恢复安排：'.$record->reason, false);
             $changes = [...$changes, ...$result['changes']];
@@ -148,11 +161,16 @@ class LongTermChangeService
             $start = max($from, $period->effective_from->toDateString());
             $end = min($to, $period->effective_to->toDateString());
             $version = $this->versions->createDraft($semester, $actor, $period->timetableVersion, '长期调整 · '.$start);
-            $entries = $version->entries()->with(self::RELATIONS)->get()->keyBy('entry_key');
+            $entries = $version->entries()->with(self::RELATIONS)->get();
             $segmentPatches = [];
             $pending = [];
             foreach ($patches as $patch) {
-                $entry = $entries->get($patch['key']);
+                $entry = isset($patch['lesson_instance_id'])
+                    ? $entries->firstWhere('lesson_instance_id', (int) $patch['lesson_instance_id'])
+                    : null;
+                if ($entry === null && isset($patch['key'])) {
+                    $entry = $entries->firstWhere('entry_key', $patch['key']);
+                }
                 if ($entry === null) {
                     throw new ApiProblemException('LONG_TERM_ENTRY_MISSING', $start.' 起的课表已移除所选课程，请缩短生效范围或重新选择', 409);
                 }
@@ -164,7 +182,7 @@ class LongTermChangeService
                     }
                     if ($before[$field] !== $patch['before'][$field]) {
                         throw new ApiProblemException('LONG_TERM_FUTURE_CONFLICT', $start.' 起，'.$entry->course->name.'已有其他调整涉及同一项安排，请缩短日期范围或先处理该调整', 409,
-                            ['date' => $start, 'entry_key' => $patch['key'], 'field' => $field]);
+                            ['date' => $start, 'lesson_instance_id' => $entry->lesson_instance_id, 'entry_key' => $entry->entry_key, 'field' => $field]);
                     }
                     $after[$field] = $patch['after'][$field];
                 }
@@ -182,7 +200,12 @@ class LongTermChangeService
                 }
                 $pending[$entry->id] = ['entry' => $entry, 'after' => $after, 'before_snapshot' => $beforeSnapshot,
                     'teacher_ids' => array_map(fn (int $id): int => $id === $oldTeacherId ? $after['teacher_id'] : $id, $teacherIds)];
-                $segmentPatches[] = ['key' => $patch['key'], 'before' => $before, 'after' => $after];
+                $segmentPatches[] = [
+                    'lesson_instance_id' => $entry->lesson_instance_id,
+                    'key' => $entry->entry_key,
+                    'before' => $before,
+                    'after' => $after,
+                ];
             }
             $slots = [];
             foreach ($entries as $entry) {
@@ -232,7 +255,19 @@ class LongTermChangeService
             $followingVersion = $this->periods->versionForDate($semester, $afterDate);
             $followingEnd = TimetableEffectivePeriod::query()->where('semester_id', $semester->id)->where('status', 'active')
                 ->whereDate('effective_from', '<=', $afterDate)->whereDate('effective_to', '>=', $afterDate)->first()?->effective_to->toDateString() ?? $semester->end_date->toDateString();
-            $following = $followingVersion?->entries()->whereIn('entry_key', array_column($patches, 'key'))->with(self::RELATIONS)->get()
+            $lessonInstanceIds = array_values(array_filter(array_column($patches, 'lesson_instance_id')));
+            $entryKeys = array_values(array_filter(array_column($patches, 'key')));
+            $following = $followingVersion?->entries()
+                ->where(function ($query) use ($lessonInstanceIds, $entryKeys): void {
+                    if ($lessonInstanceIds !== []) {
+                        $query->whereIn('lesson_instance_id', $lessonInstanceIds);
+                    }
+                    if ($entryKeys !== []) {
+                        $method = $lessonInstanceIds === [] ? 'whereIn' : 'orWhereIn';
+                        $query->{$method}('entry_key', $entryKeys);
+                    }
+                })
+                ->with(self::RELATIONS)->get()
                 ->map(fn (TimetableEntry $entry): array => $this->snapshot($entry, $afterDate, $followingEnd))->all() ?? [];
         }
 
@@ -275,16 +310,28 @@ class LongTermChangeService
 
     private function assertDependencyDates(Semester $semester, TimetableEntry $entry, string $from, string $to, int $weekday): void
     {
+        if ($entry->lesson_instance_id === null) {
+            $this->lessonIdentities->ensureEntryIdentity($entry);
+            $entry->refresh();
+        }
         $exceptions = CalendarException::query()->where('semester_id', $semester->id)->where('status', 'active')
-            ->where(fn ($query) => $query->whereHas('originalEntry', fn ($query) => $query->where('entry_key', $entry->entry_key))
-                ->orWhereHas('relatedEntry', fn ($query) => $query->where('entry_key', $entry->entry_key)))
+            ->where(function ($query) use ($entry): void {
+                $query->where('lesson_instance_id', $entry->lesson_instance_id)
+                    ->orWhere('related_lesson_instance_id', $entry->lesson_instance_id);
+                if ($entry->entry_key !== null) {
+                    $query->orWhereHas('originalEntry', fn ($query) => $query->where('entry_key', $entry->entry_key))
+                        ->orWhereHas('relatedEntry', fn ($query) => $query->where('entry_key', $entry->entry_key));
+                }
+            })
             ->with(['originalEntry', 'relatedEntry'])->get();
         foreach ($exceptions as $exception) {
             $dates = [];
-            if ($exception->originalEntry?->entry_key === $entry->entry_key) {
+            if ($exception->lesson_instance_id === $entry->lesson_instance_id
+                || ($entry->entry_key !== null && $exception->originalEntry?->entry_key === $entry->entry_key)) {
                 $dates[] = $exception->effective_date->toDateString();
             }
-            if ($exception->relatedEntry?->entry_key === $entry->entry_key) {
+            if ($exception->related_lesson_instance_id === $entry->lesson_instance_id
+                || ($entry->entry_key !== null && $exception->relatedEntry?->entry_key === $entry->entry_key)) {
                 $dates[] = ($exception->replacement_date ?? $exception->effective_date)->toDateString();
             }
             foreach ($dates as $date) {
@@ -295,7 +342,14 @@ class LongTermChangeService
             }
         }
         $substitutions = Substitution::query()->where('status', 'active')->whereBetween('effective_date', [$from, $to])
-            ->whereHas('originalEntry', fn ($query) => $query->where('semester_id', $semester->id)->where('entry_key', $entry->entry_key))->get();
+            ->where(function ($query) use ($semester, $entry): void {
+                $query->where('lesson_instance_id', $entry->lesson_instance_id);
+                if ($entry->entry_key !== null) {
+                    $query->orWhereHas('originalEntry', fn ($query) => $query
+                        ->where('semester_id', $semester->id)
+                        ->where('entry_key', $entry->entry_key));
+                }
+            })->get();
         foreach ($substitutions as $substitution) {
             if ($substitution->effective_date->dayOfWeekIso !== $weekday) {
                 throw new ApiProblemException('LONG_TERM_TEMPORARY_DEPENDENCY', $substitution->effective_date->toDateString().' 已安排代课，改变星期会使原课不再存在。请先处理代课', 409);
@@ -328,6 +382,7 @@ class LongTermChangeService
         };
 
         return [
+            'lesson_instance_id' => $entry->lesson_instance_id,
             'entry_key' => $entry->entry_key, 'date' => $from, 'effective_from' => $from, 'effective_to' => $to,
             'recurrence_label' => $pattern.' · '.$week, 'weekday' => $entry->weekday,
             'item_id' => $entry->item_id, 'item_name' => $entry->item->name,

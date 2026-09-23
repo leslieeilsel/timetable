@@ -10,6 +10,7 @@ use App\Modules\Resources\Models\Room;
 use App\Modules\Resources\Models\Teacher;
 use App\Modules\ScheduleTemplate\Models\Item;
 use App\Modules\TeachingAssignment\Models\TeachingAssignment;
+use App\Modules\Timetable\Models\LessonInstance;
 use App\Modules\Timetable\Models\TimetableEntry;
 use App\Modules\Timetable\Models\TimetableVersion;
 use Illuminate\Database\Eloquent\Model;
@@ -24,7 +25,9 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $replacement_date
  * @property CalendarExceptionType $type
  * @property int|null $original_entry_id
+ * @property int|null $lesson_instance_id
  * @property int|null $related_entry_id
+ * @property int|null $related_lesson_instance_id
  * @property int|null $replacement_assignment_id
  * @property int|null $replacement_teacher_id
  * @property int|null $replacement_room_id
@@ -36,7 +39,9 @@ use Illuminate\Support\Carbon;
  * @property-read Semester $semester
  * @property-read TimetableVersion $timetableVersion
  * @property-read TimetableEntry|null $originalEntry
+ * @property-read LessonInstance|null $lessonInstance
  * @property-read TimetableEntry|null $relatedEntry
+ * @property-read LessonInstance|null $relatedLessonInstance
  * @property-read TeachingAssignment|null $replacementAssignment
  * @property-read Teacher|null $replacementTeacher
  * @property-read Room|null $replacementRoom
@@ -46,8 +51,8 @@ use Illuminate\Support\Carbon;
 class CalendarException extends Model
 {
     protected $fillable = [
-        'semester_id', 'timetable_version_id', 'effective_date', 'type', 'original_entry_id',
-        'replacement_date', 'related_entry_id', 'replacement_assignment_id', 'replacement_teacher_id',
+        'semester_id', 'timetable_version_id', 'effective_date', 'type', 'original_entry_id', 'lesson_instance_id',
+        'replacement_date', 'related_entry_id', 'related_lesson_instance_id', 'replacement_assignment_id', 'replacement_teacher_id',
         'replacement_room_id', 'replacement_item_id', 'title', 'status', 'reason', 'created_by',
     ];
 
@@ -79,10 +84,22 @@ class CalendarException extends Model
         return $this->belongsTo(TimetableEntry::class, 'original_entry_id');
     }
 
+    /** @return BelongsTo<LessonInstance, $this> */
+    public function lessonInstance(): BelongsTo
+    {
+        return $this->belongsTo(LessonInstance::class);
+    }
+
     /** @return BelongsTo<TimetableEntry, $this> */
     public function relatedEntry(): BelongsTo
     {
         return $this->belongsTo(TimetableEntry::class, 'related_entry_id');
+    }
+
+    /** @return BelongsTo<LessonInstance, $this> */
+    public function relatedLessonInstance(): BelongsTo
+    {
+        return $this->belongsTo(LessonInstance::class, 'related_lesson_instance_id');
     }
 
     /** @return BelongsTo<TeachingAssignment, $this> */

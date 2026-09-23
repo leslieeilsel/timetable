@@ -205,12 +205,17 @@ export interface PreparationCheck {
     blocking: number
     warnings: number
     passed: number
+    active_days: number
+    active_class_settings: number
     confirmed_assignments: number
+    assignment_resource_issues: number
     required_entries: number
     available_slots_per_resource: number
     fixed_placements: number
     active_hard_constraints: number
     active_soft_constraints: number
+    active_constraints: number
+    current_version_count: number
   }
   checks: PreparationCheckItem[]
   recent_runs: ScheduleRun[]
@@ -287,6 +292,7 @@ export interface ScheduleCandidateScore {
   changes_from_current: number
   class_daily_imbalance: number
   room_changes: number
+  weights?: Record<string, number>
   rule_results: Array<{
     constraint_id: number
     name: string
@@ -367,6 +373,31 @@ export interface TimetableVersion {
   activated_at: string | null
 }
 
+export interface TimetablePublicationImpactItem {
+  kind: "calendar_exception" | "substitution"
+  id: number
+  status: "preserved" | "recomputed" | "needs_review" | "orphaned"
+  effective_date: string
+  replacement_date?: string | null
+  summary: string
+  reason: string
+}
+
+export interface TimetablePublicationPreview {
+  allowed: boolean
+  effective_from: string
+  effective_to: string
+  summary: string
+  impact: {
+    preserved: number
+    recomputed: number
+    needs_review: number
+    orphaned: number
+    blocked: boolean
+    items: TimetablePublicationImpactItem[]
+  }
+}
+
 export interface TimetableEffectivePeriod {
   id: number
   semester_id: number
@@ -385,6 +416,7 @@ export interface TimetableEffectivePeriod {
 
 export interface TimetableEntry {
   id: number
+  lesson_instance_id?: number | null
   timetable_version_id: number
   teaching_assignment_id: number
   school_class_id: number | null

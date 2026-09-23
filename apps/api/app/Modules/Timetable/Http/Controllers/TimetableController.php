@@ -16,6 +16,7 @@ use App\Modules\ScheduleTemplate\Models\ScheduleTemplateDay;
 use App\Modules\TeachingAssignment\Models\TeachingAssignment;
 use App\Modules\Timetable\Models\TimetableEntry;
 use App\Modules\Timetable\Models\TimetableVersion;
+use App\Modules\Timetable\Services\LessonIdentityService;
 use App\Modules\Timetable\Services\RoomResolver;
 use App\Modules\Timetable\Services\TimetableConflictService;
 use App\Modules\Timetable\Services\TimetableDiagnosticService;
@@ -49,6 +50,7 @@ class TimetableController
         private readonly TimetableDiagnosticService $diagnostics,
         private readonly TimetableSynchronizationService $synchronization,
         private readonly TimetableVersionService $versions,
+        private readonly LessonIdentityService $lessonIdentities,
         private readonly SimpleXlsxWriter $xlsx,
     ) {}
 
@@ -349,8 +351,14 @@ class TimetableController
                     $activeWeeks,
                 );
                 try {
+                    $lessonInstance = $this->lessonIdentities->identityForNewEntry(
+                        $lockedSemester,
+                        $assignment,
+                        $version,
+                    );
                     $entry = TimetableEntry::query()->create([
                         'entry_key' => (string) Str::uuid(),
+                        'lesson_instance_id' => $lessonInstance->id,
                         'semester_id' => $lockedSemester->id,
                         'timetable_version_id' => $version->id,
                         'teaching_assignment_id' => $assignment->id,

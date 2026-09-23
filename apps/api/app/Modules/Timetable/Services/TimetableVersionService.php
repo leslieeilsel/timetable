@@ -25,6 +25,7 @@ class TimetableVersionService
         private readonly WeekPatternService $weekPatterns,
         private readonly TimetableSynchronizationService $synchronization,
         private readonly TimetableDiagnosticService $diagnostics,
+        private readonly LessonIdentityService $lessonIdentities,
     ) {}
 
     public function resolveForRead(
@@ -181,6 +182,7 @@ class TimetableVersionService
             'soft_warning_count' => $candidate->soft_warning_count,
         ]);
 
+        $lessonInstances = $this->lessonIdentities->mapCandidate($semester, $candidate);
         $classRows = [];
         $teacherRows = [];
         $timestamp = now();
@@ -188,6 +190,7 @@ class TimetableVersionService
             $assignment = $candidateEntry->teachingAssignment;
             $entryId = (int) DB::table('timetable_entries')->insertGetId([
                 'entry_key' => (string) Str::uuid(),
+                'lesson_instance_id' => $lessonInstances[$candidateEntry->id] ?? null,
                 'semester_id' => $semester->id,
                 'timetable_version_id' => $version->id,
                 'teaching_assignment_id' => $assignment->id,
@@ -339,8 +342,11 @@ class TimetableVersionService
             ->chunkById(500, function ($entries) use ($target, $entrySource): void {
                 $timestamp = now();
                 foreach ($entries as $entry) {
+                    $lessonInstanceId = $entry->lesson_instance_id
+                        ?? $this->lessonIdentities->ensureEntryIdentity($entry)->id;
                     $newEntryId = (int) DB::table('timetable_entries')->insertGetId([
                         'entry_key' => $entry->entry_key ?? (string) Str::uuid(),
+                        'lesson_instance_id' => $lessonInstanceId,
                         'semester_id' => $entry->semester_id,
                         'timetable_version_id' => $target->id,
                         'teaching_assignment_id' => $entry->teaching_assignment_id,
@@ -457,6 +463,12 @@ class TimetableVersionService
                 'base_version_id' => $run->base_version_id,
                 'run_base_version_fingerprint' => $run->base_version_fingerprint,
                 'current_base_version_fingerprint' => ScheduleRun::fingerprintTimetableVersion($run->base_version_id, true),
+            ]);
+        }
+        if (! $run->baselineContextMatches($semester)) {
+            throw new ApiProblemException('CANDIDATE_BASELINE_STALE', '基础课表版本已切换，该候选方案只能查看，不能采用', 409, [
+                'base_version_id' => $run->base_version_id,
+                'current_timetable_version_id' => $semester->current_timetable_version_id,
             ]);
         }
         $settings = AppSetting::query()->findOrFail(1);

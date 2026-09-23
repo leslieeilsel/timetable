@@ -66,7 +66,8 @@ class ScheduleRunController
                 ...$this->meta($semester, $settings),
                 'is_stale' => ! $run->hasCompleteInputSnapshot()
                     || $run->revisionDifferences($semester, $settings) !== []
-                    || ! $run->baselineMatches(),
+                    || ! $run->baselineMatches()
+                    || ! $run->baselineContextMatches($semester),
             ],
         ])->header('ETag', $this->etags->semester($semester, $settings));
     }
@@ -152,6 +153,8 @@ class ScheduleRunController
                     'constraint_revision' => $constraintRevision,
                     'base_version_id' => $baseVersionId,
                     'base_version_fingerprint' => $baseVersionFingerprint,
+                    'current_timetable_version_id' => $lockedSemester->current_timetable_version_id,
+                    'base_was_current' => $baseVersionId === $lockedSemester->current_timetable_version_id,
                     'constraints' => $activeConstraints,
                 ],
                 'strategy' => $data['strategy'],
@@ -163,7 +166,7 @@ class ScheduleRunController
                 'constraint_revision' => $constraintRevision,
                 'base_version_id' => $baseVersionId,
                 'base_version_fingerprint' => $baseVersionFingerprint,
-                'algorithm_version' => 'resource-block-v3-snapshot',
+                'algorithm_version' => 'resource-block-v4-quality',
                 'random_seed' => random_int(1, 2_000_000_000),
                 'progress_stage' => 'queued',
                 'progress_percent' => 0,

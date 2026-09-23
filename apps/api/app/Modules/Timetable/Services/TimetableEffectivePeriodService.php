@@ -17,6 +17,8 @@ use Illuminate\Support\Collection;
 
 class TimetableEffectivePeriodService
 {
+    public function __construct(private readonly LessonIdentityService $lessonIdentities) {}
+
     public function versionForDate(Semester $semester, string|Carbon $date): ?TimetableVersion
     {
         $day = $date instanceof Carbon ? $date->toDateString() : $date;
@@ -142,8 +144,14 @@ class TimetableEffectivePeriodService
                 && $effectiveDate <= $to->toDateString();
             if ($effectiveIsInside && $exception->timetable_version_id !== $version->id) {
                 $exception->original_entry_id = $this->mappedEntryId($version, $exception->original_entry_id);
+                $exception->lesson_instance_id = $exception->original_entry_id === null
+                    ? $exception->lesson_instance_id
+                    : TimetableEntry::query()->whereKey($exception->original_entry_id)->value('lesson_instance_id');
                 if ($exception->type !== CalendarExceptionType::Swap || $replacementDate === null || $replacementDate === $effectiveDate) {
                     $exception->related_entry_id = $this->mappedEntryId($version, $exception->related_entry_id);
+                    $exception->related_lesson_instance_id = $exception->related_entry_id === null
+                        ? $exception->related_lesson_instance_id
+                        : TimetableEntry::query()->whereKey($exception->related_entry_id)->value('lesson_instance_id');
                 }
                 $exception->timetable_version_id = $version->id;
                 $exception->save();
@@ -157,6 +165,9 @@ class TimetableEffectivePeriodService
                 && $replacementDate <= $to->toDateString();
             if ($replacementIsInside && $exception->type === CalendarExceptionType::Swap) {
                 $exception->related_entry_id = $this->mappedEntryId($version, $exception->related_entry_id);
+                $exception->related_lesson_instance_id = $exception->related_entry_id === null
+                    ? $exception->related_lesson_instance_id
+                    : TimetableEntry::query()->whereKey($exception->related_entry_id)->value('lesson_instance_id');
                 $exception->save();
             }
             // Rebinding the source can change the moved lesson outside this period too.
@@ -178,6 +189,7 @@ class TimetableEffectivePeriodService
             $mapped = $this->mappedEntryId($version, $substitution->original_entry_id);
             if ($mapped !== $substitution->original_entry_id) {
                 $substitution->original_entry_id = $mapped;
+                $substitution->lesson_instance_id = TimetableEntry::query()->whereKey($mapped)->value('lesson_instance_id');
                 $substitution->save();
                 $affectedDates[] = $substitution->effective_date->toDateString();
                 $rebasedSubstitutions++;
@@ -231,22 +243,20 @@ class TimetableEffectivePeriodService
             return null;
         }
         $entry = TimetableEntry::query()->find($entryId);
-        if ($entry === null || $entry->entry_key === null) {
+        if ($entry === null) {
             throw new ApiProblemException('TIMETABLE_PERIOD_REBASE_FAILED', '已有临时调整无法映射到长期调课版本', 409, [
                 'entry_id' => $entryId,
             ]);
         }
-        $mapped = TimetableEntry::query()
-            ->where('timetable_version_id', $version->id)
-            ->where('entry_key', $entry->entry_key)
-            ->value('id');
+        $mapped = $this->lessonIdentities->mappedEntryId($version, $entryId);
         if ($mapped === null) {
-            throw new ApiProblemException('TIMETABLE_PERIOD_REBASE_FAILED', '长期调课草稿移除了已有临时调整引用的课程，请先处理该临时调整', 409, [
+            throw new ApiProblemException('TIMETABLE_PERIOD_REBASE_FAILED', '新课表中已不存在临时调整引用的业务课次，请在发布预检中处理该调整', 409, [
                 'entry_id' => $entryId,
                 'entry_key' => $entry->entry_key,
+                'lesson_instance_id' => $entry->lesson_instance_id,
             ]);
         }
 
-        return (int) $mapped;
+        return $mapped;
     }
 }

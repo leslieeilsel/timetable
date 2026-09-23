@@ -11,6 +11,7 @@ use App\Modules\DailyOperations\Models\TeacherLeave;
 use App\Modules\DailyOperations\Services\DailyTimetableService;
 use App\Modules\Resources\Models\Teacher;
 use App\Modules\Timetable\Models\TimetableEntry;
+use App\Modules\Timetable\Services\LessonIdentityService;
 use App\Support\ApiProblemException;
 use App\Support\EtagService;
 use App\Support\WriteGuard;
@@ -27,6 +28,7 @@ class TeacherLeaveController
         private readonly EtagService $etags,
         private readonly AuditLogger $audit,
         private readonly DailyTimetableService $daily,
+        private readonly LessonIdentityService $lessonIdentities,
     ) {}
 
     public function index(Request $request, Semester $semester): JsonResponse
@@ -249,6 +251,7 @@ class TeacherLeaveController
                     'replaced_teacher_id' => $lockedLeave->teacher_id,
                 ]);
                 $substitution->fill([
+                    'lesson_instance_id' => $this->lessonIdentities->ensureEntryIdentity($entry)->id,
                     'replacement_teacher_id' => (int) $item['replacement_teacher_id'],
                     'status' => OperationalStatus::Active,
                     'reason' => $item['reason'] ?? $lockedLeave->reason,

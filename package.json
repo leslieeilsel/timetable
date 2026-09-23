@@ -6,7 +6,7 @@
     "dev:web": "vp run @timetable/web#dev",
     "dev:teacher": "vp run @timetable/teacher#dev",
     "dev:api": "php apps/api/artisan serve --host=127.0.0.1 --port=8000",
-    "dev:queue": "php apps/api/artisan queue:work database --queue=default --tries=3 --timeout=300",
+    "dev:queue": "php apps/api/artisan queue:listen database --queue=default --tries=3 --timeout=300",
     "dev": "vp exec concurrently -k --kill-others-on-fail \"vp run dev:api\" \"vp run dev:queue\" \"vp run dev:web\" \"vp run dev:teacher\" \"vp run dev:agent\"",
     "check:web": "vp run @timetable/web#check",
     "check:teacher": "vp run @timetable/teacher#check",

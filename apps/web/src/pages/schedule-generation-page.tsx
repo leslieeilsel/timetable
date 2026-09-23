@@ -17,7 +17,6 @@ import {
   SquareIcon,
 } from "lucide-react"
 import { toast } from "sonner"
-import { AiAssistantButton } from "@/components/ai-assistant"
 import { api, apiAllPages, apiMessage } from "@/lib/api"
 import { assessCandidateQuality } from "@/lib/candidate-quality"
 import { semesterPath, useResolvedSemesterId } from "@/lib/semester"
@@ -32,6 +31,7 @@ import type {
   ScheduleTemplate,
   TeachingAssignment,
   TimetableEntry,
+  TimetablePublicationPreview,
   TimetableVersion,
 } from "@/lib/types"
 import { EmptyList, ErrorState, Field, LoadingState, PageHeader } from "@/components/page"
@@ -75,14 +75,22 @@ type ScopeType = "all" | "grade" | "class" | "assignment"
 type StrategyProfile = "balanced" | "class_distribution" | "teacher_experience" | "room_utilization"
 const terminal = new Set(["completed", "failed", "cancelled"])
 const strategyOptions: Array<{ value: StrategyProfile; title: string; description: string }> = [
-  { value: "balanced", title: "均衡质量", description: "课程分布、教师体验和主课时段整体平衡" },
+  { value: "balanced", title: "综合均衡", description: "同时兼顾班级课表、教师课表和教室使用" },
   {
     value: "class_distribution",
-    title: "班级分布优先",
-    description: "减少同科同日重复，让课程更均匀",
+    title: "班级课表优先",
+    description: "优先让班级每天的课程分布更均匀",
   },
-  { value: "teacher_experience", title: "教师体验优先", description: "减少空堂和过长连续授课" },
-  { value: "room_utilization", title: "教室利用优先", description: "降低跨教室变化，保持场地稳定" },
+  {
+    value: "teacher_experience",
+    title: "教师课表优先",
+    description: "优先减少教师空堂和过长连续授课",
+  },
+  {
+    value: "room_utilization",
+    title: "教室稳定优先",
+    description: "优先减少教室切换，保持上课场地稳定",
+  },
 ]
 
 export function ScheduleGenerationPage() {
@@ -95,11 +103,10 @@ export function ScheduleGenerationPage() {
   const [scopeIds, setScopeIds] = useState<number[]>([])
   const [mode, setMode] = useState<"rebuild" | "fill">("rebuild")
   const [keepLocked, setKeepLocked] = useState(true)
-  const [profile, setProfile] = useState<StrategyProfile>("balanced")
   const [candidateCount, setCandidateCount] = useState<1 | 3>(1)
   const [starting, setStarting] = useState(false)
   const [customOpen, setCustomOpen] = useState(false)
-  const [historyOpen, setHistoryOpen] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(true)
   const [runsPage, setRunsPage] = useState(() => positiveIntegerParam(params, "page", 1))
   const [runsPageSize, setRunsPageSize] = useState(() =>
     positiveIntegerParam(params, "per_page", 20, [20, 50, 100]),
@@ -135,6 +142,10 @@ export function ScheduleGenerationPage() {
         `/api/v1/semesters/${semesterId}/schedule-runs?page=${runsPage}&per_page=${runsPageSize}`,
       ),
     enabled: semesterId !== null,
+    refetchInterval: (query) => {
+      const pageRuns = query.state.data?.data ?? []
+      return pageRuns.some((run) => !terminal.has(run.status)) ? 2000 : false
+    },
   })
   const activeRun = useQuery({
     queryKey: ["schedule-run", semesterId, runId],
@@ -156,7 +167,8 @@ export function ScheduleGenerationPage() {
     )
   }, [runsPage, runsPageSize, setParams])
   useEffect(() => {
-    if (activeRun.data?.data.status === "completed")
+    const status = activeRun.data?.data.status
+    if (status && terminal.has(status))
       void client.invalidateQueries({ queryKey: ["schedule-runs", semesterId] })
   }, [activeRun.data?.data.status, client, semesterId])
   const runsPagination = paginationOf(runs.data?.meta)
@@ -187,7 +199,7 @@ export function ScheduleGenerationPage() {
         body: JSON.stringify({
           scope: { type: scopeType, ids: scopeType === "all" ? [] : scopeIds },
           preservation: { keep_locked: keepLocked, keep_current: mode === "fill" },
-          strategy: { profile },
+          strategy: { profile: "balanced" },
           candidate_count: candidateCount,
         }),
       })
@@ -226,29 +238,27 @@ export function ScheduleGenerationPage() {
           .filter((assignment) => assignmentMatchesScope(assignment, scopeType, scopeIds))
           .reduce((sum, assignment) => sum + assignment.weekly_items, 0)
   const isRecommended =
-    scopeType === "all" &&
-    mode === "rebuild" &&
-    keepLocked &&
-    profile === "balanced" &&
-    candidateCount === 1
+    scopeType === "all" && mode === "rebuild" && keepLocked && candidateCount === 1
   const resetRecommended = () => {
     setScopeType("all")
     setScopeIds([])
     setMode("rebuild")
     setKeepLocked(true)
-    setProfile("balanced")
     setCandidateCount(1)
   }
   const runTotal = runsPagination?.total ?? runs.data?.data.length ?? 0
-  const latestRun = runs.data?.data[0]
+  const canStart =
+    preparation.data?.data.ready === true && (scopeType === "all" || scopeIds.length > 0)
+  const scopeSummary =
+    scopeType === "all" ? "全校" : `${scopeName(scopeType)} · 已选 ${scopeIds.length} 项`
   return (
     <>
       <PageHeader
         title="方案生成"
-        description="生成不会覆盖当前课表，候选方案由你选择后才会生效。"
+        description="按本次排课需求生成候选课表。生成后先预览，确认采用后才会影响当前课表。"
       />
       <SchedulingWorkflow />
-      <div className="space-y-4 p-4 md:p-7">
+      <div className="mx-auto w-full max-w-[1480px] space-y-5 p-4 md:p-6">
         {runId ? (
           activeRun.isLoading ? (
             <LoadingState label="正在恢复任务状态…" />
@@ -270,249 +280,213 @@ export function ScheduleGenerationPage() {
         ) : preparation.isError || !preparation.data ? (
           <ErrorState retry={() => void preparation.refetch()} />
         ) : (
-          <>
-            <section className="surface-panel overflow-hidden">
-              <div className="grid gap-6 p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center lg:p-6">
-                <div className="min-w-0">
-                  <p
-                    className={cn(
-                      "flex items-center gap-2 text-sm font-medium",
-                      preparation.data.data.ready ? "text-emerald-700" : "text-rose-700",
-                    )}
-                  >
-                    {preparation.data.data.ready ? (
-                      <CheckCircle2Icon className="size-4" />
-                    ) : (
-                      <AlertTriangleIcon className="size-4" />
-                    )}
-                    {preparation.data.data.ready
-                      ? isRecommended
-                        ? "准备完成 · 系统推荐"
-                        : "准备完成 · 自定义配置"
-                      : `还有 ${preparation.data.data.summary.blocking} 项阻塞`}
-                  </p>
-                  <h2 className="mt-2 text-xl font-semibold tracking-tight">
-                    {isRecommended ? "全校均衡排课" : "按当前配置生成课表"}
-                  </h2>
-                  <dl className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm">
-                    <GenerationFact
-                      label="范围"
-                      value={
-                        scopeType === "all"
-                          ? "全校"
-                          : `${scopeName(scopeType)} · ${scopeIds.length} 项`
-                      }
-                    />
-                    <GenerationFact label="预计安排" value={`${selectedEntryCount} 节`} />
-                    <GenerationFact label="优化目标" value={strategyName(profile)} />
-                    <GenerationFact
-                      label="预计用时"
-                      value={candidateCount === 3 ? "约 1–3 分钟" : "约 10–60 秒"}
-                    />
-                  </dl>
-                </div>
-                <div className="flex shrink-0 flex-col gap-2 sm:flex-row lg:min-w-56 lg:flex-col">
-                  {!preparation.data.data.ready ? (
-                    <Button
-                      nativeButton={false}
-                      render={<Link to={semesterPath(semesterId, "preparation")} />}
-                    >
-                      先处理阻塞问题
-                      <ArrowRightIcon />
-                    </Button>
-                  ) : !customOpen ? (
-                    <Button
-                      disabled={starting || (scopeType !== "all" && scopeIds.length === 0)}
-                      onClick={() => void start()}
-                    >
-                      {starting ? <LoaderCircleIcon className="animate-spin" /> : <SparklesIcon />}
-                      {starting ? "正在创建任务…" : "开始自动排课"}
-                    </Button>
-                  ) : null}
-                  <Button variant="outline" onClick={() => setCustomOpen((value) => !value)}>
-                    <Settings2Icon />
-                    {customOpen ? "收起自定义设置" : isRecommended ? "自定义设置" : "修改设置"}
-                  </Button>
-                </div>
+          <section className="surface-panel overflow-hidden">
+            <div className="flex flex-col gap-3 border-b px-5 py-4 sm:flex-row sm:items-center">
+              <div className="min-w-0 flex-1">
+                <h2 className="font-semibold">生成新方案</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  推荐设置适用于大多数排课场景。生成后先预览，确认采用后才会影响当前课表。
+                </p>
               </div>
-            </section>
+              <div
+                className={cn(
+                  "inline-flex w-fit items-center gap-2 text-sm font-medium",
+                  preparation.data.data.ready ? "text-emerald-700" : "text-rose-700",
+                )}
+              >
+                {preparation.data.data.ready ? (
+                  <CheckCircle2Icon className="size-4" />
+                ) : (
+                  <AlertTriangleIcon className="size-4" />
+                )}
+                {preparation.data.data.ready
+                  ? "可以开始生成"
+                  : `${preparation.data.data.summary.blocking} 项阻塞`}
+              </div>
+            </div>
+
+            <div className="grid gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-semibold">{isRecommended ? "推荐设置" : "当前设置"}</p>
+                  {isRecommended && (
+                    <span className="rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                      推荐
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1.5 text-sm text-muted-foreground">
+                  {mode === "rebuild" ? "全部课程重新排" : "只安排未排课程"}
+                  {` · ${scopeSummary} · ${candidateCount} 个方案`}
+                </p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  本次涉及 {selectedEntryCount} 节课 · 预计
+                  {candidateCount === 3 ? " 1–3 分钟" : " 10–60 秒"}
+                  {keepLocked ? " · 锁定课程保持原位" : ""}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-2 lg:justify-end">
+                {preparation.data.data.ready ? (
+                  <Button disabled={starting || !canStart} onClick={() => void start()}>
+                    {starting ? <LoaderCircleIcon className="animate-spin" /> : <SparklesIcon />}
+                    {starting ? "正在创建任务…" : "开始生成方案"}
+                  </Button>
+                ) : (
+                  <Button
+                    nativeButton={false}
+                    render={<Link to={semesterPath(semesterId, "preparation")} />}
+                  >
+                    处理阻塞项
+                    <ArrowRightIcon />
+                  </Button>
+                )}
+                <Button variant="outline" onClick={() => setCustomOpen((value) => !value)}>
+                  <Settings2Icon />
+                  {customOpen ? "收起设置" : "调整设置"}
+                </Button>
+              </div>
+            </div>
 
             {customOpen && (
-              <section className="surface-panel overflow-hidden">
-                <div className="border-b px-5 py-4">
-                  <h2 className="font-semibold">自定义生成方案</h2>
-                </div>
-                <div className="grid lg:grid-cols-[minmax(0,1.2fr)_minmax(20rem,0.8fr)]">
-                  <section className="grid content-start gap-4 border-b p-5 lg:border-r lg:border-b-0">
-                    <div>
-                      <h3 className="font-semibold">1. 生成范围</h3>
-                    </div>
-                    <Segmented
-                      value={scopeType}
-                      onChange={(value) => {
-                        setScopeType(value as ScopeType)
-                        setScopeIds([])
-                      }}
-                      options={[
-                        { value: "all", label: "全校" },
-                        { value: "grade", label: "按年级" },
-                        { value: "class", label: "按班级" },
-                        { value: "assignment", label: "按任课关系" },
-                      ]}
-                    />
-                    {scopeType !== "all" &&
-                      (assignments.isLoading || classSettings.isLoading ? (
-                        <LoadingState label="正在载入可选范围…" />
-                      ) : assignments.isError || classSettings.isError ? (
-                        <ErrorState
-                          retry={() => {
-                            void assignments.refetch()
-                            void classSettings.refetch()
-                          }}
-                        />
-                      ) : (
-                        <ScopePicker options={options} selected={scopeIds} onChange={setScopeIds} />
-                      ))}
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <button
-                        type="button"
-                        aria-pressed={mode === "rebuild"}
-                        className={cn(
-                          "rounded-xl border p-4 text-left focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/20",
-                          mode === "rebuild"
-                            ? "border-primary bg-primary/[0.05]"
-                            : "hover:bg-muted/50",
-                        )}
-                        onClick={() => setMode("rebuild")}
-                      >
-                        <span className="font-medium">全量重排</span>
-                        <span className="mt-1 block text-sm text-muted-foreground">
-                          重新寻找整体质量更好的课表。
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        aria-pressed={mode === "fill"}
-                        className={cn(
-                          "rounded-xl border p-4 text-left focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/20",
-                          mode === "fill"
-                            ? "border-primary bg-primary/[0.05]"
-                            : "hover:bg-muted/50",
-                        )}
-                        onClick={() => setMode("fill")}
-                      >
-                        <span className="font-medium">保留现有并补排</span>
-                        <span className="mt-1 block text-sm text-muted-foreground">
-                          尽量不动已有安排，只补齐未排课程。
-                        </span>
-                      </button>
-                    </div>
-                    <label className="flex items-start gap-3 rounded-xl border bg-muted/30 p-3 text-sm">
-                      <Checkbox
-                        checked={keepLocked}
-                        onCheckedChange={(checked) => setKeepLocked(Boolean(checked))}
+              <div className="border-t bg-muted/10">
+                <div className="divide-y">
+                  <div className="grid gap-3 px-5 py-4 md:grid-cols-[9rem_minmax(0,1fr)] md:items-start">
+                    <p className="pt-2 text-sm font-medium">排课方式</p>
+                    <div className="min-w-0">
+                      <Segmented
+                        value={mode}
+                        onChange={(value) => setMode(value as "rebuild" | "fill")}
+                        options={[
+                          { value: "rebuild", label: "全部重新排" },
+                          { value: "fill", label: "只排未安排课程" },
+                        ]}
                       />
-                      <span>
-                        <strong className="block font-medium">保留已锁定课程</strong>
-                      </span>
-                    </label>
-                  </section>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        {mode === "rebuild"
+                          ? "本次范围内的课程全部重新安排。"
+                          : "保留已有课表，只安排还没有排上的课程。"}
+                      </p>
+                    </div>
+                  </div>
 
-                  <div>
-                    <section className="grid gap-4 border-b p-5">
-                      <div>
-                        <h3 className="font-semibold">2. 优化目标</h3>
-                      </div>
-                      <div className="grid gap-2">
-                        {strategyOptions.map((option) => (
-                          <button
-                            key={option.value}
-                            type="button"
-                            aria-pressed={profile === option.value}
-                            className={cn(
-                              "rounded-xl border px-3 py-3 text-left focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/20",
-                              profile === option.value
-                                ? "border-primary bg-primary/[0.05]"
-                                : "hover:bg-muted/50",
-                            )}
-                            onClick={() => setProfile(option.value)}
-                          >
-                            <span className="flex items-center gap-2 font-medium">
-                              {profile === option.value && (
-                                <CheckCircle2Icon className="size-4 text-primary" />
-                              )}
-                              {option.title}
-                            </span>
-                            <span className="mt-1 block text-xs leading-5 text-muted-foreground">
-                              {option.description}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    </section>
-
-                    <section className="grid gap-3 p-5">
-                      <div>
-                        <h3 className="font-semibold">3. 候选数量</h3>
-                      </div>
+                  <div className="grid gap-3 px-5 py-4 md:grid-cols-[9rem_minmax(0,1fr)] md:items-start">
+                    <p className="pt-2 text-sm font-medium">生成几个方案</p>
+                    <div className="min-w-0">
                       <Segmented
                         value={String(candidateCount)}
                         onChange={(value) => setCandidateCount(Number(value) as 1 | 3)}
                         options={[
-                          { value: "1", label: "1 个 · 推荐" },
-                          { value: "3", label: "3 个 · 便于比较" },
+                          { value: "1", label: "生成 1 个" },
+                          { value: "3", label: "生成 3 个" },
                         ]}
                       />
-                    </section>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        {candidateCount === 1
+                          ? "生成 1 个结果，速度更快。"
+                          : "生成 3 个不同结果，完成后可以逐个比较。"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 px-5 py-4 md:grid-cols-[9rem_minmax(0,1fr)] md:items-start">
+                    <p className="pt-2 text-sm font-medium">排课范围</p>
+                    <div className="min-w-0">
+                      <Segmented
+                        value={scopeType}
+                        onChange={(value) => {
+                          setScopeType(value as ScopeType)
+                          setScopeIds([])
+                        }}
+                        options={[
+                          { value: "all", label: "全校" },
+                          { value: "grade", label: "指定年级" },
+                          { value: "class", label: "指定班级" },
+                          { value: "assignment", label: "指定任课关系" },
+                        ]}
+                      />
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        {scopeType === "all"
+                          ? "全校所有已确认的任课关系参与本次排课。"
+                          : scopeType === "grade"
+                            ? "只为下方选中的年级进行本次排课。"
+                            : scopeType === "class"
+                              ? "只为下方选中的班级进行本次排课。"
+                              : "只处理下方选中的任课关系。"}
+                      </p>
+                      {scopeType !== "all" && (
+                        <div className="mt-3">
+                          {assignments.isLoading || classSettings.isLoading ? (
+                            <LoadingState label="正在载入可选范围…" />
+                          ) : assignments.isError || classSettings.isError ? (
+                            <ErrorState
+                              retry={() => {
+                                void assignments.refetch()
+                                void classSettings.refetch()
+                              }}
+                            />
+                          ) : (
+                            <ScopePicker
+                              options={options}
+                              selected={scopeIds}
+                              onChange={setScopeIds}
+                            />
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 px-5 py-4 md:grid-cols-[9rem_minmax(0,1fr)] md:items-start">
+                    <p className="pt-2 text-sm font-medium">保留锁定安排</p>
+                    <div className="min-w-0 pt-1.5">
+                      <label className="flex cursor-pointer items-center gap-2 text-sm">
+                        <Checkbox
+                          checked={keepLocked}
+                          onCheckedChange={(checked) => setKeepLocked(Boolean(checked))}
+                        />
+                        保持锁定课程位置不变
+                      </label>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        {keepLocked
+                          ? "已锁定课程保持原位置，不参与重新安排。"
+                          : "已锁定课程也会参与本次重新安排。"}
+                      </p>
+                    </div>
                   </div>
                 </div>
-                <div className="flex flex-col gap-3 border-t bg-muted/30 p-4 sm:flex-row sm:items-center">
-                  <Button variant="ghost" onClick={resetRecommended}>
-                    <RotateCcwIcon />
-                    恢复推荐配置
-                  </Button>
-                  <Button
-                    className="sm:ml-auto"
-                    disabled={
-                      starting ||
-                      !preparation.data.data.ready ||
-                      (scopeType !== "all" && scopeIds.length === 0)
-                    }
-                    onClick={() => void start()}
-                  >
-                    {starting ? <LoaderCircleIcon className="animate-spin" /> : <SparklesIcon />}
-                    {starting ? "正在创建任务…" : "使用此配置生成"}
-                  </Button>
-                </div>
-              </section>
+
+                {!isRecommended && (
+                  <div className="flex justify-end border-t px-5 py-3">
+                    <Button variant="ghost" size="sm" onClick={resetRecommended}>
+                      <RotateCcwIcon />
+                      恢复推荐设置
+                    </Button>
+                  </div>
+                )}
+              </div>
             )}
-          </>
+          </section>
         )}
 
         <section className="surface-panel overflow-hidden">
           <button
             type="button"
-            className="flex min-h-16 w-full items-center gap-3 px-4 text-left hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/20"
+            className="flex min-h-14 w-full items-center gap-3 px-5 text-left transition-colors hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/20"
             aria-expanded={historyOpen}
             onClick={() => setHistoryOpen((value) => !value)}
           >
             <Clock3Icon className="size-4 shrink-0 text-muted-foreground" />
-            <span className="min-w-0">
-              <span className="block text-sm font-semibold">生成记录</span>
-              <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                {latestRun
-                  ? `最近任务 #${latestRun.id} · ${strategyName(latestRun.strategy.profile)} · ${runStatusName(latestRun.status)}`
-                  : "还没有生成任务"}
-              </span>
-            </span>
-            <span className="ml-auto text-xs text-muted-foreground">{runTotal} 条</span>
+            <span className="text-sm font-semibold">历史生成记录</span>
+            <span className="text-xs text-muted-foreground">{runTotal} 条</span>
             <ChevronDownIcon
               className={cn(
-                "size-4 shrink-0 text-muted-foreground transition-transform",
+                "ml-auto size-4 shrink-0 text-muted-foreground transition-transform",
                 historyOpen && "rotate-180",
               )}
             />
           </button>
+
           {historyOpen && (
             <div className="border-t">
               {runs.isLoading ? (
@@ -520,17 +494,20 @@ export function ScheduleGenerationPage() {
               ) : runs.isError ? (
                 <ErrorState retry={() => void runs.refetch()} />
               ) : !runs.data?.data.length ? (
-                <EmptyList title="还没有生成任务" description="完成配置后开始第一次自动排课。" />
+                <EmptyList
+                  title="还没有生成记录"
+                  description="完成上方设置后开始第一次方案生成。"
+                />
               ) : (
                 <>
                   <Table responsive>
                     <TableHeader>
                       <TableRow>
                         <TableHead>任务</TableHead>
-                        <TableHead>范围</TableHead>
-                        <TableHead>策略</TableHead>
+                        <TableHead>排课范围</TableHead>
+                        <TableHead>排课偏好</TableHead>
                         <TableHead>进度</TableHead>
-                        <TableHead>候选</TableHead>
+                        <TableHead>方案数</TableHead>
                         <TableHead>创建时间</TableHead>
                         <TableHead className="text-right">操作</TableHead>
                       </TableRow>
@@ -541,14 +518,14 @@ export function ScheduleGenerationPage() {
                           <TableCell data-label="任务" className="font-medium">
                             #{run.id}
                           </TableCell>
-                          <TableCell data-label="范围">{scopeName(run.scope.type)}</TableCell>
-                          <TableCell data-label="策略">
+                          <TableCell data-label="排课范围">{scopeName(run.scope.type)}</TableCell>
+                          <TableCell data-label="排课偏好">
                             {strategyName(run.strategy.profile)}
                           </TableCell>
                           <TableCell data-label="进度">
                             <RunStatus status={run.status} percent={run.progress_percent} />
                           </TableCell>
-                          <TableCell data-label="候选">{run.candidates_count ?? 0}</TableCell>
+                          <TableCell data-label="方案数">{run.candidates_count ?? 0}</TableCell>
                           <TableCell data-label="创建时间">{formatDate(run.created_at)}</TableCell>
                           <TableCell data-label="操作" className="text-right">
                             <Button
@@ -706,9 +683,6 @@ function RunWorkspace({
             未找到完整可行方案
           </p>
           <p className="mt-2 text-sm leading-6 text-rose-800/80">{run.error_message}</p>
-          <div className="mt-3">
-            <AiAssistantButton semesterId={run.semester_id} scheduleRunId={run.id} />
-          </div>
           {bottleneck && (
             <div className="mt-3 rounded-lg border border-rose-200 bg-white/55 p-3 text-sm text-rose-900">
               <p className="font-medium">
@@ -832,9 +806,17 @@ function CandidateCard({
         <Score label="课程分布" value={candidate.score_breakdown.course_distribution} />
         <Score label="教师体验" value={candidate.score_breakdown.teacher_experience} />
         <Score label="班级负荷" value={candidate.score_breakdown.class_load} />
-        <Score label="连排与间隔" value={candidate.score_breakdown.session_spacing} />
-        <Score label="教室稳定" value={candidate.score_breakdown.room_stability} />
-        <Score label="学校规则" value={candidate.score_breakdown.custom_rules} />
+        <Score label="主课时段" value={candidate.score_breakdown.core_course_priority} />
+        <Score
+          label="连排与间隔"
+          value={candidate.score_breakdown.session_spacing}
+          active={candidate.score_breakdown.weights?.session_spacing !== 0}
+        />
+        <Score
+          label="学校规则"
+          value={candidate.score_breakdown.custom_rules}
+          active={candidate.score_breakdown.weights?.custom_rules !== 0}
+        />
       </dl>
       {!assessment.eligible && (
         <div
@@ -842,7 +824,7 @@ function CandidateCard({
           className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-800 dark:bg-amber-950/45 dark:text-amber-200"
         >
           <p className="font-medium">未达到推荐质量线</p>
-          <p>{assessment.reasons.join("；")}。建议调整生成策略或人工复核后再设为当前课表。</p>
+          <p>{assessment.reasons.join("；")}。建议调整生成策略或人工复核后再发布。</p>
         </div>
       )}
       <details className="mt-3 rounded-lg bg-muted/30 px-3 py-2 text-xs">
@@ -853,8 +835,11 @@ function CandidateCard({
           <span>连续授课提醒 {candidate.score_breakdown.consecutive_over_preference}</span>
           <span>班级日负荷差 {candidate.score_breakdown.class_daily_imbalance}</span>
           <span>教室变化 {candidate.score_breakdown.room_changes}</span>
+          <span>教室稳定分 {candidate.score_breakdown.room_stability}</span>
           <span>主课优先分 {candidate.score_breakdown.core_course_priority}</span>
-          <span>相对当前变化 {candidate.score_breakdown.changes_from_current}</span>
+          {candidate.score_breakdown.weights?.stability !== 0 && (
+            <span>相对当前变化 {candidate.score_breakdown.changes_from_current}</span>
+          )}
           {candidate.score_breakdown.rule_results
             .filter((item) => item.violations > 0)
             .slice(0, 4)
@@ -879,7 +864,7 @@ function CandidateCard({
           onClick={() => onAdopt(candidate, true)}
         >
           <CheckCircle2Icon />
-          设为当前课表
+          发布课表
         </Button>
       </div>
     </article>
@@ -1113,13 +1098,31 @@ function AdoptDialog({
     setQualityAcknowledged(false)
   }, [value])
   const quality = value ? assessCandidateQuality(value.candidate) : null
+  const publicationPreview = useQuery({
+    queryKey: ["candidate-publication-preview", semesterId, runId, value?.candidate.id],
+    enabled: Boolean(value?.activate && value),
+    queryFn: () =>
+      api<TimetablePublicationPreview>(
+        `/api/v1/semesters/${semesterId}/schedule-runs/${runId}/candidates/${value!.candidate.id}/adopt-preview`,
+        {
+          method: "POST",
+          body: JSON.stringify({ name: value!.candidate.name }),
+        },
+      ),
+  })
+  const publication = publicationPreview.data?.data
+  const publicationBlocked = Boolean(
+    value?.activate &&
+    (publicationPreview.isLoading || publicationPreview.isError || publication?.allowed === false),
+  )
   const save = async (event: FormEvent) => {
     event.preventDefault()
     if (
       !value ||
       !etag ||
       (value.activate && reason.trim().length < 2) ||
-      (value.activate && quality && !quality.eligible && !qualityAcknowledged)
+      (value.activate && quality && !quality.eligible && !qualityAcknowledged) ||
+      publicationBlocked
     )
       return
     setSaving(true)
@@ -1137,7 +1140,7 @@ function AdoptDialog({
         },
       )
       toast.success(
-        value.activate ? "已设为当前课表，原版本已保留在历史中" : "已创建可编辑课表草稿",
+        value.activate ? "课表已发布，原版本已保留在历史记录中" : "已创建可编辑课表草稿",
       )
       onClose()
       await onSaved(result.data)
@@ -1151,10 +1154,10 @@ function AdoptDialog({
     <Dialog open={value !== null} onOpenChange={(next) => !next && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{value?.activate ? "设为当前课表" : "采用为编辑草稿"}</DialogTitle>
+          <DialogTitle>{value?.activate ? "发布课表" : "采用为编辑草稿"}</DialogTitle>
           <DialogDescription>
             {value?.activate
-              ? "系统会再次检查输入修订和硬冲突；切换后旧当前课表将转为历史版本。"
+              ? "发布前会检查课表完整性，并确认现有临时调课和代课能否安全迁移。"
               : "候选方案将复制成独立草稿，你可以继续手工调整。"}
           </DialogDescription>
         </DialogHeader>
@@ -1168,7 +1171,7 @@ function AdoptDialog({
           </Field>
           {value?.activate && (
             <Field
-              label="切换原因（必填）"
+              label="发布说明（必填）"
               error={
                 reason.length > 0 && reason.trim().length < 2 ? "请填写至少 2 个字" : undefined
               }
@@ -1176,11 +1179,82 @@ function AdoptDialog({
               <Input
                 value={reason}
                 onChange={(event) => setReason(event.target.value)}
-                placeholder="例如：采用综合质量最高方案"
+                placeholder="例如：采用本次自动排课方案"
                 autoFocus
                 aria-invalid={reason.length > 0 && reason.trim().length < 2}
               />
             </Field>
+          )}
+          {value?.activate && (
+            <div
+              className={cn(
+                "rounded-xl border p-3 text-sm",
+                publication?.allowed === false
+                  ? "border-amber-200 bg-amber-50/70 dark:border-amber-900 dark:bg-amber-950/30"
+                  : "bg-muted/20",
+              )}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="font-medium">发布影响</span>
+                {publicationPreview.isLoading ? (
+                  <span className="text-xs text-muted-foreground">检查中…</span>
+                ) : publicationPreview.isError ? (
+                  <span className="text-xs text-destructive">检查失败</span>
+                ) : publication ? (
+                  <span
+                    className={cn(
+                      "text-xs",
+                      publication.allowed ? "text-emerald-600" : "text-amber-700",
+                    )}
+                  >
+                    {publication.allowed ? "可以发布" : "需要先处理"}
+                  </span>
+                ) : null}
+              </div>
+              {publication && (
+                <div className="mt-2 space-y-2 text-xs text-muted-foreground">
+                  <p>
+                    本学期 · 自动迁移 {publication.impact.preserved} 项
+                    {publication.impact.needs_review + publication.impact.orphaned > 0
+                      ? ` · 待处理 ${publication.impact.needs_review + publication.impact.orphaned} 项`
+                      : ""}
+                  </p>
+                  {publication.impact.items
+                    .filter((item) => item.status === "needs_review" || item.status === "orphaned")
+                    .slice(0, 4)
+                    .map((item) => (
+                      <div
+                        key={`${item.kind}:${item.id}`}
+                        className="rounded-lg border bg-background px-2.5 py-2"
+                      >
+                        <p className="font-medium text-foreground">
+                          {item.effective_date} · {item.summary}
+                        </p>
+                        <p className="mt-0.5 leading-5">{item.reason}</p>
+                      </div>
+                    ))}
+                  {!publication.allowed && (
+                    <p className="leading-5">
+                      请先在
+                      <Link
+                        className="mx-1 font-medium text-foreground underline underline-offset-4"
+                        to={semesterPath(semesterId, "adjustments")}
+                      >
+                        临时调课
+                      </Link>
+                      或
+                      <Link
+                        className="mx-1 font-medium text-foreground underline underline-offset-4"
+                        to={semesterPath(semesterId, "leaves")}
+                      >
+                        请假与代课
+                      </Link>
+                      中处理，再重新发布。
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
           )}
           {value?.activate && quality && !quality.eligible && (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/45 dark:text-amber-200">
@@ -1204,10 +1278,11 @@ function AdoptDialog({
               disabled={
                 saving ||
                 Boolean(value?.activate && reason.trim().length < 2) ||
-                Boolean(value?.activate && quality && !quality.eligible && !qualityAcknowledged)
+                Boolean(value?.activate && quality && !quality.eligible && !qualityAcknowledged) ||
+                publicationBlocked
               }
             >
-              {saving ? "处理中…" : value?.activate ? "确认设为当前课表" : "创建草稿"}
+              {saving ? "处理中…" : value?.activate ? "确认发布" : "创建草稿"}
             </Button>
           </DialogFooter>
         </form>
@@ -1316,19 +1391,21 @@ function Segmented({
     </div>
   )
 }
-function GenerationFact({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-baseline gap-1.5">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="font-medium">{value}</dd>
-    </div>
-  )
-}
-function Score({ label, value }: { label: string; value: number }) {
+function Score({
+  label,
+  value,
+  active = true,
+}: {
+  label: string
+  value: number
+  active?: boolean
+}) {
   return (
     <div className="rounded-lg bg-muted/30 p-2">
       <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="mt-0.5 font-semibold tabular-nums">{Number(value).toFixed(1)}</dd>
+      <dd className="mt-0.5 font-semibold tabular-nums">
+        {active ? Number(value).toFixed(1) : "未配置"}
+      </dd>
     </div>
   )
 }

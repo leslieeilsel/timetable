@@ -11,6 +11,7 @@ use App\Modules\Resources\Models\Room;
 use App\Modules\Resources\Models\SchoolClass;
 use App\Modules\Resources\Models\Teacher;
 use App\Modules\Scheduling\Models\FixedPlacement;
+use App\Modules\Timetable\Models\LessonInstance;
 use App\Modules\Timetable\Models\TimetableEntry;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
@@ -41,6 +42,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property-read Teacher $teacher
  * @property-read Room|null $specifiedRoom
  * @property-read Collection<int, TimetableEntry> $entries
+ * @property-read Collection<int, LessonInstance> $lessonInstances
  * @property-read Collection<int, Teacher> $collaborators
  * @property-read Collection<int, FixedPlacement> $fixedPlacements
  */
@@ -105,6 +107,12 @@ class TeachingAssignment extends Model
     public function entries(): HasMany
     {
         return $this->hasMany(TimetableEntry::class);
+    }
+
+    /** @return HasMany<LessonInstance, $this> */
+    public function lessonInstances(): HasMany
+    {
+        return $this->hasMany(LessonInstance::class);
     }
 
     /** @return BelongsToMany<Teacher, $this> */

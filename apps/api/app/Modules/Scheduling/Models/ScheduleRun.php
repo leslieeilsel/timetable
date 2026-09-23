@@ -173,7 +173,6 @@ class ScheduleRun extends Model
         $pairs = [
             'input_revision' => (int) $semester->getRawOriginal('input_revision'),
             'catalog_revision' => (int) $settings->getRawOriginal('catalog_revision'),
-            'timetable_revision' => (int) $semester->getRawOriginal('timetable_revision'),
             'assignment_revision' => (int) $semester->getRawOriginal('assignment_revision'),
             'constraint_revision' => (int) $semester->getRawOriginal('constraint_revision'),
         ];
@@ -188,6 +187,31 @@ class ScheduleRun extends Model
         }
 
         return $differences;
+    }
+
+    public function baselineContextMatches(Semester $semester): bool
+    {
+        $snapshot = $this->constraint_snapshot;
+        if (array_key_exists('base_was_current', $snapshot)) {
+            if (! (bool) $snapshot['base_was_current']) {
+                return true;
+            }
+
+            return $semester->current_timetable_version_id === $this->base_version_id;
+        }
+
+        if ($this->base_version_id === null) {
+            return $semester->current_timetable_version_id === null;
+        }
+
+        $status = DB::table('timetable_versions')
+            ->where('id', $this->base_version_id)
+            ->value('status');
+        if ($status === 'draft') {
+            return true;
+        }
+
+        return $semester->current_timetable_version_id === $this->base_version_id;
     }
 
     public function baselineMatches(bool $lockForUpdate = false): bool

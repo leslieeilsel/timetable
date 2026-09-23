@@ -49,7 +49,7 @@ const labels: Record<string, string> = {
   years: "学年学期",
   semester: "当前学期",
   scheduling: "排课中心",
-  preparation: "准备检查",
+  preparation: "排课准备",
   assignments: "任课关系",
   constraints: "规则与约束",
   generate: "方案生成",

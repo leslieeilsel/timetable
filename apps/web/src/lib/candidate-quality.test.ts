@@ -55,4 +55,16 @@ describe("candidate recommendation floor", () => {
     expect(assessCandidateQuality(candidate())).toEqual({ eligible: true, reasons: [] })
     expect(assessCandidateQuality(candidate({ unscheduled_count: 1 })).eligible).toBe(false)
   })
+
+  it("ignores recommendation floors for dimensions that are not active in the score", () => {
+    const value = candidate({
+      score_breakdown: {
+        ...candidate().score_breakdown,
+        session_spacing: 0,
+        weights: { session_spacing: 0 },
+      },
+    })
+
+    expect(assessCandidateQuality(value)).toEqual({ eligible: true, reasons: [] })
+  })
 })

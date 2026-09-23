@@ -26,8 +26,13 @@ it('returns all preparation checks from current semester data', function (): voi
         ->assertJsonPath('data.summary.blocking', 0)
         ->assertJsonPath('data.summary.warnings', 0)
         ->assertJsonPath('data.summary.passed', 9)
+        ->assertJsonPath('data.summary.active_days', 5)
+        ->assertJsonPath('data.summary.active_class_settings', 1)
         ->assertJsonPath('data.summary.confirmed_assignments', 1)
+        ->assertJsonPath('data.summary.assignment_resource_issues', 0)
         ->assertJsonPath('data.summary.required_entries', 1)
+        ->assertJsonPath('data.summary.active_constraints', 1)
+        ->assertJsonPath('data.summary.current_version_count', 1)
         ->assertJsonCount(9, 'data.checks');
 
     expect(collect($response->json('data.checks'))->pluck('key')->all())->toBe([

@@ -154,6 +154,139 @@ it('generates comparable candidates and directly adopts one as the current timet
         ->assertJsonPath('code', 'CANDIDATE_ALREADY_ADOPTED');
 });
 
+it('publishes a regenerated candidate while preserving temporary adjustments by stable lesson identity', function (): void {
+    Queue::fake();
+    $fixture = timetableVersionFixture();
+    $etag = $this->getJson("/api/v1/semesters/{$fixture['semester_id']}")->headers->get('ETag');
+    $placed = $this->withHeader('If-Match', $etag)
+        ->postJson("/api/v1/semesters/{$fixture['semester_id']}/timetable/entries", [
+            'teaching_assignment_id' => $fixture['assignment_id'],
+            'weekday' => 1,
+            'item_id' => $fixture['item_ids'][0],
+        ])->assertCreated();
+    $originalEntryId = (int) $placed->json('data.id');
+    $originalEntryKey = DB::table('timetable_entries')->where('id', $originalEntryId)->value('entry_key');
+    $lessonInstanceId = (int) DB::table('timetable_entries')->where('id', $originalEntryId)->value('lesson_instance_id');
+    $activated = $this->withHeader('If-Match', $placed->headers->get('ETag'))
+        ->postJson("/api/v1/semesters/{$fixture['semester_id']}/timetable-versions/{$placed->json('meta.version_id')}/activate", [
+            'reason' => '建立当前课表',
+        ])->assertOk();
+    $exception = $this->withHeader('If-Match', $activated->headers->get('ETag'))
+        ->postJson("/api/v1/semesters/{$fixture['semester_id']}/calendar-exceptions", [
+            'effective_date' => '2026-09-07',
+            'type' => 'cancel',
+            'original_entry_id' => $originalEntryId,
+            'reason' => '临时停课',
+        ])->assertCreated()
+        ->assertJsonPath('data.lesson_instance_id', $lessonInstanceId);
+
+    DB::table('fixed_placements')->insert([
+        'semester_id' => $fixture['semester_id'],
+        'teaching_assignment_id' => $fixture['assignment_id'],
+        'week_pattern' => 'all',
+        'weekday' => 1,
+        'item_id' => $fixture['item_ids'][0],
+        'is_locked' => true,
+        'status' => 'active',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    $runResponse = $this->withHeader('If-Match', $exception->headers->get('ETag'))
+        ->postJson("/api/v1/semesters/{$fixture['semester_id']}/schedule-runs", [
+            'scope' => ['type' => 'all', 'ids' => []],
+            'preservation' => ['keep_locked' => true, 'keep_current' => false],
+            'strategy' => ['profile' => 'balanced'],
+            'candidate_count' => 1,
+        ])->assertStatus(202);
+    $run = ScheduleRun::query()->findOrFail($runResponse->json('data.id'));
+    app(AutoScheduler::class)->generate($run);
+    $candidate = $run->fresh()->candidates()->firstOrFail();
+
+    $this->postJson(
+        "/api/v1/semesters/{$fixture['semester_id']}/schedule-runs/{$run->id}/candidates/{$candidate->id}/adopt-preview",
+        [],
+    )->assertOk()
+        ->assertJsonPath('data.allowed', true)
+        ->assertJsonPath('data.impact.preserved', 1)
+        ->assertJsonPath('data.impact.needs_review', 0)
+        ->assertJsonPath('data.impact.orphaned', 0);
+
+    $adopted = $this->withHeader('If-Match', $runResponse->headers->get('ETag'))
+        ->postJson(
+            "/api/v1/semesters/{$fixture['semester_id']}/schedule-runs/{$run->id}/candidates/{$candidate->id}/adopt",
+            ['activate' => true, 'reason' => '重新生成并发布'],
+        )->assertCreated();
+    $newEntry = DB::table('timetable_entries')
+        ->where('timetable_version_id', $adopted->json('data.id'))
+        ->first();
+
+    expect($newEntry)->not->toBeNull()
+        ->and($newEntry->entry_key)->not->toBe($originalEntryKey)
+        ->and((int) $newEntry->lesson_instance_id)->toBe($lessonInstanceId)
+        ->and((int) DB::table('calendar_exceptions')->where('id', $exception->json('data.id'))->value('original_entry_id'))
+        ->toBe((int) $newEntry->id)
+        ->and((int) DB::table('calendar_exceptions')->where('id', $exception->json('data.id'))->value('lesson_instance_id'))
+        ->toBe($lessonInstanceId);
+});
+
+it('blocks publication when a temporary adjustment references a lesson moved to another weekday', function (): void {
+    $fixture = timetableVersionFixture();
+    $etag = $this->getJson("/api/v1/semesters/{$fixture['semester_id']}")->headers->get('ETag');
+    $placed = $this->withHeader('If-Match', $etag)
+        ->postJson("/api/v1/semesters/{$fixture['semester_id']}/timetable/entries", [
+            'teaching_assignment_id' => $fixture['assignment_id'],
+            'weekday' => 1,
+            'item_id' => $fixture['item_ids'][0],
+        ])->assertCreated();
+    $activeVersionId = (int) $placed->json('meta.version_id');
+    $entryId = (int) $placed->json('data.id');
+    $activated = $this->withHeader('If-Match', $placed->headers->get('ETag'))
+        ->postJson("/api/v1/semesters/{$fixture['semester_id']}/timetable-versions/{$activeVersionId}/activate", [
+            'reason' => '建立当前课表',
+        ])->assertOk();
+    $exception = $this->withHeader('If-Match', $activated->headers->get('ETag'))
+        ->postJson("/api/v1/semesters/{$fixture['semester_id']}/calendar-exceptions", [
+            'effective_date' => '2026-09-07',
+            'type' => 'cancel',
+            'original_entry_id' => $entryId,
+            'reason' => '临时停课',
+        ])->assertCreated();
+    $draft = $this->withHeader('If-Match', $exception->headers->get('ETag'))
+        ->postJson("/api/v1/semesters/{$fixture['semester_id']}/timetable-versions", [
+            'name' => '改到周二的草稿',
+            'base_version_id' => $activeVersionId,
+        ])->assertCreated();
+    $draftId = (int) $draft->json('data.id');
+    $draftEntryId = (int) DB::table('timetable_entries')
+        ->where('timetable_version_id', $draftId)
+        ->value('id');
+    $moved = $this->withHeader('If-Match', $draft->headers->get('ETag'))
+        ->patchJson("/api/v1/semesters/{$fixture['semester_id']}/timetable/entries/{$draftEntryId}", [
+            'weekday' => 2,
+            'item_id' => $fixture['item_ids'][0],
+        ])->assertOk();
+
+    $this->postJson("/api/v1/semesters/{$fixture['semester_id']}/timetable-versions/{$draftId}/publication-preview")
+        ->assertOk()
+        ->assertJsonPath('data.allowed', false)
+        ->assertJsonPath('data.impact.preserved', 0)
+        ->assertJsonPath('data.impact.needs_review', 1)
+        ->assertJsonPath('data.impact.orphaned', 0)
+        ->assertJsonPath('data.impact.items.0.status', 'needs_review');
+
+    $this->withHeader('If-Match', $moved->headers->get('ETag'))
+        ->postJson("/api/v1/semesters/{$fixture['semester_id']}/timetable-versions/{$draftId}/activate", [
+            'reason' => '尝试发布',
+        ])->assertStatus(409)
+        ->assertJsonPath('code', 'TIMETABLE_PUBLICATION_REVIEW_REQUIRED')
+        ->assertJsonPath('impact.needs_review', 1);
+
+    expect((int) DB::table('semesters')->where('id', $fixture['semester_id'])->value('current_timetable_version_id'))
+        ->toBe($activeVersionId)
+        ->and((int) DB::table('calendar_exceptions')->where('id', $exception->json('data.id'))->value('original_entry_id'))
+        ->toBe($entryId);
+});
+
 it('uses a selected draft as the preserved baseline for local replanning', function (): void {
     Queue::fake();
     $fixture = timetableVersionFixture();

@@ -166,11 +166,13 @@ Route::prefix('v1')->group(function (): void {
             Route::post('/semesters/{semester}/schedule-runs/{run}/cancel', [ScheduleRunController::class, 'cancel']);
             Route::get('/semesters/{semester}/schedule-runs/{run}/candidates/{candidate}', [ScheduleCandidateController::class, 'show']);
             Route::post('/semesters/{semester}/schedule-runs/{run}/candidates/{candidate}/adopt', [ScheduleCandidateController::class, 'adopt']);
+            Route::post('/semesters/{semester}/schedule-runs/{run}/candidates/{candidate}/adopt-preview', [ScheduleCandidateController::class, 'previewAdoption']);
 
             Route::get('/semesters/{semester}/timetable-versions', [TimetableVersionController::class, 'index']);
             Route::get('/semesters/{semester}/timetable-versions/compare', [TimetableVersionController::class, 'compare']);
             Route::post('/semesters/{semester}/timetable-versions', [TimetableVersionController::class, 'store']);
             Route::post('/semesters/{semester}/timetable-versions/{version}/activate', [TimetableVersionController::class, 'activate']);
+            Route::post('/semesters/{semester}/timetable-versions/{version}/publication-preview', [TimetableVersionController::class, 'previewPublication']);
             Route::post('/semesters/{semester}/timetable-versions/{version}/restore', [TimetableVersionController::class, 'restore']);
             Route::get('/semesters/{semester}/long-term-adjustments', [LongTermAdjustmentController::class, 'index']);
             Route::post('/semesters/{semester}/long-term-adjustments/preview', [LongTermAdjustmentController::class, 'preview']);

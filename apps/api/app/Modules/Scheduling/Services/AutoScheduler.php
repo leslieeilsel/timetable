@@ -59,20 +59,21 @@ class AutoScheduler
             }
             $solutions = [];
             $solutionHashes = [];
+            $failedCandidates = [];
             for ($rank = 1; $rank <= $run->candidate_count; $rank++) {
                 $this->assertNotCancelled($run);
                 $solution = null;
                 $lastFailure = null;
                 for ($attempt = 0; $attempt < self::MAX_ATTEMPTS_PER_CANDIDATE; $attempt++) {
                     $attemptSeed = $run->random_seed + $rank * 1009 + $attempt * 7919;
-                    $result = $this->solve($problem, $attemptSeed);
+                    $result = $this->solveAttempt($problem, $attemptSeed);
                     if ($result['solution'] === null) {
                         $lastFailure = $result['failure'];
 
                         continue;
                     }
                     $hash = $this->solutionHash($result['solution']);
-                    if (isset($solutionHashes[$hash]) && $attempt < self::MAX_ATTEMPTS_PER_CANDIDATE - 1) {
+                    if (isset($solutionHashes[$hash])) {
                         continue;
                     }
                     $solutionHashes[$hash] = true;
@@ -80,22 +81,31 @@ class AutoScheduler
                     break;
                 }
                 if ($solution === null) {
-                    throw new SchedulingFailureException('NO_FEASIBLE_SOLUTION', '在当前硬约束下未找到完整可行课表。', [
+                    $failedCandidates[] = [
                         'failed_candidate_rank' => $rank,
                         'attempts' => self::MAX_ATTEMPTS_PER_CANDIDATE,
                         'bottleneck' => $lastFailure,
-                        'suggestions' => [
-                            '检查教师、班级和教室的禁排时间是否过多。',
-                            '检查固定安排是否占用了关键稀缺课节。',
-                            '减少超载任课关系课时，或增加可排课节。',
-                        ],
-                    ]);
+                    ];
+                } else {
+                    $solutions[] = $solution;
                 }
-                $solutions[] = $solution;
                 $progress = 25 + (int) floor(($rank / $run->candidate_count) * 55);
                 if (! $this->updateStage($run, ScheduleRunStatus::Optimizing, 'optimizing_candidate_'.$rank, $progress)) {
                     return;
                 }
+            }
+
+            if ($solutions === []) {
+                $lastFailedCandidate = $failedCandidates[array_key_last($failedCandidates)] ?? null;
+                throw new SchedulingFailureException('NO_FEASIBLE_SOLUTION', '在当前硬约束下未找到完整可行课表。', [
+                    ...($lastFailedCandidate ?? []),
+                    'failed_candidates' => $failedCandidates,
+                    'suggestions' => [
+                        '检查教师、班级和教室的禁排时间是否过多。',
+                        '检查固定安排是否占用了关键稀缺课节。',
+                        '减少超载任课关系课时，或增加可排课节。',
+                    ],
+                ]);
             }
 
             $this->assertNotCancelled($run);
@@ -108,7 +118,7 @@ class AutoScheduler
             ], $solutions);
             usort($rankedSolutions, fn (array $left, array $right): int => $right['metrics']['quality_score'] <=> $left['metrics']['quality_score']
                 ?: $this->solutionHash($left['solution']) <=> $this->solutionHash($right['solution']));
-            $this->complete($run, $problem, $rankedSolutions);
+            $this->complete($run, $problem, $rankedSolutions, $failedCandidates);
         } catch (SchedulingFailureException $exception) {
             $this->fail($run, $exception->failureCode, $exception->getMessage(), $exception->diagnostics);
         } catch (Throwable $exception) {
@@ -308,6 +318,7 @@ class AutoScheduler
             'constraints' => $constraints,
             'resource_loads' => $resourceLoads,
             'current_entries' => $currentEntries,
+            'preserve_current' => $keepCurrent,
         ];
     }
 
@@ -554,6 +565,11 @@ class AutoScheduler
      */
     private function solve(array $problem, int $seed): array
     {
+        $denseSolution = $this->solveDenseFullLoad($problem, $seed);
+        if ($denseSolution !== null) {
+            return $denseSolution;
+        }
+
         $occupancy = [];
         $dailyLoads = [];
         $assignmentSessions = [];
@@ -693,6 +709,332 @@ class AutoScheduler
         ksort($solution);
 
         return ['solution' => $solution, 'failure' => null];
+    }
+
+    /**
+     * Full-load class schedules are a special case: when every class has exactly one lesson for
+     * every timetable slot, solving lesson-by-lesson is fragile because the final free class slot
+     * can easily be occupied by that lesson's teacher or room. In that shape we instead schedule
+     * one class at a time and find a perfect unit-to-slot matching while respecting resources
+     * already occupied by earlier classes. Different seeds vary class and edge ordering, so the
+     * normal candidate retry loop can recover when an early class choice blocks a later class.
+     *
+     * @param  array<string, mixed>  $problem
+     * @return array{solution: array<int, int>|null, failure: array<string, mixed>|null}|null
+     */
+    private function solveDenseFullLoad(array $problem, int $seed): ?array
+    {
+        $slotCount = count($problem['slots']);
+        if ($slotCount === 0 || $problem['blocks'] === []) {
+            return null;
+        }
+
+        foreach ($problem['constraints'] as $constraint) {
+            if (! $constraint instanceof SchedulingConstraint || $constraint->kind !== ConstraintKind::Hard) {
+                continue;
+            }
+            if (! in_array($constraint->category->value, [
+                'availability', 'forbidden_slot', 'weekly_load', 'room_requirement',
+            ], true)) {
+                return null;
+            }
+        }
+
+        $classUnits = [];
+        $commonWeekMask = null;
+        foreach ($problem['blocks'] as $block) {
+            if ($block['fixed'] || $block['size'] !== 1 || count($block['unit_indexes']) !== 1) {
+                return null;
+            }
+            $unitIndex = (int) $block['unit_indexes'][0];
+            $unit = $problem['units'][$unitIndex];
+            if (count($unit['class_ids']) !== 1) {
+                return null;
+            }
+            $weekMask = (int) $unit['week_mask'];
+            $commonWeekMask ??= $weekMask;
+            if ($weekMask !== $commonWeekMask) {
+                return null;
+            }
+            $classId = (int) $unit['class_ids'][0];
+            $classUnits[$classId][] = $unitIndex;
+        }
+        foreach ($classUnits as $unitIndexes) {
+            if (count($unitIndexes) !== $slotCount) {
+                return null;
+            }
+        }
+
+        $classOrder = array_keys($classUnits);
+        $classPressure = [];
+        foreach ($classUnits as $classId => $unitIndexes) {
+            $pressure = 0;
+            foreach ($unitIndexes as $unitIndex) {
+                $unit = $problem['units'][$unitIndex];
+                $pressure += ($slotCount - count($unit['allowed_slot_indexes'])) * 100;
+                foreach ($unit['resource_keys'] as $resource) {
+                    if (! str_starts_with($resource, 'school_class:')) {
+                        $pressure += (int) ($problem['resource_loads'][$resource] ?? 0);
+                    }
+                }
+            }
+            $classPressure[$classId] = $pressure;
+        }
+        usort($classOrder, fn (int $left, int $right): int => $classPressure[$right] <=> $classPressure[$left]
+            ?: $this->stableNoise($seed, $left, 11) <=> $this->stableNoise($seed, $right, 11));
+
+        $occupancy = [];
+        $solution = [];
+        foreach ($classOrder as $position => $classId) {
+            $matching = $this->matchDenseClass(
+                $problem,
+                $classId,
+                $classUnits[$classId],
+                $occupancy,
+                $seed + $position * 104729,
+            );
+            if ($matching === null) {
+                return ['solution' => null, 'failure' => [
+                    'school_class_id' => $classId,
+                    'scheduled_class_count' => $position,
+                    'class_count' => count($classOrder),
+                    'reason' => '满负载课表在当前匹配顺序下未找到完整资源组合',
+                ]];
+            }
+            foreach ($matching as $unitIndex => $slotIndex) {
+                $unit = $problem['units'][$unitIndex];
+                $solution[$unitIndex] = $slotIndex;
+                foreach ($unit['resource_keys'] as $resource) {
+                    $occupancy[$resource][$slotIndex] =
+                        ($occupancy[$resource][$slotIndex] ?? 0) | (int) $unit['week_mask'];
+                }
+            }
+        }
+
+        if (count($solution) !== count($problem['units'])) {
+            return ['solution' => null, 'failure' => [
+                'scheduled_unit_count' => count($solution),
+                'unit_count' => count($problem['units']),
+                'reason' => '满负载课表匹配结果不完整',
+            ]];
+        }
+        ksort($solution);
+
+        return ['solution' => $solution, 'failure' => null];
+    }
+
+    /**
+     * @param  array<string, mixed>  $problem
+     * @param  list<int>  $unitIndexes
+     * @param  array<string, array<int, int>>  $occupancy
+     * @return array<int, int>|null
+     */
+    private function matchDenseClass(
+        array $problem,
+        int $classId,
+        array $unitIndexes,
+        array $occupancy,
+        int $seed,
+    ): ?array {
+        $candidateSlots = [];
+        foreach ($unitIndexes as $unitIndex) {
+            $unit = $problem['units'][$unitIndex];
+            $slots = [];
+            foreach ($unit['allowed_slot_indexes'] as $slotIndex) {
+                $slotIndex = (int) $slotIndex;
+                if (! $this->resourcesOccupied(
+                    $occupancy,
+                    $unit['resource_keys'],
+                    $slotIndex,
+                    (int) $unit['week_mask'],
+                )) {
+                    $slots[] = $slotIndex;
+                }
+            }
+            if ($slots === []) {
+                return null;
+            }
+            usort($slots, function (int $left, int $right) use ($problem, $unit, $occupancy, $seed, $classId, $unitIndex): int {
+                $leftScore = $this->denseSlotPenalty($problem, $unit, $left, $occupancy, $seed);
+                $rightScore = $this->denseSlotPenalty($problem, $unit, $right, $occupancy, $seed);
+
+                return $leftScore <=> $rightScore
+                    ?: $this->stableNoise($seed, $classId, $unitIndex, $left) <=>
+                        $this->stableNoise($seed, $classId, $unitIndex, $right);
+            });
+            $candidateSlots[$unitIndex] = $slots;
+        }
+
+        $orderedUnits = $unitIndexes;
+        usort($orderedUnits, function (int $left, int $right) use ($problem, $candidateSlots, $seed, $classId): int {
+            $leftUnit = $problem['units'][$left];
+            $rightUnit = $problem['units'][$right];
+            $leftPressure = array_sum(array_map(
+                fn (string $resource): int => str_starts_with($resource, 'school_class:')
+                    ? 0
+                    : (int) ($problem['resource_loads'][$resource] ?? 0),
+                $leftUnit['resource_keys'],
+            ));
+            $rightPressure = array_sum(array_map(
+                fn (string $resource): int => str_starts_with($resource, 'school_class:')
+                    ? 0
+                    : (int) ($problem['resource_loads'][$resource] ?? 0),
+                $rightUnit['resource_keys'],
+            ));
+
+            return count($candidateSlots[$left]) <=> count($candidateSlots[$right])
+                ?: $rightPressure <=> $leftPressure
+                ?: $this->stableNoise($seed, $classId, $left, 23) <=> $this->stableNoise($seed, $classId, $right, 23);
+        });
+
+        $slotToUnit = [];
+        $unitToSlot = [];
+        foreach ($orderedUnits as $unitIndex) {
+            $seenSlots = [];
+            if (! $this->augmentDenseClassMatching(
+                $unitIndex,
+                $candidateSlots,
+                $slotToUnit,
+                $unitToSlot,
+                $seenSlots,
+            )) {
+                return null;
+            }
+        }
+
+        return $unitToSlot;
+    }
+
+    /**
+     * Prefer placements that spread repeated courses across weekdays, compact teacher schedules,
+     * and reserve earlier periods for core courses. These are soft preferences only; the matching
+     * algorithm can still choose another slot when required to complete the class.
+     *
+     * @param  array<string, mixed>  $problem
+     * @param  array<string, mixed>  $unit
+     * @param  array<string, array<int, int>>  $occupancy
+     */
+    private function denseSlotPenalty(
+        array $problem,
+        array $unit,
+        int $slotIndex,
+        array $occupancy,
+        int $seed,
+    ): float {
+        $slot = $problem['slots'][$slotIndex];
+        $weekdays = array_values(array_unique(array_column($problem['slots'], 'weekday')));
+        $weekdayCount = max(1, count($weekdays));
+        $weekdayPosition = array_search($slot['weekday'], $weekdays, true);
+        $weekdayPosition = $weekdayPosition === false ? 0 : (int) $weekdayPosition;
+        $occurrence = max(1, (int) ($unit['occurrence'] ?? 1));
+        $offset = $this->stableNoise($seed, (int) $unit['assignment_id'], 41) % $weekdayCount;
+        $targetPosition = ($occurrence - 1 + $offset) % $weekdayCount;
+        $weekdayDistance = abs($weekdayPosition - $targetPosition);
+        $weekdayDistance = min($weekdayDistance, $weekdayCount - $weekdayDistance);
+
+        $penalty = $weekdayDistance * 12.0;
+        if (in_array($unit['course_name'], ['语文', '数学', '英语'], true)) {
+            $penalty += max(0, (int) $slot['item_sort_order'] - 4) * 7.5;
+        }
+
+        foreach ($unit['teacher_ids'] as $teacherId) {
+            $resource = "teacher:{$teacherId}";
+            $existingOrders = [];
+            foreach ($occupancy[$resource] ?? [] as $occupiedSlotIndex => $occupiedMask) {
+                if (($occupiedMask & (int) $unit['week_mask']) === 0) {
+                    continue;
+                }
+                $occupiedSlot = $problem['slots'][$occupiedSlotIndex];
+                if ($occupiedSlot['weekday'] === $slot['weekday']) {
+                    $existingOrders[] = (int) $occupiedSlot['item_sort_order'];
+                }
+            }
+            $beforeGap = $this->slotOrderGapCount($existingOrders);
+            $afterOrders = [...$existingOrders, (int) $slot['item_sort_order']];
+            $afterGap = $this->slotOrderGapCount($afterOrders);
+            $penalty += ($afterGap - $beforeGap) * 14.0;
+            $penalty += max(0, $this->slotOrderMaximumStreak($afterOrders) - 3) * 8.0;
+        }
+
+        return $penalty;
+    }
+
+    /** @param list<int> $orders */
+    private function slotOrderGapCount(array $orders): int
+    {
+        if (count($orders) < 2) {
+            return 0;
+        }
+        $orders = array_values(array_unique($orders));
+        sort($orders);
+
+        return max(0, max($orders) - min($orders) + 1 - count($orders));
+    }
+
+    /** @param list<int> $orders */
+    private function slotOrderMaximumStreak(array $orders): int
+    {
+        if ($orders === []) {
+            return 0;
+        }
+        $orders = array_values(array_unique($orders));
+        sort($orders);
+        $maximum = 1;
+        $streak = 1;
+        for ($index = 1; $index < count($orders); $index++) {
+            $streak = $orders[$index] === $orders[$index - 1] + 1 ? $streak + 1 : 1;
+            $maximum = max($maximum, $streak);
+        }
+
+        return $maximum;
+    }
+
+    /**
+     * @param  array<int, list<int>>  $candidateSlots
+     * @param  array<int, int>  $slotToUnit
+     * @param  array<int, int>  $unitToSlot
+     * @param  array<int, true>  $seenSlots
+     */
+    private function augmentDenseClassMatching(
+        int $unitIndex,
+        array $candidateSlots,
+        array &$slotToUnit,
+        array &$unitToSlot,
+        array &$seenSlots,
+    ): bool {
+        foreach ($candidateSlots[$unitIndex] as $slotIndex) {
+            if (isset($seenSlots[$slotIndex])) {
+                continue;
+            }
+            $seenSlots[$slotIndex] = true;
+            $previousUnit = $slotToUnit[$slotIndex] ?? null;
+            if ($previousUnit !== null && ! $this->augmentDenseClassMatching(
+                $previousUnit,
+                $candidateSlots,
+                $slotToUnit,
+                $unitToSlot,
+                $seenSlots,
+            )) {
+                continue;
+            }
+            $slotToUnit[$slotIndex] = $unitIndex;
+            $unitToSlot[$unitIndex] = $slotIndex;
+
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Test seam for candidate-level retries without changing the solver itself.
+     *
+     * @param  array<string, mixed>  $problem
+     * @return array{solution: array<int, int>|null, failure: array<string, mixed>|null}
+     */
+    protected function solveAttempt(array $problem, int $seed): array
+    {
+        return $this->solve($problem, $seed);
     }
 
     /**
@@ -1525,6 +1867,8 @@ class AutoScheduler
         $weightedRuleViolations = 0.0;
         $softWarningCount = 0;
         $spacingRuleViolations = 0;
+        $softRuleCount = 0;
+        $spacingRuleCount = 0;
         foreach ($problem['constraints'] as $constraint) {
             if (! $constraint instanceof SchedulingConstraint || $constraint->kind !== ConstraintKind::Soft) {
                 continue;
@@ -1536,6 +1880,7 @@ class AutoScheduler
             if ($matchingUnitIndexes === []) {
                 continue;
             }
+            $softRuleCount++;
             $violations = 0;
             $category = $constraint->category->value;
             $requirement = $constraint->requirement;
@@ -1584,6 +1929,7 @@ class AutoScheduler
                 }
                 if ($category === 'spacing') {
                     $spacingRuleViolations += $violations;
+                    $spacingRuleCount++;
                 }
             } else {
                 $resources = [];
@@ -1593,6 +1939,7 @@ class AutoScheduler
                     }
                 }
                 if ($category === 'consecutive_items') {
+                    $spacingRuleCount++;
                     $limit = $this->integerRequirement($requirement, ['max_consecutive_items', 'maximum']) ?? 3;
                     foreach (array_keys($resources) as $resource) {
                         foreach ($resourceSlotOrders[$resource] ?? [] as $sortOrders) {
@@ -1604,6 +1951,7 @@ class AutoScheduler
                             }
                         }
                     }
+                    $spacingRuleViolations += $violations;
                 } elseif ($category === 'daily_load') {
                     $limit = $this->integerRequirement($requirement, ['max_items_per_day', 'max_per_day']);
                     if ($limit !== null) {
@@ -1641,26 +1989,32 @@ class AutoScheduler
                 'satisfied' => $violations === 0,
             ];
         }
-        $sessionSpacingScore = max(0.0, 100.0 - ($sameDayRepeats + $spacingRuleViolations) * 100 / $sessionCount);
+        $sessionSpacingScore = $spacingRuleCount === 0
+            ? 100.0
+            : max(0.0, 100.0 - $spacingRuleViolations * 100 / $sessionCount);
         $customRuleScore = max(0.0, 100.0 - $weightedRuleViolations * 100 / $sessionCount);
 
         $profile = $strategy['profile'] ?? 'balanced';
         $weights = match ($profile) {
             'class_distribution' => [
-                'course_distribution' => 0.30, 'teacher_experience' => 0.12, 'class_load' => 0.22,
-                'session_spacing' => 0.18, 'room_stability' => 0.05, 'custom_rules' => 0.08, 'stability' => 0.05,
+                'course_distribution' => 0.28, 'teacher_experience' => 0.15, 'class_load' => 0.20,
+                'session_spacing' => 0.12, 'room_stability' => 0.05, 'custom_rules' => 0.05,
+                'core_course_priority' => 0.10, 'stability' => 0.05,
             ],
             'teacher_experience' => [
-                'course_distribution' => 0.12, 'teacher_experience' => 0.35, 'class_load' => 0.12,
-                'session_spacing' => 0.10, 'room_stability' => 0.05, 'custom_rules' => 0.16, 'stability' => 0.10,
+                'course_distribution' => 0.12, 'teacher_experience' => 0.33, 'class_load' => 0.10,
+                'session_spacing' => 0.10, 'room_stability' => 0.05, 'custom_rules' => 0.10,
+                'core_course_priority' => 0.10, 'stability' => 0.10,
             ],
             'room_utilization' => [
-                'course_distribution' => 0.12, 'teacher_experience' => 0.15, 'class_load' => 0.12,
-                'session_spacing' => 0.10, 'room_stability' => 0.28, 'custom_rules' => 0.13, 'stability' => 0.10,
+                'course_distribution' => 0.12, 'teacher_experience' => 0.18, 'class_load' => 0.10,
+                'session_spacing' => 0.08, 'room_stability' => 0.25, 'custom_rules' => 0.07,
+                'core_course_priority' => 0.10, 'stability' => 0.10,
             ],
             default => [
-                'course_distribution' => 0.20, 'teacher_experience' => 0.20, 'class_load' => 0.15,
-                'session_spacing' => 0.15, 'room_stability' => 0.08, 'custom_rules' => 0.12, 'stability' => 0.10,
+                'course_distribution' => 0.20, 'teacher_experience' => 0.25, 'class_load' => 0.12,
+                'session_spacing' => 0.10, 'room_stability' => 0.05, 'custom_rules' => 0.08,
+                'core_course_priority' => 0.10, 'stability' => 0.10,
             ],
         };
         if ($profile === 'custom' && isset($strategy['weights'])) {
@@ -1672,10 +2026,24 @@ class AutoScheduler
                 'session_spacing' => $custom['session_spacing'] ?? 15,
                 'room_stability' => $custom['room_stability'] ?? 10,
                 'custom_rules' => $custom['custom_rules'] ?? 10,
+                'core_course_priority' => $custom['core_course_priority'] ?? 10,
                 'stability' => $custom['stability'] ?? 10,
             ];
             $sum = max(1, array_sum($customValues));
             $weights = array_map(fn (int $value): float => $value / $sum, $customValues);
+        }
+        if (! ($problem['preserve_current'] ?? false)) {
+            $weights['stability'] = 0.0;
+        }
+        if ($softRuleCount === 0) {
+            $weights['custom_rules'] = 0.0;
+        }
+        if ($spacingRuleCount === 0) {
+            $weights['session_spacing'] = 0.0;
+        }
+        $weightSum = array_sum($weights);
+        if ($weightSum > 0) {
+            $weights = array_map(fn (float $weight): float => $weight / $weightSum, $weights);
         }
         $quality = round(
             $distributionScore * $weights['course_distribution']
@@ -1684,6 +2052,7 @@ class AutoScheduler
             + $sessionSpacingScore * $weights['session_spacing']
             + $roomStabilityScore * $weights['room_stability']
             + $customRuleScore * $weights['custom_rules']
+            + $coreScore * $weights['core_course_priority']
             + $stabilityScore * $weights['stability'],
             2,
         );
@@ -1801,6 +2170,12 @@ class AutoScheduler
                     'current_base_version_fingerprint' => ScheduleRun::fingerprintTimetableVersion($locked->base_version_id, true),
                 ]);
             }
+            if (! $locked->baselineContextMatches($semester)) {
+                throw new SchedulingFailureException('RUN_BASELINE_STALE', '基础课表版本已切换，请重新创建生成任务。', [
+                    'base_version_id' => $locked->base_version_id,
+                    'current_timetable_version_id' => $semester->current_timetable_version_id,
+                ]);
+            }
             $differences = $locked->revisionDifferences($semester, $settings);
             if ($differences !== []) {
                 throw new SchedulingFailureException('RUN_INPUT_STALE', '排课输入已变化，请重新创建生成任务。', $differences);
@@ -1892,10 +2267,11 @@ class AutoScheduler
     /**
      * @param  array<string, mixed>  $problem
      * @param  list<array{solution: array<int, int>, metrics: array<string, mixed>}>  $rankedSolutions
+     * @param  list<array<string, mixed>>  $failedCandidates
      */
-    private function complete(ScheduleRun $run, array $problem, array $rankedSolutions): bool
+    private function complete(ScheduleRun $run, array $problem, array $rankedSolutions, array $failedCandidates = []): bool
     {
-        return DB::transaction(function () use ($run, $problem, $rankedSolutions): bool {
+        return DB::transaction(function () use ($run, $problem, $rankedSolutions, $failedCandidates): bool {
             $settings = AppSetting::query()->lockForUpdate()->findOrFail(1);
             $semester = Semester::query()->lockForUpdate()->findOrFail($run->semester_id);
             $locked = ScheduleRun::query()->lockForUpdate()->find($run->id);
@@ -1913,6 +2289,12 @@ class AutoScheduler
                     'base_version_id' => $locked->base_version_id,
                     'run_base_version_fingerprint' => $locked->base_version_fingerprint,
                     'current_base_version_fingerprint' => ScheduleRun::fingerprintTimetableVersion($locked->base_version_id, true),
+                ]);
+            }
+            if (! $locked->baselineContextMatches($semester)) {
+                throw new SchedulingFailureException('RUN_BASELINE_STALE', '求解期间基础课表版本发生切换，未保存候选方案。', [
+                    'base_version_id' => $locked->base_version_id,
+                    'current_timetable_version_id' => $semester->current_timetable_version_id,
                 ]);
             }
             $differences = $locked->revisionDifferences($semester, $settings);
@@ -1942,6 +2324,9 @@ class AutoScheduler
                 'completed_at' => now(),
                 'diagnostics' => [
                     'candidate_count' => count($rankedSolutions),
+                    'requested_candidate_count' => $locked->candidate_count,
+                    'failed_candidate_count' => count($failedCandidates),
+                    'failed_candidates' => $failedCandidates,
                     'assignment_count' => count($problem['assignments']),
                     'entry_count' => count($problem['units']),
                     'slot_count' => count($problem['slots']),

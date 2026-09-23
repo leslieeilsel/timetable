@@ -5,6 +5,9 @@ use App\Models\User;
 use App\Modules\Scheduling\Jobs\GenerateScheduleCandidates;
 use App\Modules\Scheduling\Models\ScheduleRun;
 use App\Modules\Scheduling\Services\AutoScheduler;
+use App\Modules\Scheduling\Services\PreparationCheckService;
+use App\Modules\Scheduling\Services\WeekPatternService;
+use App\Modules\Timetable\Services\RoomResolver;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Support\Facades\DB;
@@ -81,7 +84,7 @@ it('persists the complete scheduling input baseline and dispatches a recoverable
         ->and($overlapGuard)->toBeInstanceOf(WithoutOverlapping::class)
         ->and($overlapGuard->expiresAfter)->toBe(330)
         ->and($overlapGuard->releaseAfter)->toBeNull()
-        ->and($workspacePackage['scripts']['dev:queue'])->toContain('queue:work database')
+        ->and($workspacePackage['scripts']['dev:queue'])->toContain('queue:listen database')
         ->and($workspacePackage['scripts']['dev'])->toContain('dev:queue');
 });
 
@@ -151,6 +154,152 @@ it('keeps a completed run idempotent when the same job is delivered again', func
     expect($reloaded->status->value)->toBe('completed')
         ->and($reloaded->candidates()->orderBy('rank')->pluck('id')->all())->toBe($firstCandidateIds)
         ->and($reloaded->candidates()->count())->toBe(1);
+});
+
+it('does not score rebuild tasks against the previous timetable or unconfigured soft dimensions', function (): void {
+    Queue::fake();
+    $fixture = scheduleRunReliabilityFixture();
+    DB::table('scheduling_constraints')->where('id', $fixture['constraint_id'])->delete();
+    $run = createScheduleRunForReliabilityTest($this, $fixture);
+
+    app(AutoScheduler::class)->generate($run);
+
+    $breakdown = $run->fresh()->candidates()->sole()->score_breakdown;
+    expect((float) $breakdown['weights']['stability'])->toBe(0.0)
+        ->and((float) $breakdown['weights']['custom_rules'])->toBe(0.0)
+        ->and((float) $breakdown['weights']['session_spacing'])->toBe(0.0)
+        ->and(abs(array_sum($breakdown['weights']) - 1.0))->toBeLessThan(0.000001);
+});
+
+it('keeps searching later candidates when an earlier candidate exhausts its attempts', function (): void {
+    Queue::fake();
+    $fixture = scheduleRunReliabilityFixture();
+    $run = createScheduleRunForReliabilityTest($this, $fixture);
+    DB::table('schedule_runs')->where('id', $run->id)->update(['candidate_count' => 3]);
+    $run = $run->fresh();
+
+    $scheduler = new class(app(PreparationCheckService::class), app(RoomResolver::class), app(WeekPatternService::class)) extends AutoScheduler
+    {
+        public int $solveCalls = 0;
+
+        protected function solveAttempt(array $problem, int $seed): array
+        {
+            $this->solveCalls++;
+            if ($this->solveCalls <= 24) {
+                return [
+                    'solution' => null,
+                    'failure' => ['reason' => 'forced first candidate failure'],
+                ];
+            }
+
+            return parent::solveAttempt($problem, $seed);
+        }
+    };
+
+    $scheduler->generate($run);
+
+    $reloaded = $run->fresh();
+    expect($scheduler->solveCalls)->toBeGreaterThan(24)
+        ->and($reloaded->status->value)->toBe('completed')
+        ->and($reloaded->candidates()->count())->toBeGreaterThan(0)
+        ->and($reloaded->diagnostics['requested_candidate_count'])->toBe(3)
+        ->and($reloaded->diagnostics['failed_candidate_count'])->toBe(1)
+        ->and($reloaded->diagnostics['failed_candidates'][0]['failed_candidate_rank'])->toBe(1);
+});
+
+it('fails only after every requested candidate exhausts its attempts without a solution', function (): void {
+    Queue::fake();
+    $fixture = scheduleRunReliabilityFixture();
+    $run = createScheduleRunForReliabilityTest($this, $fixture);
+    DB::table('schedule_runs')->where('id', $run->id)->update(['candidate_count' => 3]);
+    $run = $run->fresh();
+
+    $scheduler = new class(app(PreparationCheckService::class), app(RoomResolver::class), app(WeekPatternService::class)) extends AutoScheduler
+    {
+        public int $solveCalls = 0;
+
+        protected function solveAttempt(array $problem, int $seed): array
+        {
+            $this->solveCalls++;
+
+            return [
+                'solution' => null,
+                'failure' => ['reason' => 'forced candidate failure'],
+            ];
+        }
+    };
+
+    $scheduler->generate($run);
+
+    $reloaded = $run->fresh();
+    expect($scheduler->solveCalls)->toBe(72)
+        ->and($reloaded->status->value)->toBe('failed')
+        ->and($reloaded->error_code)->toBe('NO_FEASIBLE_SOLUTION')
+        ->and($reloaded->candidates()->count())->toBe(0)
+        ->and($reloaded->diagnostics['failed_candidate_rank'])->toBe(3)
+        ->and($reloaded->diagnostics['failed_candidates'])->toHaveCount(3);
+});
+
+it('solves saturated class schedules that must alternate shared teachers across every slot', function (): void {
+    Queue::fake();
+    $fixture = scheduleRunReliabilityFixture();
+    DB::table('schedule_template_days')
+        ->where('semester_id', $fixture['semester_id'])
+        ->where('weekday', '!=', 1)
+        ->update(['is_enabled' => false]);
+
+    $clone = function (string $table, int $id, array $changes): int {
+        $attributes = (array) DB::table($table)->where('id', $id)->sole();
+        unset($attributes['id']);
+
+        return DB::table($table)->insertGetId(array_replace($attributes, $changes));
+    };
+    $teacherId = $clone('teachers', $fixture['teacher_id'], [
+        'employee_no' => 'T-DENSE-002',
+        'name' => '满负载教师 2',
+    ]);
+    $courseId = $clone('courses', $fixture['course_id'], [
+        'name' => '满负载课程 2',
+        'short_name' => '满2',
+    ]);
+    $roomId = $clone('rooms', $fixture['room_id'], ['name' => '满负载 2 班教室']);
+    $classId = $clone('school_classes', $fixture['class_id'], [
+        'code' => 'DENSE-002',
+        'name' => '满负载 2 班',
+    ]);
+    DB::table('teacher_course')->insert(['teacher_id' => $teacherId, 'course_id' => $courseId]);
+    $setting = (array) DB::table('semester_class_settings')
+        ->where('school_class_id', $fixture['class_id'])->sole();
+    unset($setting['id']);
+    DB::table('semester_class_settings')->insert(array_replace($setting, [
+        'school_class_id' => $classId,
+        'fixed_room_id' => $roomId,
+    ]));
+    $clone('teaching_assignments', $fixture['assignment_id'], [
+        'course_id' => $courseId,
+        'teacher_id' => $teacherId,
+    ]);
+    $clone('teaching_assignments', $fixture['assignment_id'], ['school_class_id' => $classId]);
+    $clone('teaching_assignments', $fixture['assignment_id'], [
+        'school_class_id' => $classId,
+        'course_id' => $courseId,
+        'teacher_id' => $teacherId,
+    ]);
+
+    $run = createScheduleRunForReliabilityTest($this, $fixture);
+    app(AutoScheduler::class)->generate($run);
+
+    $reloaded = $run->fresh();
+    expect($reloaded->status->value)->toBe('completed')
+        ->and($reloaded->candidates()->count())->toBe(1);
+    $candidate = $reloaded->candidates()->sole();
+    expect((float) $candidate->score_breakdown['teacher_experience'])->toBe(100.0);
+    $entries = $candidate->entries()->with('teachingAssignment:id,teacher_id')->get();
+    expect($entries)->toHaveCount(4);
+    foreach ($entries->groupBy(fn ($entry): string => $entry->weekday.':'.$entry->item_id) as $slotEntries) {
+        expect($slotEntries)->toHaveCount(2)
+            ->and($slotEntries->pluck('teachingAssignment.teacher_id')->unique())->toHaveCount(2);
+    }
 });
 
 it('does not let a stale worker overwrite cancellation at the final checkpoint', function (): void {
@@ -277,6 +426,86 @@ it('rejects adopting a candidate after catalog resources or qualifications chang
         ->assertJsonPath('current_catalog_revision', 1);
 
     expect(DB::table('timetable_versions')->where('source_candidate_id', $candidate->id)->exists())->toBeFalse();
+});
+
+it('keeps completed candidates usable when only operational timetable revision changes', function (): void {
+    Queue::fake();
+    $fixture = scheduleRunReliabilityFixture();
+    $baseVersionId = addScheduleRunBaseVersion($fixture, $this->scheduler->id, false);
+    DB::table('timetable_versions')->where('id', $baseVersionId)->update([
+        'status' => 'active',
+        'activated_at' => now(),
+    ]);
+    DB::table('semesters')->where('id', $fixture['semester_id'])->update([
+        'current_timetable_version_id' => $baseVersionId,
+    ]);
+    $run = createScheduleRunForReliabilityTest($this, $fixture);
+    app(AutoScheduler::class)->generate($run);
+    $candidate = $run->fresh()->candidates()->firstOrFail();
+
+    DB::table('semesters')->where('id', $fixture['semester_id'])->increment('timetable_revision');
+
+    $this->getJson("/api/v1/semesters/{$fixture['semester_id']}/schedule-runs/{$run->id}")
+        ->assertOk()
+        ->assertJsonPath('meta.is_stale', false);
+    $detail = $this->getJson(
+        "/api/v1/semesters/{$fixture['semester_id']}/schedule-runs/{$run->id}/candidates/{$candidate->id}",
+    )->assertOk()
+        ->assertJsonPath('data.is_stale', false);
+
+    $this->withHeader('If-Match', $detail->headers->get('ETag'))
+        ->postJson("/api/v1/semesters/{$fixture['semester_id']}/schedule-runs/{$run->id}/candidates/{$candidate->id}/adopt", [
+            'activate' => false,
+        ])->assertCreated();
+});
+
+it('marks completed candidates stale when their current baseline version is replaced', function (): void {
+    Queue::fake();
+    $fixture = scheduleRunReliabilityFixture();
+    $baseVersionId = addScheduleRunBaseVersion($fixture, $this->scheduler->id, false);
+    DB::table('timetable_versions')->where('id', $baseVersionId)->update([
+        'status' => 'active',
+        'activated_at' => now(),
+    ]);
+    DB::table('semesters')->where('id', $fixture['semester_id'])->update([
+        'current_timetable_version_id' => $baseVersionId,
+    ]);
+    $run = createScheduleRunForReliabilityTest($this, $fixture);
+    app(AutoScheduler::class)->generate($run);
+    $candidate = $run->fresh()->candidates()->firstOrFail();
+    $now = now();
+    $replacementVersionId = DB::table('timetable_versions')->insertGetId([
+        'semester_id' => $fixture['semester_id'],
+        'version_no' => 2,
+        'name' => '替代当前版本',
+        'status' => 'active',
+        'source' => 'manual',
+        'created_by' => $this->scheduler->id,
+        'input_revision' => 3,
+        'hard_conflict_count' => 0,
+        'soft_warning_count' => 0,
+        'activated_at' => $now,
+        'created_at' => $now,
+        'updated_at' => $now,
+    ]);
+    DB::table('timetable_versions')->where('id', $baseVersionId)->update(['status' => 'historical']);
+    DB::table('semesters')->where('id', $fixture['semester_id'])->update([
+        'current_timetable_version_id' => $replacementVersionId,
+    ]);
+
+    $this->getJson("/api/v1/semesters/{$fixture['semester_id']}/schedule-runs/{$run->id}")
+        ->assertOk()
+        ->assertJsonPath('meta.is_stale', true);
+    $detail = $this->getJson(
+        "/api/v1/semesters/{$fixture['semester_id']}/schedule-runs/{$run->id}/candidates/{$candidate->id}",
+    )->assertOk()
+        ->assertJsonPath('data.is_stale', true);
+
+    $this->withHeader('If-Match', $detail->headers->get('ETag'))
+        ->postJson("/api/v1/semesters/{$fixture['semester_id']}/schedule-runs/{$run->id}/candidates/{$candidate->id}/adopt", [
+            'activate' => false,
+        ])->assertStatus(409)
+        ->assertJsonPath('code', 'CANDIDATE_BASELINE_STALE');
 });
 
 it('treats a completed legacy candidate with an incomplete run snapshot as stale', function (): void {

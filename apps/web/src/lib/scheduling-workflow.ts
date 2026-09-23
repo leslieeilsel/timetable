@@ -3,11 +3,18 @@ import type { PreparationCheckItem } from "@/lib/types"
 export type WorkflowStepState = "complete" | "warning" | "blocking" | "pending"
 
 const stepCheckKeys: Record<number, readonly string[]> = {
-  1: ["schedule_template", "class_settings"],
-  2: ["confirmed_assignments", "assignment_resources", "theoretical_capacity"],
-  3: ["fixed_placements", "active_constraints"],
-  4: ["current_version"],
-  5: ["current_version"],
+  1: [
+    "schedule_template",
+    "class_settings",
+    "confirmed_assignments",
+    "assignment_resources",
+    "theoretical_capacity",
+    "fixed_placements",
+    "constraint_integrity",
+    "active_constraints",
+  ],
+  2: ["current_version"],
+  3: ["current_version"],
 }
 
 export function workflowStepState(
@@ -22,7 +29,7 @@ export function workflowStepState(
   if (related.some((check) => check?.status === "blocking")) return "blocking"
 
   // 没有当前课表是生成前的正常状态，不应提前显示成警告。
-  if (stepNumber === 4) {
+  if (stepNumber === 2) {
     return related.every((check) => check?.status === "passed") ? "complete" : "pending"
   }
 

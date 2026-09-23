@@ -5,10 +5,9 @@ namespace App\Modules\Scheduling\Http\Controllers;
 use App\Modules\AcademicCalendar\Models\AppSetting;
 use App\Modules\AcademicCalendar\Models\Semester;
 use App\Modules\Audit\Services\AuditLogger;
-use App\Modules\DailyOperations\Services\DailyTimetableService;
 use App\Modules\Scheduling\Models\ScheduleCandidate;
 use App\Modules\Scheduling\Models\ScheduleRun;
-use App\Modules\Timetable\Services\TimetableEffectivePeriodService;
+use App\Modules\Timetable\Services\TimetablePublicationService;
 use App\Modules\Timetable\Services\TimetableVersionService;
 use App\Support\ApiProblemException;
 use App\Support\EtagService;
@@ -25,8 +24,7 @@ class ScheduleCandidateController
         private readonly EtagService $etags,
         private readonly AuditLogger $audit,
         private readonly TimetableVersionService $versions,
-        private readonly TimetableEffectivePeriodService $periods,
-        private readonly DailyTimetableService $daily,
+        private readonly TimetablePublicationService $publication,
     ) {}
 
     public function show(
@@ -91,7 +89,8 @@ class ScheduleCandidateController
         $settings = AppSetting::query()->findOrFail(1);
         $isStale = ! $run->hasCompleteInputSnapshot()
             || $run->revisionDifferences($semester, $settings) !== []
-            || ! $run->baselineMatches();
+            || ! $run->baselineMatches()
+            || ! $run->baselineContextMatches($semester);
 
         return response()->json([
             'data' => [
@@ -139,21 +138,15 @@ class ScheduleCandidateController
             );
             $activate = (bool) ($data['activate'] ?? false);
             $previous = null;
-            $periodResult = null;
+            $publicationResult = null;
             if ($activate) {
-                $previous = $this->versions->activate($lockedSemester, $version);
-                $periodResult = $this->periods->publish(
+                $publicationResult = $this->publication->publishCurrent(
                     $lockedSemester,
                     $version,
-                    $lockedSemester->start_date->toDateString(),
-                    $lockedSemester->end_date->toDateString(),
                     $actor,
                     (string) $data['reason'],
                 );
-                foreach ($periodResult['affected_dates'] as $date) {
-                    $daily = $this->daily->forDate($lockedSemester, $date);
-                    $this->daily->assertActualRowsConflictFree($daily['rows'], $date);
-                }
+                $previous = $publicationResult['previous'];
             } else {
                 $lockedSemester->increment('timetable_revision');
                 $lockedSemester->refresh();
@@ -165,7 +158,8 @@ class ScheduleCandidateController
                 'activated' => $activate,
                 'previous_version_id' => $previous?->id,
                 'reason' => $data['reason'] ?? null,
-                'effective_period_id' => $periodResult['period']->id ?? null,
+                'effective_period_id' => $publicationResult['period']->id ?? null,
+                'publication_impact' => $publicationResult['impact'] ?? null,
             ]);
 
             return response()->json([
@@ -173,6 +167,46 @@ class ScheduleCandidateController
                 'meta' => $this->meta($lockedSemester, $settings),
             ], 201)->header('ETag', $this->etags->semester($lockedSemester, $settings));
         }, 3);
+    }
+
+    public function previewAdoption(
+        Request $request,
+        Semester $semester,
+        ScheduleRun $run,
+        ScheduleCandidate $candidate,
+    ): JsonResponse {
+        $this->assertParents($semester, $run, $candidate);
+        $data = $request->validate([
+            'name' => ['nullable', 'string', 'max:120'],
+        ]);
+        DB::beginTransaction();
+        try {
+            $settings = AppSetting::query()->lockForUpdate()->findOrFail(1);
+            $lockedSemester = Semester::query()->lockForUpdate()->findOrFail($semester->id);
+            $lockedRun = ScheduleRun::query()->lockForUpdate()->findOrFail($run->id);
+            $lockedCandidate = ScheduleCandidate::query()->lockForUpdate()->findOrFail($candidate->id);
+            $this->assertParents($lockedSemester, $lockedRun, $lockedCandidate);
+            $version = $this->versions->createFromCandidate(
+                $lockedSemester,
+                $request->user(),
+                $lockedCandidate,
+                $data['name'] ?? null,
+            );
+            $preview = $this->publication->preview(
+                $lockedSemester,
+                $version,
+                $request->user(),
+                $lockedSemester->start_date->toDateString(),
+                $lockedSemester->end_date->toDateString(),
+            );
+        } finally {
+            DB::rollBack();
+        }
+
+        return response()->json([
+            'data' => $preview,
+            'meta' => $this->meta($semester, $settings),
+        ])->header('ETag', $this->etags->semester($semester, $settings));
     }
 
     private function assertParents(Semester $semester, ScheduleRun $run, ScheduleCandidate $candidate): void
