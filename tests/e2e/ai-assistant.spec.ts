@@ -38,7 +38,11 @@ async function setup(
 ) {
   await mockAdmin(page)
   await context.addCookies([
-    { name: "XSRF-TOKEN", value: "e2e-chat-csrf", url: test.info().project.use.baseURL as string },
+    {
+      name: "XSRF-TOKEN-ADMIN",
+      value: "e2e-chat-csrf",
+      url: test.info().project.use.baseURL as string,
+    },
   ])
   const chats = new Map<string, ConversationDetail>()
   const requests: Record<string, unknown>[] = []
@@ -160,7 +164,7 @@ test("free chat, follow-up, history, refresh and a new conversation", async ({ p
     },
   ])
   await page.goto("/ai")
-  await expect(page.getByRole("heading", { name: "今天有什么可以帮你？" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "今天想处理什么？" })).toBeVisible()
   await page.screenshot({ path: test.info().outputPath("ai-chat-empty.png") })
   await app.send("什么是硬约束？")
   await expect(page.getByRole("article", { name: "AI 回复" })).toContainText("排课必须满足的条件")
@@ -169,16 +173,16 @@ test("free chat, follow-up, history, refresh and a new conversation", async ({ p
   expect(app.requests).toHaveLength(2)
   const firstUrl = page.url()
   await page.reload()
-  await expect(page.getByRole("article")).toHaveCount(2)
+  await expect(page.getByRole("article")).toHaveCount(4)
   await expect(page.getByRole("textbox", { name: "发送给 AI 的消息" })).toHaveValue("")
   await page.getByRole("link", { name: "新对话", exact: true }).click()
-  await expect(page.getByRole("heading", { name: "今天有什么可以帮你？" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "今天想处理什么？" })).toBeVisible()
   await page
     .getByRole("navigation")
     .getByRole("link", { name: "什么是硬约束？", exact: true })
     .click()
   await expect(page).toHaveURL(firstUrl)
-  await expect(page.getByRole("article")).toHaveCount(2)
+  await expect(page.getByRole("article")).toHaveCount(4)
   expect(errors).toEqual([])
 })
 
@@ -231,13 +235,13 @@ test("structured questionnaire resumes the same chat and rule edits expire the o
   await expect(page.getByRole("button", { name: "确认保存草稿" })).toHaveCount(0)
 })
 
-test("context entry points prefill without auto-sending and a disabled model preserves the business workflow", async ({
+test("composer prefill does not auto-send and a disabled model preserves the business workflow", async ({
   page,
   context,
 }) => {
   const app = await setup(page, context, () => [])
-  await page.goto("/semesters/1/constraints")
-  await page.getByRole("link", { name: "AI 添加规则" }).click()
+  const prefill = new URLSearchParams({ semester_id: "1", prompt: "我想添加一条排课规则：" })
+  await page.goto(`/ai?${prefill}`)
   await expect(page.getByRole("textbox", { name: "发送给 AI 的消息" })).toHaveValue(
     "我想添加一条排课规则：",
   )
@@ -263,10 +267,16 @@ test("a narrow screen keeps the composer accessible and history can be opened an
   const app = await setup(page, context, () => [{ type: "text", text: "可以，请告诉我具体要求。" }])
   await page.goto("/ai")
   await app.send("你好")
-  await expect(page.getByRole("article")).toContainText("具体要求")
+  await expect(page.getByRole("article", { name: "AI 回复" })).toContainText("具体要求")
   await page.getByRole("button", { name: "查看对话历史" }).click()
   await expect(page.getByRole("complementary", { name: "对话历史" })).toBeVisible()
-  await page.getByRole("button", { name: "关闭历史", exact: true }).click()
+  // 遮罩层铺满容器，其几何中心被 256px 宽的历史面板盖住；真实交互是点击面板外侧区域。
+  const historyBackdrop = page.getByRole("button", { name: "关闭对话历史", exact: true })
+  const backdropBox = await historyBackdrop.boundingBox()
+  if (!backdropBox) throw new Error("未找到历史遮罩层")
+  await historyBackdrop.click({
+    position: { x: backdropBox.width - 24, y: backdropBox.height / 2 },
+  })
   await expect(page.getByRole("textbox", { name: "发送给 AI 的消息" })).toBeVisible()
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth > window.innerWidth,

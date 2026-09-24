@@ -3,11 +3,16 @@
 namespace App\Http\Middleware;
 
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
+use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Cookie;
 
 class PreventClientRequestForgery extends PreventRequestForgery
 {
-    protected function newCookie($request, $config)
+    /**
+     * @param  Request  $request
+     * @param  array<string, mixed>  $config
+     */
+    protected function newCookie($request, $config): Cookie
     {
         return new Cookie(
             UseClientSession::xsrfCookieName($request),

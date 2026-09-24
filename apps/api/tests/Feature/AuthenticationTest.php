@@ -24,7 +24,6 @@ it('starts a session for the configured Vite development host', function (): voi
         ->assertJsonPath('data.id', $user->id);
 });
 
-
 it('keeps administrator and teacher browser sessions isolated', function (): void {
     config(['session.driver' => 'database']);
     $this->withCredentials();

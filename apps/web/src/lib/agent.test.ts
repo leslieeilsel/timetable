@@ -54,7 +54,7 @@ describe("Agent stream", () => {
 
   it("refreshes CSRF once before starting a stream, with no automatic model retry", async () => {
     vi.stubGlobal("window", new EventTarget())
-    vi.stubGlobal("document", { cookie: "XSRF-TOKEN=test" })
+    vi.stubGlobal("document", { cookie: "XSRF-TOKEN-ADMIN=test" })
     const calls: string[] = []
     let runs = 0
     vi.stubGlobal(

@@ -60,9 +60,10 @@ class CapacityService
     public function preview(Semester $semester, TeachingAssignment $candidate): array
     {
         $capacity = $this->weeklyCapacity($semester);
+        $candidateId = $candidate->getKey();
         // Replace the saved version of this assignment instead of counting it twice.
         $confirmed = $semester->teachingAssignments()->where('status', AssignmentStatus::Confirmed->value)
-            ->when($candidate->id !== null, fn ($query) => $query->whereKeyNot($candidate->id))
+            ->when($candidateId !== null, fn ($query) => $query->whereKeyNot($candidateId))
             ->with(self::RELATIONS)->get();
         $resources = $this->resourceLoads($semester, collect([$candidate])->concat($confirmed), $candidate);
         $affected = array_values(array_filter($resources, fn ($resource) => $resource['is_current']));
@@ -129,7 +130,7 @@ class CapacityService
         foreach ($assignments as $assignment) {
             $classes = $assignment->school_class_id !== null
                 ? collect([$assignment->schoolClass])
-                : $assignment->teachingGroup?->schoolClasses ?? collect();
+                : $assignment->teachingGroup->schoolClasses ?? collect();
             $teachers = collect([$assignment->teacher])->concat($assignment->collaborators)->unique('id');
             $roomId = $assignment->room_mode === RoomMode::Specified
                 ? $assignment->specified_room_id
@@ -160,7 +161,7 @@ class CapacityService
                 $resources[$key]['courses'][] = [
                     'assignment_id' => $assignment->id,
                     'course_name' => $assignment->course->name,
-                    'target_name' => $assignment->schoolClass?->name ?? $assignment->teachingGroup?->name,
+                    'target_name' => $assignment->schoolClass->name ?? $assignment->teachingGroup?->name,
                     'weekly_items' => $assignment->weekly_items,
                     'active_weeks' => $weeks,
                     'is_current' => $assignment === $candidate,

@@ -43,9 +43,9 @@ test("管理员首次改密、会话恢复、维护资料并安全退出", async
   }
 
   await expect(page).toHaveURL(/\/$/)
-  await expect(page.getByRole("heading", { name: "工作台" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "开始准备一个学期" })).toBeVisible()
   await page.reload()
-  await expect(page.getByRole("heading", { name: "工作台" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "开始准备一个学期" })).toBeVisible()
 
   await ensureResourcesOpen(page)
   await page.getByRole("link", { name: "教师", exact: true }).click()
@@ -67,7 +67,7 @@ test("管理员首次改密、会话恢复、维护资料并安全退出", async
     "课程",
     "教室",
     "年级",
-    "年级与班级",
+    "学年学期",
   ])
   await expect(breadcrumbMenu.getByRole("menuitem", { name: "课程", exact: true })).toHaveAttribute(
     "aria-current",
@@ -125,13 +125,11 @@ test("管理员首次改密、会话恢复、维护资料并安全退出", async
   await collapseSidebarButton.click()
   const mainNavigation = page.getByRole("navigation", { name: "主导航" })
   const schedulingMenuTrigger = mainNavigation.getByRole("button", {
-    name: "打开排课中心菜单",
+    name: "打开学期排课菜单",
   })
   await expect(schedulingMenuTrigger).toBeVisible()
-  await expect(mainNavigation.getByRole("button", { name: "打开日常运行菜单" })).toBeVisible()
-  await expect
-    .poll(async () => (await desktopSidebar.boundingBox())?.width)
-    .toBe(48)
+  await expect(mainNavigation.getByRole("link", { name: "调课与代课", exact: true })).toBeVisible()
+  await expect.poll(async () => (await desktopSidebar.boundingBox())?.width).toBe(48)
 
   const collapsedAvatarBox = await sidebarAvatar.boundingBox()
   const collapsedLogoBox = await sidebarLogo.boundingBox()
@@ -236,7 +234,7 @@ test("管理员首次改密、会话恢复、维护资料并安全退出", async
   await page.setViewportSize({ width: 390, height: 844 })
   await page.getByLabel("账号").fill("e2e-admin@example.test")
   expect((await submitLogin(page, permanentPassword)).ok()).toBe(true)
-  await expect(page.getByRole("heading", { name: "工作台" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "开始准备一个学期" })).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   )
