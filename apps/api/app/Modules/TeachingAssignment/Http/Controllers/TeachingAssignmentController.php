@@ -123,6 +123,32 @@ class TeachingAssignmentController
             ->header('ETag', $this->etags->semester($semester, $settings));
     }
 
+    public function capacityPreview(Request $request, Semester $semester): JsonResponse
+    {
+        $identity = $request->validate([
+            'assignment_id' => ['nullable', 'integer', Rule::exists('teaching_assignments', 'id')->where('semester_id', $semester->id)],
+        ]);
+        $data = array_merge([
+            'items_per_session' => 1,
+            'week_pattern' => WeekPattern::All->value,
+            'active_weeks' => null,
+        ], $this->validateAssignment($request, $semester));
+        $collaboratorIds = array_map('intval', $data['collaborator_ids'] ?? []);
+        unset($data['collaborator_ids']);
+        $this->assertAssignmentShape($semester, $data, $collaboratorIds);
+
+        // This candidate stays in memory; checking a form never writes an assignment.
+        $candidate = new TeachingAssignment(array_merge($data, [
+            'semester_id' => $semester->id,
+            'academic_year_id' => $semester->academic_year_id,
+        ]));
+        $candidate->id = isset($identity['assignment_id']) ? (int) $identity['assignment_id'] : null;
+        $candidate->setRelation('semester', $semester);
+        $candidate->setRelation('collaborators', Teacher::query()->whereKey($collaboratorIds)->get());
+
+        return response()->json(['data' => $this->capacity->preview($semester, $candidate)]);
+    }
+
     public function store(Request $request, Semester $semester): JsonResponse
     {
         $data = $this->validateAssignment($request, $semester);
@@ -163,18 +189,12 @@ class TeachingAssignmentController
         return DB::transaction(function () use ($request, $semester, $assignment, $data): JsonResponse {
             [$actor, $settings, $lockedSemester] = $this->guard->semester($request, $semester);
             $locked = TeachingAssignment::query()->with('collaborators')->withCount('entries')->lockForUpdate()->findOrFail($assignment->id);
+            $beforeCollaborators = $this->sortedIntegers($locked->collaborators->pluck('id')->all());
             $collaboratorIds = array_key_exists('collaborator_ids', $data)
-                ? array_map('intval', $data['collaborator_ids'])
-                : $locked->collaborators->pluck('id')->map(fn ($id) => (int) $id)->all();
+                ? $this->sortedIntegers($data['collaborator_ids'])
+                : $beforeCollaborators;
+            $collaboratorsChanged = $collaboratorIds !== $beforeCollaborators;
             unset($data['collaborator_ids']);
-            $immutableWithEntries = [
-                'school_class_id', 'teaching_group_id', 'course_id', 'teacher_id', 'collaborator_ids',
-                'items_per_session', 'week_pattern', 'active_weeks', 'room_mode', 'specified_room_id',
-            ];
-            if ($locked->entries_count > 0 && (collect($immutableWithEntries)->contains(fn ($field) => array_key_exists($field, $data))
-                || $collaboratorIds !== $locked->collaborators->pluck('id')->map(fn ($id) => (int) $id)->all())) {
-                throw new ApiProblemException('ASSIGNMENT_HAS_ENTRIES', '已有课程时不能修改授课对象、教师、周型、连排或教室规则', 409);
-            }
             if (isset($data['weekly_items']) && $data['weekly_items'] < $this->maxScheduledItems($locked)) {
                 throw new ApiProblemException('WEEKLY_ITEMS_BELOW_SCHEDULED', '每周课时不能低于已排课时', 422);
             }
@@ -184,12 +204,12 @@ class TeachingAssignmentController
                 'allows_substitution',
             ]), $data);
             $this->assertAssignmentShape($lockedSemester, $merged, $collaboratorIds);
-            $this->assertUniqueTarget($lockedSemester, $merged, $locked->id);
             $before = $locked->toArray();
-            $before['collaborator_ids'] = $locked->collaborators->pluck('id')->all();
-            $locked->fill($data);
+            $before['collaborator_ids'] = $beforeCollaborators;
+            $this->fillAssignmentChanges($locked, $merged);
+            $this->assertScheduledFieldsUnchanged($locked, $collaboratorsChanged);
+            $this->assertUniqueTarget($lockedSemester, $merged, $locked->id);
             $attributesChanged = $locked->isDirty();
-            $collaboratorsChanged = $collaboratorIds !== $locked->collaborators->pluck('id')->map(fn ($id) => (int) $id)->all();
             if ($attributesChanged) {
                 $locked->save();
             }
@@ -249,7 +269,7 @@ class TeachingAssignmentController
 
             $changed = collect();
             foreach ($data['operations'] as $index => $operation) {
-                $collaboratorIds = array_map('intval', $operation['collaborator_ids'] ?? []);
+                $collaboratorIds = $this->sortedIntegers($operation['collaborator_ids'] ?? []);
                 unset($operation['assignment_id'], $operation['collaborator_ids']);
                 $payload = array_merge([
                     'teaching_group_id' => null,
@@ -278,17 +298,9 @@ class TeachingAssignmentController
                     continue;
                 }
 
-                $beforeCollaborators = $assignment->collaborators->pluck('id')->map(fn ($id) => (int) $id)->all();
-                $assignment->fill($payload);
-                $immutableWithEntries = [
-                    'school_class_id', 'teaching_group_id', 'course_id', 'teacher_id',
-                    'items_per_session', 'week_pattern', 'active_weeks', 'room_mode', 'specified_room_id',
-                ];
-                if ($assignment->entries_count > 0 && ($assignment->isDirty($immutableWithEntries) || $beforeCollaborators !== $collaboratorIds)) {
-                    throw new ApiProblemException('ASSIGNMENT_HAS_ENTRIES', '批量操作中有任课关系已排课，不能修改授课对象、教师、周型、连排或教室规则', 409, [
-                        'assignment_id' => $assignment->id,
-                    ]);
-                }
+                $beforeCollaborators = $this->sortedIntegers($assignment->collaborators->pluck('id')->all());
+                $this->fillAssignmentChanges($assignment, $payload);
+                $this->assertScheduledFieldsUnchanged($assignment, $beforeCollaborators !== $collaboratorIds);
                 if ($assignment->exists && $assignment->weekly_items < $this->maxScheduledItems($assignment)) {
                     throw new ApiProblemException('WEEKLY_ITEMS_BELOW_SCHEDULED', '每周课时不能低于已排课时', 422, [
                         'assignment_id' => $assignment->id,
@@ -551,6 +563,65 @@ class TeachingAssignmentController
             ], 'meta' => $this->meta($lockedSemester, $settings)])
                 ->header('ETag', $this->etags->semester($lockedSemester, $settings));
         }, 3);
+    }
+
+    /**
+     * @param  array<int, int|string>  $values
+     * @return list<int>
+     */
+    private function sortedIntegers(array $values): array
+    {
+        $values = array_map('intval', $values);
+        sort($values, SORT_NUMERIC);
+
+        return $values;
+    }
+
+    /** @param array<string, mixed> $data */
+    private function fillAssignmentChanges(TeachingAssignment $assignment, array $data): void
+    {
+        // Teaching weeks form a set; a different input order is not a schedule change.
+        if (isset($data['active_weeks']) && $assignment->active_weeks !== null
+            && $this->sortedIntegers($data['active_weeks']) === $this->sortedIntegers($assignment->active_weeks)) {
+            $data['active_weeks'] = $assignment->active_weeks;
+        }
+
+        $assignment->fill($data);
+    }
+
+    private function assertScheduledFieldsUnchanged(TeachingAssignment $assignment, bool $collaboratorsChanged): void
+    {
+        if ($assignment->entries_count === 0) {
+            return;
+        }
+
+        $protectedFields = [
+            'school_class_id' => '班级',
+            'teaching_group_id' => '教学组',
+            'course_id' => '课程',
+            'teacher_id' => '任课教师',
+            'items_per_session' => '每次连续上几节',
+            'week_pattern' => '上课周次',
+            'active_weeks' => '指定教学周',
+            'room_mode' => '上课地点',
+            'specified_room_id' => '指定教室',
+        ];
+        $changedFields = array_filter(
+            $protectedFields,
+            fn (string $field): bool => $assignment->isDirty($field),
+            ARRAY_FILTER_USE_KEY,
+        );
+        if ($collaboratorsChanged) {
+            $changedFields['collaborator_ids'] = '协同教师';
+        }
+        if ($changedFields !== []) {
+            throw new ApiProblemException(
+                'ASSIGNMENT_HAS_ENTRIES',
+                '这门课已排入课表，不能在此修改：'.implode('、', $changedFields).'。请保留这些设置后再保存。',
+                409,
+                ['assignment_id' => $assignment->id, 'changed_fields' => array_keys($changedFields)],
+            );
+        }
     }
 
     /** @return array<string, mixed> */

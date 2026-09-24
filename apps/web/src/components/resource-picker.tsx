@@ -304,7 +304,7 @@ export function ResourcePicker({
           aria-expanded={open}
           aria-invalid={invalid || undefined}
           disabled={disabled}
-          className="min-w-0 flex-1 justify-between bg-background px-3 font-normal"
+          className="min-w-0 flex-1 justify-between bg-background px-3 font-normal disabled:opacity-100 disabled:[&>span]:opacity-50"
           onClick={() => {
             resetDialog()
             setOpen(true)

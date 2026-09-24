@@ -277,7 +277,7 @@ export function GroupedAssignmentsTable({
             <TableHead>{view === "class" ? "课程" : "授课对象"}</TableHead>
             <TableHead>{secondaryHeader}</TableHead>
             {tertiaryHeader && <TableHead>{tertiaryHeader}</TableHead>}
-            <TableHead>课时与周型</TableHead>
+            <TableHead>节数与上课周次</TableHead>
             {view !== "room" && <TableHead>教室</TableHead>}
             <TableHead>排课进度</TableHead>
             <TableHead>状态</TableHead>
@@ -351,9 +351,9 @@ export function GroupedAssignmentsTable({
                   )}
                   <TableCell>
                     <p>
-                      周 {assignment.weekly_items} 节
+                      每个上课周 {assignment.weekly_items} 节
                       {assignment.items_per_session > 1
-                        ? ` · ${assignment.items_per_session} 连排`
+                        ? ` · ${assignment.items_per_session} 节连堂`
                         : ""}
                     </p>
                     <p className="text-sm text-muted-foreground">
@@ -525,8 +525,8 @@ function teacherLabel(assignment: TeachingAssignment) {
 }
 
 function weekPatternLabel(value: TeachingAssignment["week_pattern"]) {
-  if (value === "a") return "A 周"
-  if (value === "b") return "B 周"
+  if (value === "a") return "单周"
+  if (value === "b") return "双周"
   if (value === "specified") return "指定周"
   return "每周"
 }

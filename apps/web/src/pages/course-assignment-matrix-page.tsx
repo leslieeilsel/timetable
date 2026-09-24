@@ -12,6 +12,7 @@ import {
   PlusIcon,
   MoveHorizontalIcon,
   UsersIcon,
+  XIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 import { api, apiAllPages, apiMessage } from "@/lib/api"
@@ -490,6 +491,11 @@ export function CourseAssignmentMatrixPage() {
     }
   }
   const handleCellKey = (event: KeyboardEvent<HTMLButtonElement>, cell: MatrixCell) => {
+    if (event.key === "Escape") {
+      event.preventDefault()
+      setSelectedKeys([])
+      return
+    }
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "c") {
       event.preventDefault()
       copySelection()
@@ -647,9 +653,12 @@ export function CourseAssignmentMatrixPage() {
     <>
       <PageHeader
         title="任课与课时"
-        description="按班级和课程批量维护教师、周课时、周型、连排和教室方式。"
+        description="设置各班的任课教师、每周节数和上课地点。不开设的课程可留空。"
       />
       <div className="p-4 md:p-6">
+        {!isDraftReview && (
+          <div className="mb-4 flex flex-wrap justify-end gap-2">{toolbarActions}</div>
+        )}
         {semesterId && preparationFilter && (
           <AssignmentPreparationIssues
             semesterId={semesterId}
@@ -668,6 +677,7 @@ export function CourseAssignmentMatrixPage() {
         )}
         <div className="surface-panel overflow-hidden">
           <ListToolbar
+            className="max-lg:grid max-lg:grid-cols-2 max-lg:[&>label]:col-span-2 max-lg:[&>div]:col-span-2 max-lg:[&>button]:w-full max-lg:[&>button:first-of-type]:col-span-2"
             search={search}
             onSearchChange={setSearch}
             searchPlaceholder={
@@ -691,11 +701,15 @@ export function CourseAssignmentMatrixPage() {
                       {gradeDrafts.length} 条待确认
                       <span aria-hidden="true">→</span>
                     </Button>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 text-emerald-700">
+                  ) : matrixAssignments.data?.data.some(
+                      (assignment) => assignment.status === "confirmed",
+                    ) ? (
+                    <span className="inline-flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400">
                       <CheckCircle2Icon className="size-4" />
-                      {gradeFilter === "all" ? "全部年级已确认" : "本年级已全部确认"}
+                      已录入的任课均已确认
                     </span>
+                  ) : (
+                    <span>尚无已确认任课</span>
                   )}
                 </>
               ) : isDraftReview ? (
@@ -724,7 +738,6 @@ export function CourseAssignmentMatrixPage() {
                 <span>共 {tableMeta.total} 条任课关系</span>
               )
             }
-            actions={isDraftReview ? undefined : toolbarActions}
           >
             <ToolbarSelect
               value={view}
@@ -807,13 +820,9 @@ export function CourseAssignmentMatrixPage() {
 
           {view === "matrix" ? (
             <>
-              {selectedCells.length > 0 && (
-                <div className="flex flex-wrap items-center gap-2 border-b bg-primary/[0.025] px-4 py-2.5 text-sm">
+              {selectedCells.length > 1 && (
+                <div className="flex flex-wrap items-center gap-2 border-b bg-muted/40 px-4 py-2.5 text-sm">
                   <span className="mr-1 font-medium">已选 {selectedCells.length} 格</span>
-                  <Button size="sm" variant="outline" onClick={copySelection}>
-                    <ClipboardCopyIcon />
-                    复制
-                  </Button>
                   <Button
                     size="sm"
                     variant="outline"
@@ -848,8 +857,18 @@ export function CourseAssignmentMatrixPage() {
                 <ErrorState retry={() => void matrixAssignments.refetch()} />
               ) : !matrixClasses.length ? (
                 <EmptyList
-                  title={gradeFilter === "all" ? "本学期还没有启用班级" : "本年级还没有启用班级"}
-                  description="先到班级与作息中启用班级，再维护课程与任课关系。"
+                  title={
+                    search.trim()
+                      ? "没有匹配的班级或任课"
+                      : gradeFilter === "all"
+                        ? "本学期还没有启用班级"
+                        : "本年级还没有启用班级"
+                  }
+                  description={
+                    search.trim()
+                      ? "试试其他班级、课程或教师名称，也可以清空搜索。"
+                      : "先到班级与作息中启用班级，再维护课程与任课关系。"
+                  }
                 />
               ) : !activeCourses.length ? (
                 <EmptyList
@@ -857,7 +876,12 @@ export function CourseAssignmentMatrixPage() {
                   description="请调整课程筛选或先维护课程资料。"
                 />
               ) : (
-                <div className="grid min-h-[520px] xl:grid-cols-[minmax(0,1fr)_300px]">
+                <div
+                  className={cn(
+                    "grid items-start",
+                    selectedCells.length === 1 && "xl:grid-cols-[minmax(0,1fr)_280px]",
+                  )}
+                >
                   <div className="min-w-0">
                     <div
                       aria-hidden="true"
@@ -870,7 +894,7 @@ export function CourseAssignmentMatrixPage() {
                       role="region"
                       aria-label="可横向滚动的任课表"
                       tabIndex={0}
-                      className="max-h-[calc(100vh-250px)] min-h-[520px] overflow-auto focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/30"
+                      className="max-h-[calc(100dvh-260px)] min-h-72 overflow-auto focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/30"
                     >
                       <div className="relative inline-block min-w-full align-top">
                         <table className="w-max min-w-full border-separate border-spacing-0 text-sm">
@@ -878,7 +902,7 @@ export function CourseAssignmentMatrixPage() {
                             <tr>
                               <th
                                 scope="col"
-                                className="sticky top-0 left-0 z-30 h-14 min-w-44 border-r border-b bg-muted px-4 text-left font-semibold shadow-[2px_2px_5px_-5px_rgba(0,0,0,.4)]"
+                                className="sticky top-0 left-0 z-30 h-12 min-w-36 border-r border-b bg-muted px-4 text-left font-medium"
                               >
                                 班级
                               </th>
@@ -886,14 +910,9 @@ export function CourseAssignmentMatrixPage() {
                                 <th
                                   key={course.id}
                                   scope="col"
-                                  className="sticky top-0 z-20 h-14 min-w-40 border-r border-b bg-muted px-3 text-left font-semibold"
+                                  className="sticky top-0 z-20 h-12 min-w-36 border-r border-b bg-muted px-4 text-left font-medium"
                                 >
                                   <span className="block">{course.name}</span>
-                                  {course.short_name && (
-                                    <span className="text-xs font-normal text-muted-foreground">
-                                      课表简称：{course.short_name}
-                                    </span>
-                                  )}
                                 </th>
                               ))}
                             </tr>
@@ -903,7 +922,7 @@ export function CourseAssignmentMatrixPage() {
                               <tr key={classSetting.school_class_id}>
                                 <th
                                   scope="row"
-                                  className="sticky left-0 z-10 h-24 border-r border-b bg-background px-4 text-left shadow-[2px_0_5px_-5px_rgba(0,0,0,.4)]"
+                                  className="sticky left-0 z-10 h-20 border-r border-b bg-background px-4 text-left"
                                 >
                                   <span className="block font-semibold">
                                     {classSetting.school_class.name}
@@ -922,9 +941,7 @@ export function CourseAssignmentMatrixPage() {
                                     statusFilter !== "all" && assignment?.status !== statusFilter
                                   const cellTone =
                                     assignment?.status === "draft"
-                                      ? selected
-                                        ? "bg-amber-100 ring-1 ring-inset ring-amber-400/80 dark:bg-amber-950/55 dark:ring-amber-700"
-                                        : "bg-amber-100/80 ring-1 ring-inset ring-amber-400/80 hover:bg-amber-100 dark:bg-amber-950/45 dark:ring-amber-700 dark:hover:bg-amber-950/60"
+                                      ? "bg-amber-50/60 hover:bg-amber-50 dark:bg-amber-950/25 dark:hover:bg-amber-950/40"
                                       : selected
                                         ? "bg-primary/[0.055]"
                                         : assignment
@@ -938,7 +955,7 @@ export function CourseAssignmentMatrixPage() {
                                       data-grid-column={column}
                                       data-grid-selected={selected ? "true" : undefined}
                                       className={cn(
-                                        "relative z-0 h-24 border-r border-b p-0 transition-colors has-[button:focus-visible]:ring-2 has-[button:focus-visible]:ring-inset has-[button:focus-visible]:ring-ring/35",
+                                        "relative z-0 h-20 border-r border-b border-r-border/50 p-0 transition-colors has-[button:focus-visible]:ring-2 has-[button:focus-visible]:ring-inset has-[button:focus-visible]:ring-ring/35",
                                         cellTone,
                                       )}
                                     >
@@ -953,7 +970,7 @@ export function CourseAssignmentMatrixPage() {
                                         }
                                         aria-pressed={selected}
                                         className={cn(
-                                          "group relative z-10 flex size-full min-h-24 flex-col items-start bg-transparent px-3 py-2 text-left outline-none transition-opacity",
+                                          "group relative z-10 flex size-full min-h-20 flex-col items-start justify-center bg-transparent px-4 py-3 text-left outline-none transition-opacity",
                                           statusMuted && "opacity-35",
                                         )}
                                         onClick={(event) => selectCell(cell, event)}
@@ -977,35 +994,30 @@ export function CourseAssignmentMatrixPage() {
                                                 {assignment.teacher.name}
                                               </span>
                                               {assignment.status === "draft" ? (
-                                                <span className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-md bg-amber-200/80 px-1.5 py-0.5 text-xs font-medium text-amber-950 ring-1 ring-inset ring-amber-300/80 dark:bg-amber-900/70 dark:text-amber-100 dark:ring-amber-700">
-                                                  <CircleAlertIcon className="size-3" />
+                                                <span className="ml-auto shrink-0 text-xs text-amber-800 dark:text-amber-300">
                                                   待确认
                                                 </span>
                                               ) : assignment.status === "inactive" ? (
-                                                <span className="mt-1.5 ml-auto size-2 shrink-0 rounded-full bg-slate-400" />
+                                                <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+                                                  已停用
+                                                </span>
                                               ) : null}
                                             </span>
                                             <span className="mt-1 text-xs text-muted-foreground">
-                                              周 {assignment.weekly_items} 节
+                                              {assignment.week_pattern === "all"
+                                                ? "每周"
+                                                : weekPatternLabel(assignment.week_pattern)}{" "}
+                                              {assignment.weekly_items} 节
                                               {assignment.items_per_session > 1
-                                                ? ` · ${assignment.items_per_session} 连排`
+                                                ? ` · ${assignment.items_per_session} 节连堂`
                                                 : ""}
-                                              {assignment.week_pattern !== "all"
-                                                ? ` · ${weekPatternLabel(assignment.week_pattern)}`
-                                                : ""}
-                                            </span>
-                                            <span className="mt-auto line-clamp-1 text-xs text-muted-foreground">
-                                              {assignment.collaborators.length
-                                                ? `协同：${assignment.collaborators.map((item) => item.name).join("、")}`
-                                                : roomLabel(assignment)}
                                             </span>
                                           </>
                                         ) : (
                                           <>
-                                            <PlusIcon className="mb-2 size-4 opacity-45 transition-opacity group-hover:opacity-90" />
-                                            <span className="text-xs">未设置</span>
-                                            <span className="mt-auto text-[11px] opacity-0 transition-opacity group-hover:opacity-100">
-                                              双击或按 Enter 新增
+                                            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground group-hover:text-foreground group-focus-visible:text-foreground">
+                                              <PlusIcon className="size-3.5" />
+                                              设置任课
                                             </span>
                                           </>
                                         )}
@@ -1032,21 +1044,29 @@ export function CourseAssignmentMatrixPage() {
                       </div>
                     </div>
                   </div>
-                  <MatrixDetailPanel
-                    cells={selectedCells}
-                    copied={copied}
-                    onEdit={(cell) =>
-                      setEditor({
-                        assignment: cell.assignment,
-                        schoolClassId: cell.classSetting.school_class_id,
-                        courseId: cell.course.id,
-                      })
-                    }
-                    onCopy={copySelection}
-                    onPaste={() => void pasteSelection()}
-                    onBatch={() => setBatchOpen(true)}
-                    onConfirm={confirmAssignments}
-                  />
+                  {selectedCells.length === 1 && (
+                    <MatrixDetailPanel
+                      cells={selectedCells}
+                      copied={copied}
+                      onEdit={(cell) =>
+                        setEditor({
+                          assignment: cell.assignment,
+                          schoolClassId: cell.classSetting.school_class_id,
+                          courseId: cell.course.id,
+                        })
+                      }
+                      onCopy={copySelection}
+                      onPaste={() => void pasteSelection()}
+                      onConfirm={confirmAssignments}
+                      onClose={() => {
+                        setSelectedKeys([])
+                        if (focusedKey)
+                          requestAnimationFrame(() =>
+                            document.getElementById(`assignment-cell-${focusedKey}`)?.focus(),
+                          )
+                      }}
+                    />
+                  )}
                 </div>
               )}
             </>
@@ -1156,79 +1176,67 @@ function MatrixDetailPanel({
   onEdit,
   onCopy,
   onPaste,
-  onBatch,
   onConfirm,
+  onClose,
 }: {
   cells: MatrixCell[]
   copied: AssignmentTemplate | null
   onEdit: (cell: MatrixCell) => void
   onCopy: () => void
   onPaste: () => void
-  onBatch: () => void
   onConfirm: (assignmentIds: number[]) => void
+  onClose: () => void
 }) {
-  if (!cells.length)
-    return (
-      <aside className="hidden border-l bg-muted/30 p-5 xl:block">
-        <p className="text-sm text-muted-foreground">选择单元格查看详情</p>
-      </aside>
-    )
-  const draftAssignmentIds = cells
-    .map((cell) => cell.assignment)
-    .filter((assignment): assignment is TeachingAssignment => assignment?.status === "draft")
-    .map((assignment) => assignment.id)
-  if (cells.length > 1)
-    return (
-      <aside className="hidden border-l bg-muted/30 p-5 xl:block">
-        <p className="font-semibold">已选择 {cells.length} 个单元格</p>
-        <div className="mt-3 grid grid-cols-2 gap-2 rounded-lg border bg-background p-3 text-sm">
-          <span className="text-muted-foreground">已有设置</span>
-          <span className="text-right font-medium">
-            {cells.filter((cell) => cell.assignment).length}
-          </span>
-          <span className="text-muted-foreground">将新增</span>
-          <span className="text-right font-medium">
-            {cells.filter((cell) => !cell.assignment).length}
-          </span>
-        </div>
-        <div className="mt-4 grid gap-2">
-          {draftAssignmentIds.length > 0 && (
-            <Button onClick={() => onConfirm(draftAssignmentIds)}>
-              <CheckIcon />
-              确认待确认项（{draftAssignmentIds.length}）
-            </Button>
-          )}
-          <Button variant="outline" onClick={onBatch}>
-            批量设置
-          </Button>
-          <Button variant="outline" disabled={!copied} onClick={onPaste}>
-            <ClipboardPasteIcon />
-            粘贴已复制设置
-          </Button>
-        </div>
-      </aside>
-    )
   const cell = cells[0]
+  if (!cell) return null
   const assignment = cell.assignment
   return (
-    <aside className="hidden border-l bg-muted/30 p-5 xl:block">
-      <h2 className="text-base font-semibold">
-        {cell.classSetting.school_class.name} · {cell.course.name}
-      </h2>
+    <aside
+      aria-label="任课详情"
+      className="order-first border-b bg-muted/20 p-5 xl:order-last xl:border-b-0 xl:border-l"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm text-muted-foreground">{cell.classSetting.school_class.name}</p>
+          <h2 className="mt-1 text-base font-semibold">{cell.course.name}</h2>
+        </div>
+        <Button size="icon-sm" variant="ghost" aria-label="关闭任课详情" onClick={onClose}>
+          <XIcon />
+        </Button>
+      </div>
       {assignment ? (
         <>
-          <div className="mt-4 space-y-3 rounded-xl border bg-background p-4 text-sm">
-            <Detail label="主讲教师" value={assignment.teacher.name} />
+          <div className="mt-5 space-y-4 text-sm">
+            <Detail label="任课教师" value={assignment.teacher.name} />
+            {assignment.collaborators.length > 0 && (
+              <Detail
+                label="协同教师"
+                value={assignment.collaborators.map((teacher) => teacher.name).join("、")}
+              />
+            )}
             <Detail
-              label="协同教师"
-              value={assignment.collaborators.map((teacher) => teacher.name).join("、") || "无"}
+              label={assignment.week_pattern === "all" ? "每周节数" : "每个上课周"}
+              value={`${assignment.weekly_items} 节`}
             />
             <Detail
-              label="课时"
-              value={`每周 ${assignment.weekly_items} 节${assignment.items_per_session > 1 ? `，每次 ${assignment.items_per_session} 连排` : ""}`}
+              label="上课周次"
+              value={
+                assignment.week_pattern === "specified"
+                  ? `第 ${assignment.active_weeks?.join("、") ?? ""} 周`
+                  : weekPatternLabel(assignment.week_pattern)
+              }
             />
-            <Detail label="周型" value={weekPatternLabel(assignment.week_pattern)} />
-            <Detail label="教室" value={roomLabel(assignment)} />
+            {assignment.items_per_session > 1 && (
+              <Detail label="连堂安排" value={`每次连续 ${assignment.items_per_session} 节`} />
+            )}
+            <Detail
+              label="上课地点"
+              value={
+                assignment.room_mode === "class_default"
+                  ? (cell.classSetting.fixed_room?.name ?? "班级固定教室")
+                  : roomLabel(assignment)
+              }
+            />
             <div className="flex items-center justify-between gap-3">
               <span className="text-muted-foreground">状态</span>
               <StatusBadge
@@ -1237,32 +1245,38 @@ function MatrixDetailPanel({
               />
             </div>
           </div>
-          <div className="mt-4 grid gap-2">
+          <div className="mt-6 grid gap-2 border-t pt-4">
+            <Button onClick={() => onEdit(cell)}>
+              <PencilIcon />
+              编辑任课
+            </Button>
             {assignment.status === "draft" && (
-              <Button onClick={() => onConfirm([assignment.id])}>
+              <Button variant="outline" onClick={() => onConfirm([assignment.id])}>
                 <CheckIcon />
                 确认任课关系
               </Button>
             )}
-            <Button
-              variant={assignment.status === "draft" ? "outline" : "default"}
-              onClick={() => onEdit(cell)}
-            >
-              <PencilIcon />
-              编辑任课关系
-            </Button>
-            <Button variant="outline" onClick={onCopy}>
+            <Button variant="ghost" onClick={onCopy}>
               <ClipboardCopyIcon />
               复制此设置
             </Button>
+            {copied && (
+              <Button variant="ghost" onClick={onPaste}>
+                <ClipboardPasteIcon />
+                粘贴已复制设置
+              </Button>
+            )}
           </div>
         </>
       ) : (
-        <div className="mt-4 rounded-xl border border-dashed bg-background p-4 text-sm">
-          <p className="font-medium">尚未设置任课关系</p>
-          <Button className="mt-4 w-full" onClick={() => onEdit(cell)}>
+        <div className="mt-5 text-sm">
+          <p className="font-medium">尚未设置任课</p>
+          <p className="mt-2 leading-relaxed text-muted-foreground">
+            如果这个班不开设这门课，保持留空即可。
+          </p>
+          <Button className="mt-5 w-full" onClick={() => onEdit(cell)}>
             <PlusIcon />
-            设置任课关系
+            设置任课
           </Button>
           {copied && (
             <Button className="mt-2 w-full" variant="outline" onClick={onPaste}>
@@ -1325,7 +1339,7 @@ function AssignmentsTable({
           )}
           <TableHead>授课对象 · 课程</TableHead>
           <TableHead>教师</TableHead>
-          <TableHead>课时与周型</TableHead>
+          <TableHead>节数与上课周次</TableHead>
           <TableHead>教室</TableHead>
           <TableHead>排课进度</TableHead>
           <TableHead>状态</TableHead>
@@ -1367,8 +1381,10 @@ function AssignmentsTable({
             </TableCell>
             <TableCell>
               <p>
-                周 {assignment.weekly_items} 节
-                {assignment.items_per_session > 1 ? ` · ${assignment.items_per_session} 连排` : ""}
+                每个上课周 {assignment.weekly_items} 节
+                {assignment.items_per_session > 1
+                  ? ` · ${assignment.items_per_session} 节连堂`
+                  : ""}
               </p>
               <p className="text-xs text-muted-foreground">
                 {weekPatternLabel(assignment.week_pattern)}
@@ -1531,7 +1547,7 @@ function BatchAssignmentDialog({
   }
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>批量设置 {cells.length} 个单元格</DialogTitle>
           <DialogDescription>
@@ -1540,15 +1556,15 @@ function BatchAssignmentDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4">
-          <Field label="主讲教师">
+          <Field label="任课教师">
             <TeacherPicker
               teachers={teachers}
               value={form.teacherId}
               onValueChange={(value) => setForm((current) => ({ ...current, teacherId: value }))}
             />
           </Field>
-          <div className="grid grid-cols-3 gap-3">
-            <Field label="周课时">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Field label={form.weekPattern === "all" ? "每周节数（节）" : "上课周的节数（节）"}>
               <Input
                 type="number"
                 min="1"
@@ -1558,7 +1574,7 @@ function BatchAssignmentDialog({
                 }
               />
             </Field>
-            <Field label="每次连排">
+            <Field label="每次连续上几节">
               <Input
                 type="number"
                 min="1"
@@ -1568,7 +1584,7 @@ function BatchAssignmentDialog({
                 }
               />
             </Field>
-            <Field label="周型">
+            <Field label="上课周次">
               <SimpleSelect
                 className="w-full"
                 value={form.weekPattern}
@@ -1580,14 +1596,18 @@ function BatchAssignmentDialog({
                 }
               >
                 <option value="all">每周</option>
-                <option value="a">单周 / A 周</option>
-                <option value="b">双周 / B 周</option>
+                <option value="a">单周</option>
+                <option value="b">双周</option>
                 <option value="specified">指定周</option>
               </SimpleSelect>
             </Field>
           </div>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            节数按实际需要上课的周计算。连续上 2 节表示两节连堂；单周为本学期第 1、3、5…周，双周为第
+            2、4、6…周。
+          </p>
           {form.weekPattern === "specified" && (
-            <Field label="教学周">
+            <Field label="指定教学周">
               <Input
                 value={form.activeWeeks}
                 placeholder="1、3、5、7"
@@ -1597,8 +1617,8 @@ function BatchAssignmentDialog({
               />
             </Field>
           )}
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="教室方式">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="上课地点">
               <SimpleSelect
                 className="w-full"
                 value={form.roomMode}
@@ -1681,7 +1701,7 @@ function roomLabel(assignment: TeachingAssignment) {
 }
 
 function weekPatternLabel(pattern: WeekPattern) {
-  return { all: "每周", a: "单周 / A 周", b: "双周 / B 周", specified: "指定教学周" }[pattern]
+  return { all: "每周", a: "单周", b: "双周", specified: "指定教学周" }[pattern]
 }
 
 function paginationFrom(

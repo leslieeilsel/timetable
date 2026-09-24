@@ -226,10 +226,6 @@ class TeacherLeaveController
                 $seen[$pair] = true;
                 $entry = $this->semesterEntry($lockedSemester, (int) $item['entry_id']);
                 $this->assertAffected($lockedSemester, $lockedLeave, $entry, $item['date']);
-                $entry->loadMissing('teachingAssignment');
-                if (! $entry->teachingAssignment->allows_substitution) {
-                    throw new ApiProblemException('SUBSTITUTION_NOT_ALLOWED', $entry->course->name.'不允许临时代课', 409);
-                }
                 $recommendations = $this->daily->substitutionRecommendations(
                     $lockedSemester,
                     $entry,

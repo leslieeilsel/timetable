@@ -128,6 +128,7 @@ Route::prefix('v1')->group(function (): void {
 
             Route::get('/semesters/{semester}/teaching-assignments', [TeachingAssignmentController::class, 'index']);
             Route::post('/semesters/{semester}/teaching-assignments', [TeachingAssignmentController::class, 'store']);
+            Route::post('/semesters/{semester}/teaching-assignments/capacity-preview', [TeachingAssignmentController::class, 'capacityPreview']);
             Route::post('/semesters/{semester}/teaching-assignments/copy', [TeachingAssignmentController::class, 'copy']);
             Route::post('/semesters/{semester}/teaching-assignments/bulk', [TeachingAssignmentController::class, 'bulkUpsert']);
             Route::post('/semesters/{semester}/teaching-assignments/confirm', [TeachingAssignmentController::class, 'confirm']);
