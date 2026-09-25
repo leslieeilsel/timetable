@@ -6,9 +6,22 @@ export interface GradeConflict {
   entry_id?: number
   existing_entry_id?: number
   assignment_id?: number
+  weekday?: number
+  item_id?: number
+  item_name?: string
+  fixed_placement_id?: number
+  constraint_id?: number
 }
 
 export interface GradeValidation {
+  draft_assignment_count?: number
+  synchronization_issues?: Array<{
+    message?: string
+    assignment_ids?: number[]
+    teaching_assignment_id?: number
+    assignment_id?: number
+    type?: string
+  }>
   hard_conflicts: GradeConflict[]
   incomplete_assignments: { id: number; required: number; scheduled: number }[]
 }

@@ -1,3 +1,4 @@
+import { ChangeContacts } from "@/components/adjustments/change-contacts"
 import { useEffect, useRef, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { ArrowRightIcon } from "lucide-react"
@@ -293,6 +294,16 @@ export function LongTermHistory({
                 historical={!preview && Boolean(selected.restored_from)}
               />
               {!restoreMode && <RecordDetailMeta reason={selected.reason} />}
+              {!restoreMode && (
+                <ChangeContacts
+                  kind="long_term_change"
+                  recordId={selected.id}
+                  detail={weeklyDetail(selected.changes)}
+                  reason={selected.reason}
+                  status={`${recordStatus(selected, today)} · ${selected.effective_from} 至 ${selected.effective_to}${selected.restored_from ? `；${selected.restored_from} 起恢复原安排，以下为历史调整` : ""}`}
+                  canEdit={canEdit}
+                />
+              )}
               {restoreMode &&
                 canEdit &&
                 !selected.restored_from &&

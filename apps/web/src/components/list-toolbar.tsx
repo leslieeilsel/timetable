@@ -14,6 +14,7 @@ export function ListToolbar({
   search,
   onSearchChange,
   searchPlaceholder = "搜索",
+  searchOnType = false,
   children,
   summary,
   actions,
@@ -22,6 +23,7 @@ export function ListToolbar({
   search?: string
   onSearchChange?: (value: string) => void
   searchPlaceholder?: string
+  searchOnType?: boolean
   children?: ReactNode
   summary?: ReactNode
   actions?: ReactNode
@@ -55,7 +57,8 @@ export function ListToolbar({
 
   const updateDraftSearch = (value: string) => {
     setDraftSearch(value)
-    if (value === "" && search) onSearchChange?.("")
+    if (searchOnType && !composingRef.current) onSearchChange?.(value)
+    else if (value === "" && search) onSearchChange?.("")
   }
 
   if (!hasControls) return null
@@ -84,12 +87,13 @@ export function ListToolbar({
             onCompositionEnd={(event) => {
               composingRef.current = false
               setDraftSearch(event.currentTarget.value)
+              if (searchOnType) onSearchChange?.(event.currentTarget.value)
             }}
             onKeyDown={submitSearch}
             placeholder={searchPlaceholder}
             aria-label={searchPlaceholder}
             aria-keyshortcuts="Enter Meta+K Control+K"
-            title="按 Enter 搜索"
+            title={searchOnType ? "输入后筛选" : "按 Enter 搜索"}
             className="pl-9 pr-11"
           />
           <kbd className="pointer-events-none absolute top-1/2 right-2.5 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded-lg border bg-muted text-muted-foreground">

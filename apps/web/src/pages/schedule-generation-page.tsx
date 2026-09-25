@@ -100,6 +100,10 @@ export function ScheduleGenerationPage() {
   const runId = Number(params.get("run")) || null
   const [scopeType, setScopeType] = useState<ScopeType>("all")
   const [scopeIds, setScopeIds] = useState<number[]>([])
+  const [retryBase, setRetryBase] = useState<number | null | undefined>(undefined)
+  const [retryStrategy, setRetryStrategy] = useState<ScheduleRun["strategy"]>({
+    profile: "balanced",
+  })
   const [mode, setMode] = useState<"rebuild" | "fill">("rebuild")
   const [keepLocked, setKeepLocked] = useState(true)
   const [candidateCount, setCandidateCount] = useState<1 | 3>(1)
@@ -197,8 +201,12 @@ export function ScheduleGenerationPage() {
         etag: preparation.data.etag,
         body: JSON.stringify({
           scope: { type: scopeType, ids: scopeType === "all" ? [] : scopeIds },
-          preservation: { keep_locked: keepLocked, keep_current: mode === "fill" },
-          strategy: { profile: "balanced" },
+          preservation: {
+            keep_locked: keepLocked,
+            keep_current: mode === "fill",
+            ...(retryBase === undefined ? {} : { base_version_id: retryBase }),
+          },
+          strategy: retryStrategy,
           candidate_count: candidateCount,
         }),
       })
@@ -266,6 +274,24 @@ export function ScheduleGenerationPage() {
         </Button>
       </div>
       <div className="mx-auto w-full max-w-[1480px] space-y-5 p-4 md:p-6">
+        {!runId && retryBase !== undefined && (
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            <span>
+              重试基准：{retryBase === null ? "空课表" : `方案记录 #${retryBase}`} ·{" "}
+              {strategyName(retryStrategy.profile)}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setRetryBase(undefined)
+                setRetryStrategy({ profile: "balanced" })
+              }}
+            >
+              改用当前正式课表
+            </Button>
+          </div>
+        )}
         {runId ? (
           activeRun.isLoading ? (
             <LoadingState label="正在恢复任务状态…" />
@@ -277,7 +303,20 @@ export function ScheduleGenerationPage() {
               stale={activeRun.data.meta?.is_stale === true}
               etag={activeRun.data.etag}
               onCancel={() => void cancel()}
-              onBack={() => setParams((current) => mergeSearchParams(current, { run: null }))}
+              onBack={() => {
+                const previous = activeRun.data!.data
+                setRetryBase(
+                  previous.base_version_id ?? previous.preservation.base_version_id ?? null,
+                )
+                setRetryStrategy(previous.strategy)
+                setScopeType(previous.scope.type)
+                setScopeIds(previous.scope.ids)
+                setMode(previous.preservation.keep_current ? "fill" : "rebuild")
+                setKeepLocked(previous.preservation.keep_locked)
+                setCandidateCount(previous.candidate_count)
+                setCustomOpen(true)
+                setParams((current) => mergeSearchParams(current, { run: null }))
+              }}
               onPreview={setPreview}
               onAdopt={(candidate, activate) => setAdopting({ candidate, activate })}
             />
@@ -639,7 +678,7 @@ function RunWorkspace({
         <div className="flex gap-2 sm:ml-auto">
           <Button variant="outline" onClick={onBack}>
             <RotateCcwIcon />
-            新建任务
+            使用本次设置重试
           </Button>
           {active && (
             <Button variant="destructive" onClick={onCancel}>
@@ -648,6 +687,24 @@ function RunWorkspace({
             </Button>
           )}
         </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-3 border-b px-4 py-3 text-sm text-muted-foreground">
+        <span>
+          {run.base_version_id
+            ? `比较基准：方案记录 #${run.base_version_id}`
+            : "比较基准：空课表（所有课程计为新增）"}{" "}
+          · {run.preservation.keep_current ? "保留已有位置，只补未排课程" : "按所选范围重新编排"} ·{" "}
+          {run.preservation.keep_locked ? "保留锁定" : "允许移动普通锁定课格"}
+        </span>
+        {run.base_version_id && (
+          <a
+            className="underline underline-offset-4"
+            href={`${semesterPath(run.semester_id, "planning")}?version=${run.base_version_id}`}
+          >
+            查看基准课表
+          </a>
+        )}
+        <span>候选复核、采用为草稿并发布后，才影响正式安排。</span>
       </div>
       {active && (
         <div className="p-5">
@@ -687,7 +744,9 @@ function RunWorkspace({
         <div className="m-4 rounded-xl border border-rose-200 bg-rose-50 p-4">
           <p className="flex items-center gap-2 font-semibold text-rose-800">
             <AlertTriangleIcon className="size-4" />
-            未找到完整可行方案
+            {run.error_code === "NO_FEASIBLE_SOLUTION"
+              ? "本次搜索未找到完整方案"
+              : "本次任务未完成"}
           </p>
           <p className="mt-2 text-sm leading-6 text-rose-800/80">{run.error_message}</p>
           {bottleneck && (
@@ -720,7 +779,9 @@ function RunWorkspace({
         </div>
       )}
       {run.status === "cancelled" && (
-        <div className="p-8 text-center text-muted-foreground">任务已取消，没有产生部分课表。</div>
+        <div className="p-8 text-center text-muted-foreground">
+          任务已取消。基准课表保持原样，可以使用本次设置重试。
+        </div>
       )}
       {run.status === "completed" && (
         <div className="p-4">
@@ -793,7 +854,11 @@ function CandidateCard({
                     : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
                 )}
               >
-                {recommended ? "推荐" : "当前最高分 · 未达推荐线"}
+                {candidate.score_breakdown.methodology_version !== 2
+                  ? "历史评分"
+                  : recommended
+                    ? "推荐"
+                    : "当前最高分 · 未达推荐线"}
               </span>
             )}
           </div>
@@ -809,11 +874,37 @@ function CandidateCard({
           <p className="text-xs text-muted-foreground">综合质量</p>
         </div>
       </div>
+      <div className="mt-4 grid gap-1 border-y py-3 text-xs leading-5">
+        <p className="font-medium">相对基准课表的变化</p>
+        {candidate.score_breakdown.change_counts ? (
+          <>
+            <span>
+              新增 {candidate.score_breakdown.change_counts.added} 节 · 移动已有{" "}
+              {candidate.score_breakdown.change_counts.moved} 节 · 更换教师{" "}
+              {candidate.score_breakdown.change_counts.teacher_changed} 节
+            </span>
+            <span>
+              移除 {candidate.score_breakdown.change_counts.removed} 节 · 原样保留{" "}
+              {candidate.score_breakdown.change_counts.unchanged} 节 · 更换教室{" "}
+              {candidate.score_breakdown.change_counts.room_changed} 节
+            </span>
+          </>
+        ) : (
+          <span>
+            旧记录：新增或移动合计 {candidate.score_breakdown.changes_from_current} 节，无法区分
+          </span>
+        )}
+      </div>
       <dl className="mt-4 grid grid-cols-2 gap-2 text-sm">
         <Score label="课程分布" value={candidate.score_breakdown.course_distribution} />
-        <Score label="教师体验" value={candidate.score_breakdown.teacher_experience} />
+        <Score label="教师课时安排" value={candidate.score_breakdown.teacher_experience} />
         <Score label="班级负荷" value={candidate.score_breakdown.class_load} />
-        <Score label="主课时段" value={candidate.score_breakdown.core_course_priority} />
+        <Score
+          label={
+            candidate.score_breakdown.methodology_version === 2 ? "语数英上午" : "主课时段（旧）"
+          }
+          value={candidate.score_breakdown.core_course_priority}
+        />
         <Score
           label="连排与间隔"
           value={candidate.score_breakdown.session_spacing}
@@ -825,6 +916,11 @@ function CandidateCard({
           active={candidate.score_breakdown.weights?.custom_rules !== 0}
         />
       </dl>
+      <p className="mt-3 text-xs leading-5 text-muted-foreground">
+        {candidate.score_breakdown.methodology_version === 2
+          ? "评分口径 v2 · 仅用于方案比较，不代表教师满意度。上午指开始时间早于 12:00 的课节。"
+          : "历史评分使用旧口径，空堂可能包含非教学时段。请重新生成后再比较分数。"}
+      </p>
       {!assessment.eligible && (
         <div
           role="note"
@@ -836,17 +932,41 @@ function CandidateCard({
       )}
       <details className="mt-3 rounded-lg bg-muted/30 px-3 py-2 text-xs">
         <summary className="cursor-pointer font-medium">查看扣分明细</summary>
-        <div className="mt-2 grid gap-1 text-muted-foreground">
-          <span>教师空堂 {candidate.score_breakdown.teacher_gaps}</span>
+        <div className="mt-2 grid max-h-80 gap-1 overflow-y-auto text-muted-foreground">
+          <span>
+            教师空堂 {candidate.score_breakdown.teacher_gaps}
+            {candidate.score_breakdown.methodology_version === 2
+              ? " 节／周（按实际教学周平均）"
+              : "（旧口径）"}
+          </span>
+          {candidate.score_breakdown.methodology_version === 2 && (
+            <p>
+              空堂只计每天首末节授课之间空出的正式课节；课间操、午休等非教学时段不计，跨午间空出的正式课节仍计入。
+            </p>
+          )}
+          {candidate.score_breakdown.teacher_gap_details?.map((detail, index) => (
+            <span key={`${detail.teacher_id}-${detail.weekday}-${index}`}>
+              {detail.teacher} · 周{"一二三四五六日"[detail.weekday - 1]} · 空堂：
+              {detail.item_names.join("、")}（第 {detail.weeks.join("、")} 周）
+            </span>
+          ))}
+          {candidate.score_breakdown.core_outside_morning?.map((detail, index) => (
+            <span key={`${detail.assignment_id}-${index}`}>
+              {detail.class_name} · {detail.course} · {detail.teacher}：周
+              {"一二三四五六日"[detail.weekday - 1]} {detail.item_name}未排在上午
+            </span>
+          ))}
           <span>同科同日重复 {candidate.score_breakdown.same_course_same_day_repeats}</span>
           <span>连续授课提醒 {candidate.score_breakdown.consecutive_over_preference}</span>
           <span>班级日负荷差 {candidate.score_breakdown.class_daily_imbalance}</span>
           <span>教室变化 {candidate.score_breakdown.room_changes}</span>
           <span>教室稳定分 {candidate.score_breakdown.room_stability}</span>
-          <span>主课优先分 {candidate.score_breakdown.core_course_priority}</span>
-          {candidate.score_breakdown.weights?.stability !== 0 && (
-            <span>相对当前变化 {candidate.score_breakdown.changes_from_current}</span>
-          )}
+          <span>
+            {candidate.score_breakdown.methodology_version === 2
+              ? "语数英上午分"
+              : "主课优先分（旧口径）"}{" "}
+            {candidate.score_breakdown.core_course_priority}
+          </span>
           {candidate.score_breakdown.rule_results
             .filter((item) => item.violations > 0)
             .slice(0, 4)

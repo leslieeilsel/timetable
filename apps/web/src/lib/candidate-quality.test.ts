@@ -15,6 +15,7 @@ function candidate(overrides: Partial<ScheduleCandidate> = {}): ScheduleCandidat
     unscheduled_count: 0,
     created_at: "2026-08-30T00:00:00Z",
     score_breakdown: {
+      methodology_version: 2,
       course_distribution: 80,
       teacher_experience: 80,
       class_load: 80,
@@ -37,6 +38,14 @@ function candidate(overrides: Partial<ScheduleCandidate> = {}): ScheduleCandidat
 }
 
 describe("candidate recommendation floor", () => {
+  it("does not recommend legacy scores using the current scoring threshold", () => {
+    const value = candidate()
+    delete value.score_breakdown.methodology_version
+    expect(assessCandidateQuality(value)).toEqual({
+      eligible: false,
+      reasons: ["历史评分口径已更新，请重新生成后再比较"],
+    })
+  })
   it("does not recommend a high overall score with a severely poor teacher experience", () => {
     const value = candidate({
       quality_score: "75.80",
@@ -48,7 +57,7 @@ describe("candidate recommendation floor", () => {
     })
 
     expect(assessCandidateQuality(value)).toMatchObject({ eligible: false })
-    expect(assessCandidateQuality(value).reasons[0]).toContain("教师体验")
+    expect(assessCandidateQuality(value).reasons[0]).toContain("教师课时安排")
   })
 
   it("recommends only complete, conflict-free candidates above every floor", () => {

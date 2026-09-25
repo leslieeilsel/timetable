@@ -554,6 +554,25 @@ function PublishedCalendar({
               <dd>{dailyStatusLabels[selected.status]}</dd>
             </dl>
           )}
+          {canEdit &&
+            selected &&
+            (selected.date < today ||
+              !selected.original_entry_id ||
+              selected.exception_id ||
+              selected.substitution_id ||
+              selected.is_cancelled) && (
+              <p role="status" className="text-sm text-muted-foreground">
+                {selected.date < today
+                  ? "历史日期只供核对，不能从这里发起新的调课。"
+                  : selected.substitution_id
+                    ? "这节课已有代课安排，请进入请假代课记录核对后处理。"
+                    : selected.exception_id
+                      ? "这节课已有临时调整，请先在调整记录中核对或撤回，避免重复覆盖。"
+                      : selected.is_cancelled
+                        ? "这节课已停课，请先核对原调整记录。"
+                        : "该活动没有基础课程，不能按普通课程发起调课。"}
+              </p>
+            )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setSelected(null)}>
               关闭

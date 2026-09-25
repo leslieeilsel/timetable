@@ -278,6 +278,24 @@ export interface FixedPlacement {
 }
 
 export interface ScheduleCandidateScore {
+  methodology_version?: number
+  teacher_gap_details?: Array<{
+    teacher_id: number
+    teacher: string
+    weekday: number
+    item_ids: number[]
+    item_names: string[]
+    weeks: number[]
+  }>
+  core_outside_morning?: Array<{
+    assignment_id: number
+    course: string
+    teacher: string
+    class_name: string | null
+    weekday: number
+    item_id: number
+    item_name: string
+  }>
   course_distribution: number
   teacher_experience: number
   class_load: number
@@ -290,6 +308,16 @@ export interface ScheduleCandidateScore {
   teacher_gaps: number
   consecutive_over_preference: number
   core_preferred_ratio: number
+  baseline_version_id?: number | null
+  change_counts?: {
+    added: number
+    removed: number
+    moved: number
+    teacher_changed: number
+    room_changed: number
+    unchanged: number
+    existing_changed: number
+  }
   changes_from_current: number
   class_daily_imbalance: number
   room_changes: number
@@ -320,6 +348,7 @@ export interface ScheduleCandidate {
 
 export interface ScheduleRun {
   id: number
+  base_version_id?: number | null
   semester_id: number
   status: ScheduleRunStatus
   scope: { type: "all" | "grade" | "class" | "assignment"; ids: number[] }

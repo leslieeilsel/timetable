@@ -1,4 +1,7 @@
-import { PublishTimetableDialog } from "@/components/publish-timetable-dialog"
+import {
+  PublishTimetableDialog,
+  type PublicationRepairTarget,
+} from "@/components/publish-timetable-dialog"
 import type { GradeValidation } from "@/lib/grade-timetable"
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
@@ -241,7 +244,8 @@ export function TimetablePage({
   const [historyBusy, setHistoryBusy] = useState(false)
   const [replanStarting, setReplanStarting] = useState(false)
   const [draftCreating, setDraftCreating] = useState(false)
-  const [publishOpen, setPublishOpen] = useState(false)
+  const [publishOpen, setPublishOpen] = useState(() => params.get("publish") === "1")
+  const [repairTarget, setRepairTarget] = useState<PublicationRepairTarget | null>(null)
   const [compareOpen, setCompareOpen] = useState(false)
   const [bulkExportOpen, setBulkExportOpen] = useState(false)
   const [slot, setSlot] = useState<{
@@ -657,15 +661,15 @@ export function TimetablePage({
   const exportQuery = `view=${view}&resource_id=${resourceId}&mode=${full ? "full" : "official"}${selectedVersionId ? `&version_id=${selectedVersionId}` : ""}`
   const xlsxExportUrl = `/api/v1/semesters/${semesterId}/timetable/export.xlsx?${exportQuery}`
   const createDraft = async () => {
-    const etag = timetable.data?.etag ?? semester.data.etag
-    if (!etag || draftCreating) return
+    if (draftCreating) return
     setDraftCreating(true)
     try {
+      const latestSemester = await api<Semester>(`/api/v1/semesters/${semesterId}`)
       const result = await api<TimetableVersion>(
         `/api/v1/semesters/${semesterId}/timetable-versions`,
         {
           method: "POST",
-          etag,
+          etag: latestSemester.etag,
           body: JSON.stringify({
             base_version_id: selectedVersion?.id ?? null,
             name: selectedVersion
@@ -674,6 +678,20 @@ export function TimetablePage({
           }),
         },
       )
+      if (selectedVersion && user) {
+        try {
+          const previousReason = sessionStorage.getItem(
+            `publication-reason:${user.id}:${semesterId}:${selectedVersion.id}`,
+          )
+          if (previousReason)
+            sessionStorage.setItem(
+              `publication-reason:${user.id}:${semesterId}:${result.data.id}`,
+              previousReason,
+            )
+        } catch {
+          /* The current page still retains its in-memory explanation. */
+        }
+      }
       selectVersion(String(result.data.id))
       toast.success("编辑草稿已创建")
       await refresh()
@@ -823,20 +841,25 @@ export function TimetablePage({
                 role="group"
                 aria-label="版本操作"
               >
-                {canMutate && (!selectedVersion || selectedVersion.status !== "draft") && (
-                  <Button
-                    variant="outline"
-                    disabled={draftCreating || replanStarting}
-                    onClick={() => void createDraft()}
-                  >
-                    {draftCreating ? (
-                      <LoaderCircleIcon className="animate-spin" />
-                    ) : (
-                      <FilePlus2Icon />
-                    )}
-                    {draftCreating ? "正在创建…" : "开始编排"}
-                  </Button>
-                )}
+                {canMutate &&
+                  (!selectedVersion || selectedVersion.status !== "draft" || versionIsStale) && (
+                    <Button
+                      variant="outline"
+                      disabled={draftCreating || replanStarting}
+                      onClick={() => void createDraft()}
+                    >
+                      {draftCreating ? (
+                        <LoaderCircleIcon className="animate-spin" />
+                      ) : (
+                        <FilePlus2Icon />
+                      )}
+                      {draftCreating
+                        ? "正在创建…"
+                        : versionIsStale
+                          ? "使用最新资料创建修复草稿"
+                          : "开始编排"}
+                    </Button>
+                  )}
                 <Button
                   variant="outline"
                   disabled={!selectedVersion || selectableVersions.length < 2}
@@ -994,6 +1017,11 @@ export function TimetablePage({
             </div>
           )}
         </section>
+        {!readOnly && versionIsStale && (
+          <p role="status" className="mb-4 rounded-lg border bg-muted/40 p-3 text-sm">
+            规则或任课资料已更新。请使用最新资料创建修复草稿，系统会复制现有课程位置，再按最新要求检查；原方案保留。
+          </p>
+        )}
         {!gradeMode && returnGrade && (
           <Button
             variant="ghost"
@@ -1091,6 +1119,65 @@ export function TimetablePage({
                 </span>
               </div>
             )}
+            {!readOnly && selectedVersion && (
+              <p className="mb-3 text-xs text-muted-foreground">
+                当前编辑：{selectedVersion.name} · v{selectedVersion.version_no} ·{" "}
+                {selectedVersion.status === "draft"
+                  ? "草稿，尚未生效；检查并发布后才替换标准课表"
+                  : "已发布，实际执行课表请按日期查看"}{" "}
+                · 本学期 {current.start_date} 至 {current.end_date}
+              </p>
+            )}
+            {repairTarget && !readOnly && (
+              <div
+                role="status"
+                className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/40 p-3"
+              >
+                <div className="text-sm">
+                  <p className="font-medium">正在修复：{repairTarget.label}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {repairTarget.weekday
+                      ? `请核对${weekdayName[repairTarget.weekday]}的指定课节。`
+                      : "点击空白课节补课时，或点击已有课程调整；新增时会预选这条任课。"}
+                    {versionIsStale
+                      ? "规则或任课资料已变更，请先使用上方入口创建修复草稿。"
+                      : "修复后可继续发布检查。"}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {canEdit && repairTarget.weekday && repairTarget.itemId && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={
+                        !timetable.isSuccess ||
+                        !timetable.data?.data.items.some((item) => item.id === repairTarget.itemId)
+                      }
+                      onClick={() =>
+                        setSlot({
+                          weekday: repairTarget.weekday!,
+                          itemId: repairTarget.itemId!,
+                          entry: timetable.data?.data.entries.find(
+                            (entry) =>
+                              entry.id === repairTarget.entryId ||
+                              (entry.weekday === repairTarget.weekday &&
+                                entry.item_id === repairTarget.itemId),
+                          ),
+                        })
+                      }
+                    >
+                      打开对应课节
+                    </Button>
+                  )}
+                  <Button size="sm" onClick={() => setPublishOpen(true)}>
+                    继续发布检查
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setRepairTarget(null)}>
+                    结束定位
+                  </Button>
+                </div>
+              </div>
+            )}
             {!versionSelectionReady ? (
               <div className="overflow-hidden rounded-2xl border bg-background">
                 <EmptyList
@@ -1148,6 +1235,7 @@ export function TimetablePage({
         versionId={timetable.data?.data.version?.id ?? null}
         view={view}
         resourceId={Number(resourceId)}
+        initialAssignmentId={repairTarget?.assignmentId}
         readOnly={!canEdit}
         onClose={() => setSlot(null)}
         onSaved={refresh}
@@ -1160,6 +1248,29 @@ export function TimetablePage({
           onClose={() => setPublishOpen(false)}
           semester={current}
           version={selectedVersion}
+          assignments={assignments.data?.data ?? []}
+          onRefreshDraft={createDraft}
+          onLocate={(target) => {
+            const assignment = assignments.data?.data.find(
+              (item) => item.id === target.assignmentId,
+            )
+            if (!assignment) {
+              toast.error("任课资料尚未载入，请稍后重试。")
+              return
+            }
+            setPublishOpen(false)
+            setRepairTarget(target)
+            setGradeMode(false)
+            setView("class")
+            setResourceId(
+              String(
+                assignment.school_class_id ??
+                  assignment.teaching_group?.school_classes[0]?.id ??
+                  "",
+              ),
+            )
+            setSlot(null)
+          }}
           onPublished={async () => {
             await refresh()
             await client.invalidateQueries({ queryKey: ["daily-timetable", current.id] })
@@ -1447,6 +1558,7 @@ function SlotDialog({
   versionId,
   view,
   resourceId,
+  initialAssignmentId,
   readOnly,
   onClose,
   onSaved,
@@ -1463,6 +1575,7 @@ function SlotDialog({
   versionId: number | null
   view: View
   resourceId: number
+  initialAssignmentId?: number
   readOnly: boolean
   onClose: () => void
   onSaved: () => Promise<void>
@@ -1503,13 +1616,20 @@ function SlotDialog({
   )
   useEffect(() => {
     if (slot) {
-      setAssignmentId(String(slot.entry?.teaching_assignment_id ?? candidates[0]?.id ?? ""))
+      setAssignmentId(
+        String(
+          slot.entry?.teaching_assignment_id ??
+            candidates.find((item) => item.id === initialAssignmentId)?.id ??
+            candidates[0]?.id ??
+            "",
+        ),
+      )
       setWeekday(slot.weekday)
       setItemId(slot.itemId)
       setSwapTargetId("")
       setConfirmDelete(false)
     }
-  }, [candidates, slot])
+  }, [candidates, initialAssignmentId, slot])
   const diagnosis = useQuery({
     queryKey: [
       "timetable-diagnosis",
@@ -1679,7 +1799,7 @@ function SlotDialog({
             {entry
               ? readOnly
                 ? "只读查看课程详情。"
-                : "可移动、锁定或移除这节课。锁定后必须先解锁才能移动。"
+                : "可移动、锁定或移除这节课。解锁后仍须遵守固定安排和其他硬规则。"
               : `${weekdayName[slot?.weekday ?? 0]} · ${items.find((item) => item.id === slot?.itemId)?.name ?? ""}`}
           </DialogDescription>
         </DialogHeader>

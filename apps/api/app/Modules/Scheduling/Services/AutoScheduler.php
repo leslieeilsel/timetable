@@ -97,13 +97,13 @@ class AutoScheduler
 
             if ($solutions === []) {
                 $lastFailedCandidate = $failedCandidates[array_key_last($failedCandidates)] ?? null;
-                throw new SchedulingFailureException('NO_FEASIBLE_SOLUTION', '在当前硬约束下未找到完整可行课表。', [
+                throw new SchedulingFailureException('NO_FEASIBLE_SOLUTION', '本次有限次数搜索未找到完整方案，不代表已证明无解；原方案和保留范围未改变。', [
                     ...($lastFailedCandidate ?? []),
                     'failed_candidates' => $failedCandidates,
                     'suggestions' => [
-                        '检查教师、班级和教室的禁排时间是否过多。',
-                        '检查固定安排是否占用了关键稀缺课节。',
-                        '减少超载任课关系课时，或增加可排课节。',
+                        '保留当前设置重试，或返回基准草稿继续手动补排。',
+                        '根据卡点核对禁排和固定安排，确认是否录入有误。',
+                        '确需修改课时、硬规则或调整范围时，由排课老师明确修改后再运行；系统不会自动放宽要求。',
                     ],
                 ]);
             }
@@ -157,13 +157,16 @@ class AutoScheduler
         $slotIndexes = [];
         $slotIndexesByWeekdayAndOrder = [];
         foreach ($enabledWeekdays as $weekday) {
-            foreach ($items as $item) {
+            foreach ($items as $teachingOrder => $item) {
                 $index = count($slots);
                 $slots[$index] = [
                     'index' => $index,
                     'weekday' => $weekday,
                     'item_id' => $item->id,
                     'item_sort_order' => $item->sort_order,
+                    'teaching_order' => $teachingOrder + 1,
+                    'item_name' => $item->name,
+                    'is_morning' => substr($item->start_time, 0, 5) < '12:00',
                 ];
                 $slotIndexes[$weekday.':'.$item->id] = $index;
                 $slotIndexesByWeekdayAndOrder[$weekday.':'.$item->sort_order] = $index;
@@ -217,7 +220,7 @@ class AutoScheduler
             $unit['slot_index'] = $slotIndex;
             $unit['fixed_source'] = $entry->is_locked ? 'locked_entry' : 'preserved_entry';
             $signature = $this->unitSignature($unit, $slotIndex);
-            $fixedSignatures[$signature] = true;
+            $fixedSignatures[$signature] = count($units);
             $units[] = $unit;
             $fixedCounts[$assignment->id] = ($fixedCounts[$assignment->id] ?? 0) + 1;
         }
@@ -251,9 +254,11 @@ class AutoScheduler
             $unit['fixed_source'] = 'fixed_placement';
             $signature = $this->unitSignature($unit, $slotIndex);
             if (isset($fixedSignatures[$signature])) {
+                $units[$fixedSignatures[$signature]]['fixed_source'] = 'fixed_placement';
+
                 continue;
             }
-            $fixedSignatures[$signature] = true;
+            $fixedSignatures[$signature] = count($units);
             $units[] = $unit;
             $fixedCounts[$placement->teaching_assignment_id] = ($fixedCounts[$placement->teaching_assignment_id] ?? 0) + 1;
         }
@@ -308,6 +313,7 @@ class AutoScheduler
 
         return [
             'semester_id' => $semester->id,
+            'base_version_id' => $baseVersionId,
             'week_count' => $weekCount,
             'slots' => $slots,
             'slot_indexes' => $slotIndexes,
@@ -934,12 +940,13 @@ class AutoScheduler
 
         $penalty = $weekdayDistance * 12.0;
         if (in_array($unit['course_name'], ['语文', '数学', '英语'], true)) {
-            $penalty += max(0, (int) $slot['item_sort_order'] - 4) * 7.5;
+            $penalty += $slot['is_morning'] ? 0 : 7.5;
         }
 
         foreach ($unit['teacher_ids'] as $teacherId) {
             $resource = "teacher:{$teacherId}";
             $existingOrders = [];
+            $existingTeachingOrders = [];
             foreach ($occupancy[$resource] ?? [] as $occupiedSlotIndex => $occupiedMask) {
                 if (($occupiedMask & (int) $unit['week_mask']) === 0) {
                     continue;
@@ -947,11 +954,12 @@ class AutoScheduler
                 $occupiedSlot = $problem['slots'][$occupiedSlotIndex];
                 if ($occupiedSlot['weekday'] === $slot['weekday']) {
                     $existingOrders[] = (int) $occupiedSlot['item_sort_order'];
+                    $existingTeachingOrders[] = (int) $occupiedSlot['teaching_order'];
                 }
             }
-            $beforeGap = $this->slotOrderGapCount($existingOrders);
+            $beforeGap = $this->slotOrderGapCount($existingTeachingOrders);
             $afterOrders = [...$existingOrders, (int) $slot['item_sort_order']];
-            $afterGap = $this->slotOrderGapCount($afterOrders);
+            $afterGap = $this->slotOrderGapCount([...$existingTeachingOrders, (int) $slot['teaching_order']]);
             $penalty += ($afterGap - $beforeGap) * 14.0;
             $penalty += max(0, $this->slotOrderMaximumStreak($afterOrders) - 3) * 8.0;
         }
@@ -1332,7 +1340,7 @@ class AutoScheduler
         }
         if (in_array($unit['course_name'], ['语文', '数学', '英语'], true)) {
             foreach ($slotIndexes as $slotIndex) {
-                $penalty += max(0, $problem['slots'][$slotIndex]['item_sort_order'] - 4) * 2.5;
+                $penalty += $problem['slots'][$slotIndex]['is_morning'] ? 0 : 2.5;
             }
         }
         foreach ($problem['constraints'] as $constraint) {
@@ -1650,11 +1658,11 @@ class AutoScheduler
             foreach ($occupancy[$resource] ?? [] as $slotIndex => $occupiedMask) {
                 $slot = $problem['slots'][$slotIndex];
                 if ($slot['weekday'] === $weekday && ($occupiedMask & $weekBit) !== 0) {
-                    $orders[] = $slot['item_sort_order'];
+                    $orders[] = $slot['teaching_order'];
                 }
             }
             foreach ($candidateSlotIndexes as $slotIndex) {
-                $orders[] = $problem['slots'][$slotIndex]['item_sort_order'];
+                $orders[] = $problem['slots'][$slotIndex]['teaching_order'];
             }
             $orders = array_values(array_unique($orders));
             sort($orders);
@@ -1784,15 +1792,19 @@ class AutoScheduler
         $teacherSlots = [];
         $resourceDailyLoads = [];
         $resourceSlotOrders = [];
+        $resourceWeekSlots = [];
+        $coreOutsideMorning = [];
         $assignmentRooms = [];
         $coreTotal = 0;
         $corePreferred = 0;
-        $changes = 0;
-        $countedSessions = [];
-        $currentSignatures = [];
+        $before = [];
         foreach ($problem['current_entries'] as $entry) {
-            $currentSignatures[$entry->teaching_assignment_id.':'.$entry->weekday.':'.$entry->item_id] = true;
+            $before[] = ['assignment_id' => $entry->teaching_assignment_id, 'week_pattern' => $entry->week_pattern->value,
+                'weekday' => $entry->weekday, 'item_id' => $entry->item_id, 'room_id' => $entry->actual_room_id,
+                'teacher_ids' => $entry->teachers->pluck('id')->map(fn ($id): int => (int) $id)->all()];
         }
+        $after = [];
+        $countedSessions = [];
         foreach ($solution as $unitIndex => $slotIndex) {
             $unit = $problem['units'][$unitIndex];
             $slot = $problem['slots'][$slotIndex];
@@ -1806,30 +1818,85 @@ class AutoScheduler
             foreach ($unit['resource_keys'] as $resource) {
                 $resourceDailyLoads[$resource][$slot['weekday']] = ($resourceDailyLoads[$resource][$slot['weekday']] ?? 0) + 1;
                 $resourceSlotOrders[$resource][$slot['weekday']][] = $slot['item_sort_order'];
+                foreach ($this->weekIndexes($unit['week_mask'], $problem['week_count']) as $weekIndex) {
+                    $resourceWeekSlots[$resource][$slot['weekday']][$weekIndex][$slot['teaching_order']] = $slot;
+                }
             }
             $assignmentRooms[$unit['assignment_id']][$unit['room_id']] = true;
             if (in_array($unit['course_name'], ['语文', '数学', '英语'], true)) {
                 $coreTotal++;
-                if ($slot['item_sort_order'] <= 4) {
+                if ($slot['is_morning']) {
                     $corePreferred++;
+                } else {
+                    $assignment = $problem['assignments'][$unit['assignment_id']];
+                    $coreOutsideMorning[] = [
+                        'assignment_id' => $unit['assignment_id'],
+                        'course' => $unit['course_name'],
+                        'teacher' => $assignment->teacher->name,
+                        'class_name' => $assignment->schoolClass->name ?? $assignment->teachingGroup?->name,
+                        'weekday' => $slot['weekday'],
+                        'item_id' => $slot['item_id'],
+                        'item_name' => $slot['item_name'],
+                    ];
                 }
             }
-            if (! isset($currentSignatures[$unit['assignment_id'].':'.$slot['weekday'].':'.$slot['item_id']])) {
-                $changes++;
-            }
+            $after[] = ['assignment_id' => $unit['assignment_id'], 'week_pattern' => $unit['week_pattern'],
+                'weekday' => $slot['weekday'], 'item_id' => $slot['item_id'], 'room_id' => $unit['room_id'], 'teacher_ids' => $unit['teacher_ids']];
         }
+        $difference = app(ScheduleDifference::class)->compare($before, $after);
+        $changes = $difference['added'] + $difference['moved'];
         $sameDayRepeats = 0;
         foreach ($assignmentDays as $days) {
             foreach ($days as $count) {
                 $sameDayRepeats += max(0, $count - 1);
             }
         }
-        $teacherGaps = 0;
+        $resourceGaps = [];
+        $gapDetails = [];
+        $slotsByWeekday = [];
+        foreach ($problem['slots'] as $slot) {
+            $slotsByWeekday[$slot['weekday']][] = $slot;
+        }
+        foreach ($resourceWeekSlots as $resource => $days) {
+            foreach ($days as $weekday => $weeks) {
+                foreach ($weeks as $weekIndex => $occupiedSlots) {
+                    $orders = array_keys($occupiedSlots);
+                    $firstOrder = min($orders);
+                    $lastOrder = max($orders);
+                    $gaps = array_values(array_filter($slotsByWeekday[$weekday], fn (array $slot): bool => $slot['teaching_order'] > $firstOrder
+                        && $slot['teaching_order'] < $lastOrder && ! isset($occupiedSlots[$slot['teaching_order']])
+                    ));
+                    $resourceGaps[$resource] = ($resourceGaps[$resource] ?? 0) + count($gaps) / $problem['week_count'];
+                    if ($gaps !== [] && str_starts_with($resource, 'teacher:')) {
+                        $key = $resource.':'.$weekday.':'.implode(',', array_column($gaps, 'item_id'));
+                        $gapDetails[$key] ??= [
+                            'teacher_id' => (int) substr($resource, strlen('teacher:')),
+                            'weekday' => $weekday,
+                            'item_ids' => array_column($gaps, 'item_id'),
+                            'item_names' => array_column($gaps, 'item_name'),
+                            'weeks' => [],
+                        ];
+                        $gapDetails[$key]['weeks'][] = $weekIndex + 1;
+                    }
+                }
+            }
+        }
+        $teacherNames = [];
+        foreach ($problem['assignments'] as $assignment) {
+            $teacherNames[$assignment->teacher_id] = $assignment->teacher->name;
+            foreach ($assignment->collaborators as $teacher) {
+                $teacherNames[$teacher->id] = $teacher->name;
+            }
+        }
+        foreach ($gapDetails as &$detail) {
+            $detail['teacher'] = $teacherNames[$detail['teacher_id']] ?? '教师 #'.$detail['teacher_id'];
+        }
+        unset($detail);
+        $teacherGaps = round(array_sum(array_filter($resourceGaps, fn (string $key): bool => str_starts_with($key, 'teacher:'), ARRAY_FILTER_USE_KEY)), 2);
         $consecutiveWarnings = 0;
         foreach ($teacherSlots as $days) {
             foreach ($days as $sortOrders) {
                 sort($sortOrders);
-                $teacherGaps += max(0, max($sortOrders) - min($sortOrders) + 1 - count($sortOrders));
                 $streak = 1;
                 for ($index = 1; $index < count($sortOrders); $index++) {
                     $streak = $sortOrders[$index] === $sortOrders[$index - 1] + 1 ? $streak + 1 : 1;
@@ -1844,7 +1911,7 @@ class AutoScheduler
         $distributionScore = max(0.0, 100.0 - $sameDayRepeats * 100 / $total);
         $teacherScore = max(0.0, 100.0 - ($teacherGaps + $consecutiveWarnings * 2) * 100 / $total);
         $coreScore = $coreTotal === 0 ? 100.0 : $corePreferred * 100 / $coreTotal;
-        $stabilityScore = max(0.0, 100.0 - $changes * 100 / $total);
+        $stabilityScore = max(0.0, 100.0 - $difference['existing_changed'] * 100 / max(1, count($before)));
 
         $classImbalance = 0;
         $weekdays = array_values(array_unique(array_column($problem['slots'], 'weekday')));
@@ -1896,7 +1963,7 @@ class AutoScheduler
                         && $this->slotMatches($constraint->condition ?? [], $slot);
                     $preference = $requirement['preference'] ?? null;
                     if (($preference === 'avoid' && $matches) || ($preference === 'prefer' && ! $matches)
-                        || ($courseNames !== null && $slot['item_sort_order'] > 4)) {
+                        || ($courseNames !== null && ! $slot['is_morning'])) {
                         $violations++;
                     }
                 }
@@ -1963,10 +2030,7 @@ class AutoScheduler
                     }
                 } elseif ($category === 'teacher_gaps') {
                     foreach (array_keys($resources) as $resource) {
-                        foreach ($resourceSlotOrders[$resource] ?? [] as $sortOrders) {
-                            sort($sortOrders);
-                            $violations += max(0, max($sortOrders) - min($sortOrders) + 1 - count($sortOrders));
-                        }
+                        $violations += (int) ceil($resourceGaps[$resource] ?? 0);
                     }
                 } elseif ($category === 'workload_balance') {
                     foreach (array_keys($resources) as $resource) {
@@ -2061,6 +2125,9 @@ class AutoScheduler
             'quality_score' => $quality,
             'soft_warning_count' => $softWarningCount,
             'score_breakdown' => [
+                'methodology_version' => 2,
+                'teacher_gap_details' => array_values($gapDetails),
+                'core_outside_morning' => $coreOutsideMorning,
                 'course_distribution' => round($distributionScore, 2),
                 'teacher_experience' => round($teacherScore, 2),
                 'class_load' => round($classLoadScore, 2),
@@ -2074,6 +2141,8 @@ class AutoScheduler
                 'consecutive_over_preference' => $consecutiveWarnings,
                 'core_preferred_ratio' => round($coreScore / 100, 4),
                 'changes_from_current' => $changes,
+                'baseline_version_id' => $problem['base_version_id'],
+                'change_counts' => $difference,
                 'class_daily_imbalance' => $classImbalance,
                 'room_changes' => $roomChanges,
                 'rule_results' => $ruleResults,
@@ -2102,7 +2171,7 @@ class AutoScheduler
                 'weekday' => $slot['weekday'],
                 'item_id' => $slot['item_id'],
                 'actual_room_id' => $unit['room_id'],
-                'is_locked' => $unit['fixed_source'] !== null,
+                'is_locked' => in_array($unit['fixed_source'], ['locked_entry', 'fixed_placement'], true),
             ];
         }
         foreach (array_chunk($rows, 300) as $chunk) {

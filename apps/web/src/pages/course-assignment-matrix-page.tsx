@@ -1,3 +1,4 @@
+import { DataImportDialog } from "@/components/data-import-dialog"
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import {
@@ -85,6 +86,7 @@ interface MatrixCell {
   classSetting: ClassSetting
   course: Course
   assignment: TeachingAssignment | undefined
+  assignments: TeachingAssignment[]
 }
 
 interface AssignmentTemplate {
@@ -139,13 +141,29 @@ export function CourseAssignmentMatrixPage() {
   const [pageSize, setPageSize] = useState(() =>
     positiveIntegerParam(urlParams, "per_page", 20, [20, 50, 100]),
   )
+  const [chosenAssignments, setChosenAssignments] = useState<Record<string, number>>({})
   const [selectedKeys, setSelectedKeys] = useState<string[]>([])
   const [selectedAssignmentIds, setSelectedAssignmentIds] = useState<number[]>([])
   const [anchorKey, setAnchorKey] = useState<string | null>(null)
   const [focusedKey, setFocusedKey] = useState<string | null>(null)
   const [copied, setCopied] = useState<AssignmentTemplate | null>(null)
   const [editor, setEditor] = useState<AssignmentEditorSeed | undefined>(undefined)
+  const [importOpen, setImportOpen] = useState(false)
   const [batchOpen, setBatchOpen] = useState(false)
+  const [batchSnapshot, setBatchSnapshot] = useState<{
+    cells: MatrixCell[]
+    etag: string | null
+    template?: AssignmentTemplate
+  }>({ cells: [], etag: null })
+  const [onlyMatches, setOnlyMatches] = useState(() => urlParams.get("matches") === "1")
+  const [gradeCoursesOnly, setGradeCoursesOnly] = useState(
+    () => urlParams.get("grade_courses") === "1",
+  )
+  const [undoEdit, setUndoEdit] = useState<{
+    operations: ReturnType<typeof operationFromTemplate>[]
+    etag: string | null
+  } | null>(null)
+  const [undoBusy, setUndoBusy] = useState(false)
   const [groupsOpen, setGroupsOpen] = useState(false)
   const groupedView = isGroupedAssignmentView(view) ? view : null
   const isDraftReview = draftReview && view === "class" && statusFilter === "draft"
@@ -265,6 +283,8 @@ export function CourseAssignmentMatrixPage() {
           view: view === "matrix" ? null : view,
           review: isDraftReview ? "draft" : null,
           q: search.trim() || null,
+          matches: onlyMatches ? "1" : null,
+          grade_courses: gradeCoursesOnly ? "1" : null,
           grade: gradeFilter === "all" ? null : gradeFilter,
           course: courseFilter === "all" ? null : courseFilter,
           status: statusFilter === "all" ? null : statusFilter,
@@ -276,6 +296,8 @@ export function CourseAssignmentMatrixPage() {
   }, [
     courseFilter,
     gradeFilter,
+    onlyMatches,
+    gradeCoursesOnly,
     isDraftReview,
     page,
     pageSize,
@@ -311,7 +333,6 @@ export function CourseAssignmentMatrixPage() {
         : tableAssignments.data?.etag
   const etag = assignmentEtag ?? groups.data?.etag ?? semester.data?.etag ?? null
   const refresh = async () => {
-    setSelectedKeys([])
     setSelectedAssignmentIds([])
     await Promise.all([
       client.invalidateQueries({ queryKey: ["semester", semesterId] }),
@@ -321,14 +342,59 @@ export function CourseAssignmentMatrixPage() {
     ])
   }
 
-  const activeCourses = useMemo(
-    () =>
-      (courses.data?.data ?? []).filter(
+  const activeCourses = useMemo(() => {
+    const relevant = (matrixAssignments.data?.data ?? []).filter(
+      (assignment) =>
+        gradeFilter === "all" || String(assignment.school_class?.grade_id) === gradeFilter,
+    )
+    const order = [
+      "语文",
+      "数学",
+      "英语",
+      "道德与法治",
+      "政治",
+      "历史",
+      "地理",
+      "物理",
+      "化学",
+      "生物",
+      "体育",
+      "音乐",
+      "美术",
+      "信息技术",
+      "劳动",
+    ]
+    return (courses.data?.data ?? [])
+      .filter(
         (course) =>
-          course.is_active && (courseFilter === "all" || String(course.id) === courseFilter),
-      ),
-    [courseFilter, courses.data?.data],
-  )
+          course.is_active &&
+          (courseFilter === "all" || String(course.id) === courseFilter) &&
+          (!gradeCoursesOnly ||
+            relevant.some((assignment) => assignment.course_id === course.id)) &&
+          (!onlyMatches ||
+            !search.trim() ||
+            course.name.includes(search.trim()) ||
+            relevant.some(
+              (assignment) =>
+                assignment.course_id === course.id &&
+                assignmentSearchText(assignment).includes(search.trim().toLocaleLowerCase("zh-CN")),
+            )),
+      )
+      .sort(
+        (a, b) =>
+          (order.indexOf(a.name) < 0 ? 99 : order.indexOf(a.name)) -
+            (order.indexOf(b.name) < 0 ? 99 : order.indexOf(b.name)) ||
+          a.name.localeCompare(b.name, "zh-CN"),
+      )
+  }, [
+    courseFilter,
+    courses.data?.data,
+    matrixAssignments.data?.data,
+    gradeFilter,
+    gradeCoursesOnly,
+    onlyMatches,
+    search,
+  ])
   const matrixClasses = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("zh-CN")
     const assignments = matrixAssignments.data?.data ?? []
@@ -342,9 +408,7 @@ export function CourseAssignmentMatrixPage() {
             assignments.some(
               (assignment) =>
                 assignment.school_class_id === setting.school_class_id &&
-                `${assignment.course.name} ${assignment.teacher.name} ${assignment.collaborators.map((item) => item.name).join(" ")}`
-                  .toLocaleLowerCase("zh-CN")
-                  .includes(query),
+                assignmentSearchText(assignment).includes(query),
             )),
       )
       .sort(
@@ -355,19 +419,16 @@ export function CourseAssignmentMatrixPage() {
           a.school_class.name.localeCompare(b.school_class.name, "zh-CN", { numeric: true }),
       )
   }, [gradeFilter, gradeOrder, matrixAssignments.data?.data, search, settings.data?.data])
-  const assignmentMap = useMemo(
-    () =>
-      new Map(
-        (matrixAssignments.data?.data ?? [])
-          .filter((assignment) => assignment.school_class_id !== null)
-          .map((assignment) => [
-            `${assignment.school_class_id}:${assignment.course_id}`,
-            assignment,
-          ]),
-      ),
-    [matrixAssignments.data?.data],
-  )
-  const cells = useMemo(
+  const assignmentMap = useMemo(() => {
+    const grouped = new Map<string, TeachingAssignment[]>()
+    for (const assignment of matrixAssignments.data?.data ?? []) {
+      if (assignment.school_class_id === null) continue
+      const key = `${assignment.school_class_id}:${assignment.course_id}`
+      grouped.set(key, [...(grouped.get(key) ?? []), assignment])
+    }
+    return grouped
+  }, [matrixAssignments.data?.data])
+  const cells = useMemo<MatrixCell[]>(
     () =>
       matrixClasses.flatMap((classSetting, row) =>
         activeCourses.map((course, column) => ({
@@ -376,12 +437,32 @@ export function CourseAssignmentMatrixPage() {
           column,
           classSetting,
           course,
-          assignment: assignmentMap.get(`${classSetting.school_class_id}:${course.id}`),
+          assignments: assignmentMap.get(`${classSetting.school_class_id}:${course.id}`) ?? [],
+          assignment: chooseCellAssignment(
+            assignmentMap.get(`${classSetting.school_class_id}:${course.id}`) ?? [],
+            chosenAssignments[`${classSetting.school_class_id}:${course.id}`],
+            search,
+          ),
         })),
       ),
-    [activeCourses, assignmentMap, matrixClasses],
+    [activeCourses, assignmentMap, matrixClasses, chosenAssignments, search],
   )
   const cellMap = useMemo(() => new Map(cells.map((cell) => [cell.key, cell])), [cells])
+  const matchingCells = search.trim() ? cells.filter((cell) => cellMatches(cell, search)) : []
+  const matchingKeys = new Set(matchingCells.map((cell) => cell.key))
+  const locateMatch = (direction: number) => {
+    const index = matchingCells.findIndex((cell) => cell.key === focusedKey)
+    const cell = matchingCells[(index + direction + matchingCells.length) % matchingCells.length]
+    if (!cell) return
+    setSelectedKeys([cell.key])
+    setFocusedKey(cell.key)
+    setAnchorKey(cell.key)
+    requestAnimationFrame(() => {
+      const element = document.getElementById(`assignment-cell-${cell.key}`)
+      element?.scrollIntoView({ block: "nearest", inline: "nearest" })
+      element?.focus({ preventScroll: true })
+    })
+  }
   const selectedKeySet = useMemo(() => new Set(selectedKeys), [selectedKeys])
   const selectedCells = selectedKeys
     .map((key) => cellMap.get(key))
@@ -473,21 +554,30 @@ export function CourseAssignmentMatrixPage() {
     setCopied(templateFromAssignment(cell.assignment))
     toast.success("已复制任课设置；选择目标单元格后可粘贴")
   }
-  const pasteSelection = async () => {
-    if (!copied || !selectedCells.length || !etag) return
+  const openBatch = (template?: AssignmentTemplate) => {
+    if (!selectedCells.length) return
+    setBatchSnapshot({ cells: selectedCells, etag, template })
+    setBatchOpen(true)
+  }
+  const pasteSelection = () => {
+    if (copied) openBatch(copied)
+  }
+  const undoLastEdit = async () => {
+    if (!undoEdit || undoBusy) return
+    setUndoBusy(true)
     try {
       await api(`/api/v1/semesters/${semesterId}/teaching-assignments/bulk`, {
         method: "POST",
-        etag,
-        body: JSON.stringify({
-          operations: selectedCells.map((cell) => operationFromTemplate(cell, copied)),
-        }),
+        etag: undoEdit.etag,
+        body: JSON.stringify({ operations: undoEdit.operations }),
       })
-      const created = selectedCells.filter((cell) => !cell.assignment).length
-      toast.success(`已批量更新 ${selectedCells.length} 个单元格，其中新增 ${created} 条`)
+      setUndoEdit(null)
+      toast.success("已恢复修改前的草稿设置")
       await refresh()
     } catch (error) {
-      toast.error(apiMessage(error))
+      toast.error(`${apiMessage(error)}。未覆盖后续修改，可在详情中核对。`)
+    } finally {
+      setUndoBusy(false)
     }
   }
   const handleCellKey = (event: KeyboardEvent<HTMLButtonElement>, cell: MatrixCell) => {
@@ -503,7 +593,7 @@ export function CourseAssignmentMatrixPage() {
     }
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "v") {
       event.preventDefault()
-      void pasteSelection()
+      pasteSelection()
       return
     }
     if (event.key === "Enter") {
@@ -630,6 +720,13 @@ export function CourseAssignmentMatrixPage() {
   const current = semester.data.data
   const toolbarActions = (
     <>
+      <Button
+        variant="outline"
+        disabled={current.status === "closed"}
+        onClick={() => setImportOpen(true)}
+      >
+        导入 Excel
+      </Button>
       {TEACHING_GROUPS_ENABLED && (
         <Button variant="outline" onClick={() => setGroupsOpen(true)}>
           <UsersIcon />
@@ -679,6 +776,7 @@ export function CourseAssignmentMatrixPage() {
           <ListToolbar
             className="max-lg:grid max-lg:grid-cols-2 max-lg:[&>label]:col-span-2 max-lg:[&>div]:col-span-2 max-lg:[&>button]:w-full max-lg:[&>button:first-of-type]:col-span-2"
             search={search}
+            searchOnType={view === "matrix"}
             onSearchChange={setSearch}
             searchPlaceholder={
               groupedView ? groupedSearchPlaceholders[groupedView] : "搜索班级、课程或教师"
@@ -782,6 +880,62 @@ export function CourseAssignmentMatrixPage() {
             )}
           </ListToolbar>
 
+          {undoEdit && (
+            <div
+              role="status"
+              className="flex flex-wrap items-center gap-3 border-b px-4 py-3 text-sm"
+            >
+              <span>已保存 {undoEdit.operations.length} 条草稿修改</span>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={undoBusy}
+                onClick={() => void undoLastEdit()}
+              >
+                恢复修改前设置
+              </Button>
+              <span className="text-muted-foreground">后续资料变更后会要求重新核对。</span>
+            </div>
+          )}
+          {view === "matrix" && (
+            <div className="flex flex-wrap items-center gap-3 border-b px-4 py-3 text-sm">
+              {search.trim() && (
+                <>
+                  <span role="status">匹配 {matchingCells.length} 个任课格</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!matchingCells.length}
+                    onClick={() => locateMatch(-1)}
+                  >
+                    上一个匹配
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!matchingCells.length}
+                    onClick={() => locateMatch(1)}
+                  >
+                    下一个匹配
+                  </Button>
+                  <label className="flex items-center gap-2">
+                    <Checkbox
+                      checked={onlyMatches}
+                      onCheckedChange={(checked) => setOnlyMatches(Boolean(checked))}
+                    />
+                    仅显示匹配课程列
+                  </label>
+                </>
+              )}
+              <label className="flex items-center gap-2">
+                <Checkbox
+                  checked={gradeCoursesOnly}
+                  onCheckedChange={(checked) => setGradeCoursesOnly(Boolean(checked))}
+                />
+                仅显示当前范围已开课程
+              </label>
+            </div>
+          )}
           {isDraftReview && (
             <div className="flex flex-wrap items-center gap-2 border-b bg-muted/30 px-4 py-2.5 text-sm">
               <Button size="sm" variant="ghost" onClick={closeDraftReview}>
@@ -827,12 +981,12 @@ export function CourseAssignmentMatrixPage() {
                     size="sm"
                     variant="outline"
                     disabled={!copied}
-                    onClick={() => void pasteSelection()}
+                    onClick={() => pasteSelection()}
                   >
                     <ClipboardPasteIcon />
                     粘贴设置
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => setBatchOpen(true)}>
+                  <Button size="sm" variant="outline" onClick={() => openBatch()}>
                     批量设置
                   </Button>
                   {selectedDraftIds.length > 0 && (
@@ -957,6 +1111,8 @@ export function CourseAssignmentMatrixPage() {
                                       className={cn(
                                         "relative z-0 h-20 border-r border-b border-r-border/50 p-0 transition-colors has-[button:focus-visible]:ring-2 has-[button:focus-visible]:ring-inset has-[button:focus-visible]:ring-ring/35",
                                         cellTone,
+                                        matchingKeys.has(key) &&
+                                          "ring-2 ring-inset ring-primary/50",
                                       )}
                                     >
                                       <button
@@ -969,6 +1125,9 @@ export function CourseAssignmentMatrixPage() {
                                             : -1
                                         }
                                         aria-pressed={selected}
+                                        aria-description={
+                                          matchingKeys.has(key) ? "搜索匹配" : undefined
+                                        }
                                         className={cn(
                                           "group relative z-10 flex size-full min-h-20 flex-col items-start justify-center bg-transparent px-4 py-3 text-left outline-none transition-opacity",
                                           statusMuted && "opacity-35",
@@ -987,6 +1146,14 @@ export function CourseAssignmentMatrixPage() {
                                         <span className="sr-only">
                                           {classSetting.school_class.name}，{course.name}。
                                         </span>
+                                        {cell.assignments.length > 1 && (
+                                          <span className="mb-1 text-xs text-muted-foreground">
+                                            同格 {cell.assignments.length} 条任课 ·{" "}
+                                            {assignment
+                                              ? weekPatternLabel(assignment.week_pattern)
+                                              : ""}
+                                          </span>
+                                        )}
                                         {assignment ? (
                                           <>
                                             <span className="flex w-full items-start gap-2">
@@ -1046,7 +1213,21 @@ export function CourseAssignmentMatrixPage() {
                   </div>
                   {selectedCells.length === 1 && (
                     <MatrixDetailPanel
+                      key={selectedCells[0]?.key}
                       cells={selectedCells}
+                      semesterId={current.id}
+                      etag={etag}
+                      teachers={teachers.data?.data ?? []}
+                      rooms={rooms.data?.data ?? []}
+                      disabled={current.status === "closed"}
+                      onSaved={refresh}
+                      onUndo={setUndoEdit}
+                      onSelectAssignment={(id) =>
+                        setChosenAssignments((current) => ({
+                          ...current,
+                          [selectedCells[0]!.key]: id,
+                        }))
+                      }
                       copied={copied}
                       onEdit={(cell) =>
                         setEditor({
@@ -1056,7 +1237,7 @@ export function CourseAssignmentMatrixPage() {
                         })
                       }
                       onCopy={copySelection}
-                      onPaste={() => void pasteSelection()}
+                      onPaste={() => pasteSelection()}
                       onConfirm={confirmAssignments}
                       onClose={() => {
                         setSelectedKeys([])
@@ -1143,11 +1324,20 @@ export function CourseAssignmentMatrixPage() {
         onClose={() => setEditor(undefined)}
         onSaved={refresh}
       />
+      <DataImportDialog
+        kind="assignments"
+        semesterId={current.id}
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onSaved={refresh}
+      />
       <BatchAssignmentDialog
         open={batchOpen}
-        cells={selectedCells}
+        cells={batchSnapshot.cells}
+        initialTemplate={batchSnapshot.template}
+        onUndo={setUndoEdit}
         semesterId={current.id}
-        etag={etag}
+        etag={batchSnapshot.etag}
         teachers={teachers.data?.data ?? []}
         rooms={rooms.data?.data ?? []}
         onClose={() => setBatchOpen(false)}
@@ -1172,6 +1362,14 @@ export function CourseAssignmentMatrixPage() {
 
 function MatrixDetailPanel({
   cells,
+  semesterId,
+  etag,
+  teachers,
+  rooms,
+  disabled,
+  onSaved,
+  onUndo,
+  onSelectAssignment,
   copied,
   onEdit,
   onCopy,
@@ -1179,7 +1377,18 @@ function MatrixDetailPanel({
   onConfirm,
   onClose,
 }: {
+  onSelectAssignment: (id: number) => void
   cells: MatrixCell[]
+  semesterId: number
+  etag: string | null
+  teachers: Teacher[]
+  rooms: Room[]
+  disabled: boolean
+  onSaved: () => Promise<void>
+  onUndo: (value: {
+    operations: ReturnType<typeof operationFromTemplate>[]
+    etag: string | null
+  }) => void
   copied: AssignmentTemplate | null
   onEdit: (cell: MatrixCell) => void
   onCopy: () => void
@@ -1204,6 +1413,22 @@ function MatrixDetailPanel({
           <XIcon />
         </Button>
       </div>
+      {cell.assignments.length > 1 && (
+        <Field label="选择此格要编辑的任课">
+          <SimpleSelect
+            label="选择此格要编辑的任课"
+            value={String(assignment?.id ?? "")}
+            onValueChange={(id) => onSelectAssignment(Number(id))}
+          >
+            {cell.assignments.map((item) => (
+              <option key={item.id} value={item.id}>
+                {weekPatternLabel(item.week_pattern)} · {item.teacher.name}（
+                {item.teacher.employee_no ?? "无工号"}） · {item.weekly_items} 节
+              </option>
+            ))}
+          </SimpleSelect>
+        </Field>
+      )}
       {assignment ? (
         <>
           <div className="mt-5 space-y-4 text-sm">
@@ -1245,10 +1470,22 @@ function MatrixDetailPanel({
               />
             </div>
           </div>
+          {!disabled && (
+            <QuickAssignmentEditor
+              key={assignment.id}
+              cell={cell}
+              semesterId={semesterId}
+              etag={etag}
+              teachers={teachers}
+              rooms={rooms}
+              onSaved={onSaved}
+              onUndo={onUndo}
+            />
+          )}
           <div className="mt-6 grid gap-2 border-t pt-4">
             <Button onClick={() => onEdit(cell)}>
               <PencilIcon />
-              编辑任课
+              更多任课设置
             </Button>
             {assignment.status === "draft" && (
               <Button variant="outline" onClick={() => onConfirm([assignment.id])}>
@@ -1455,6 +1692,8 @@ function AssignmentsTable({
 function BatchAssignmentDialog({
   open,
   cells,
+  initialTemplate,
+  onUndo,
   semesterId,
   etag,
   teachers,
@@ -1464,6 +1703,11 @@ function BatchAssignmentDialog({
 }: {
   open: boolean
   cells: MatrixCell[]
+  initialTemplate?: AssignmentTemplate
+  onUndo: (value: {
+    operations: ReturnType<typeof operationFromTemplate>[]
+    etag: string | null
+  }) => void
   semesterId: number
   etag: string | null
   teachers: Teacher[]
@@ -1473,6 +1717,8 @@ function BatchAssignmentDialog({
 }) {
   const first = cells.find((cell) => cell.assignment)?.assignment
   const [saving, setSaving] = useState(false)
+  const [reviewing, setReviewing] = useState(false)
+  const [saveError, setSaveError] = useState("")
   const [form, setForm] = useState({
     teacherId: "",
     weeklyItems: "1",
@@ -1484,43 +1730,55 @@ function BatchAssignmentDialog({
   })
   useEffect(() => {
     if (!open) return
+    setReviewing(false)
+    setSaveError("")
     setForm({
-      teacherId: String(first?.teacher_id ?? teachers.find((item) => item.is_active)?.id ?? ""),
-      weeklyItems: String(first?.weekly_items ?? 1),
-      itemsPerSession: String(first?.items_per_session ?? 1),
-      weekPattern: first?.week_pattern ?? "all",
-      activeWeeks: first?.active_weeks?.join("、") ?? "",
-      roomMode: first?.room_mode ?? "class_default",
-      specifiedRoomId: String(
-        first?.specified_room_id ?? rooms.find((item) => item.is_active)?.id ?? "",
-      ),
+      teacherId: String(initialTemplate?.teacherId ?? first?.teacher_id ?? ""),
+      weeklyItems: String(initialTemplate?.weeklyItems ?? first?.weekly_items ?? 1),
+      itemsPerSession: String(initialTemplate?.itemsPerSession ?? first?.items_per_session ?? 1),
+      weekPattern: initialTemplate?.weekPattern ?? first?.week_pattern ?? "all",
+      activeWeeks:
+        initialTemplate?.activeWeeks?.join("、") ?? first?.active_weeks?.join("、") ?? "",
+      roomMode: initialTemplate?.roomMode ?? first?.room_mode ?? "class_default",
+      specifiedRoomId: String(initialTemplate?.specifiedRoomId ?? first?.specified_room_id ?? ""),
     })
-  }, [first, open, rooms, teachers])
+  }, [first, open, initialTemplate])
   const activeWeeks = form.activeWeeks
     .split(/[、,，\s]+/)
     .map(Number)
     .filter((value) => Number.isInteger(value) && value > 0)
   const invalid =
     !form.teacherId ||
+    !Number.isInteger(Number(form.weeklyItems)) ||
+    Number(form.weeklyItems) < 1 ||
+    Number(form.weeklyItems) > 100 ||
+    !Number.isInteger(Number(form.itemsPerSession)) ||
+    Number(form.itemsPerSession) < 1 ||
+    Number(form.itemsPerSession) > 10 ||
     Number(form.itemsPerSession) > Number(form.weeklyItems) ||
     (form.weekPattern === "specified" && !activeWeeks.length) ||
     (form.roomMode === "specified" && !form.specifiedRoomId)
+  const template: AssignmentTemplate = {
+    teacherId: Number(form.teacherId),
+    collaboratorIds: [],
+    weeklyItems: Number(form.weeklyItems),
+    itemsPerSession: Number(form.itemsPerSession),
+    weekPattern: form.weekPattern,
+    activeWeeks: form.weekPattern === "specified" ? [...new Set(activeWeeks)] : null,
+    roomMode: form.roomMode,
+    specifiedRoomId: form.roomMode === "specified" ? Number(form.specifiedRoomId) : null,
+    allowsSubstitution: true,
+  }
   const save = async () => {
-    if (!etag || invalid || !cells.length) return
+    if (!etag || invalid || !cells.length || saving) return
+    if (!reviewing) {
+      setReviewing(true)
+      return
+    }
+    setSaveError("")
     setSaving(true)
     try {
-      const template: AssignmentTemplate = {
-        teacherId: Number(form.teacherId),
-        collaboratorIds: [],
-        weeklyItems: Number(form.weeklyItems),
-        itemsPerSession: Number(form.itemsPerSession),
-        weekPattern: form.weekPattern,
-        activeWeeks: form.weekPattern === "specified" ? [...new Set(activeWeeks)] : null,
-        roomMode: form.roomMode,
-        specifiedRoomId: form.roomMode === "specified" ? Number(form.specifiedRoomId) : null,
-        allowsSubstitution: true,
-      }
-      await api(`/api/v1/semesters/${semesterId}/teaching-assignments/bulk`, {
+      const response = await api(`/api/v1/semesters/${semesterId}/teaching-assignments/bulk`, {
         method: "POST",
         etag,
         body: JSON.stringify({
@@ -1537,17 +1795,25 @@ function BatchAssignmentDialog({
           ),
         }),
       })
+      if (cells.every((cell) => cell.assignment?.status === "draft")) {
+        onUndo({
+          operations: cells.map((cell) =>
+            operationFromTemplate(cell, templateFromAssignment(cell.assignment!)),
+          ),
+          etag: response.etag,
+        })
+      }
       toast.success(`已批量设置 ${cells.length} 个单元格`)
       await onSaved()
     } catch (error) {
-      toast.error(apiMessage(error))
+      setSaveError(apiMessage(error))
     } finally {
       setSaving(false)
     }
   }
   return (
-    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
+    <Dialog open={open} onOpenChange={(next) => !next && !saving && onClose()}>
+      <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>批量设置 {cells.length} 个单元格</DialogTitle>
           <DialogDescription>
@@ -1555,103 +1821,126 @@ function BatchAssignmentDialog({
             {cells.filter((cell) => cell.assignment).length} 条；任一项失败时整批不保存。
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-4">
-          <Field label="任课教师">
-            <TeacherPicker
-              teachers={teachers}
-              value={form.teacherId}
-              onValueChange={(value) => setForm((current) => ({ ...current, teacherId: value }))}
-            />
-          </Field>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Field label={form.weekPattern === "all" ? "每周节数（节）" : "上课周的节数（节）"}>
-              <Input
-                type="number"
-                min="1"
-                value={form.weeklyItems}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, weeklyItems: event.target.value }))
-                }
+        {reviewing ? (
+          <AssignmentBatchDiff
+            cells={cells}
+            template={template}
+            teachers={teachers}
+            rooms={rooms}
+          />
+        ) : (
+          <div className="grid gap-4">
+            <Field label="任课教师">
+              <TeacherPicker
+                teachers={teachers}
+                value={form.teacherId}
+                onValueChange={(value) => setForm((current) => ({ ...current, teacherId: value }))}
               />
             </Field>
-            <Field label="每次连续上几节">
-              <Input
-                type="number"
-                min="1"
-                value={form.itemsPerSession}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, itemsPerSession: event.target.value }))
-                }
-              />
-            </Field>
-            <Field label="上课周次">
-              <SimpleSelect
-                className="w-full"
-                value={form.weekPattern}
-                onValueChange={(value) =>
-                  setForm((current) => ({
-                    ...current,
-                    weekPattern: value as WeekPattern,
-                  }))
-                }
-              >
-                <option value="all">每周</option>
-                <option value="a">单周</option>
-                <option value="b">双周</option>
-                <option value="specified">指定周</option>
-              </SimpleSelect>
-            </Field>
-          </div>
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            节数按实际需要上课的周计算。连续上 2 节表示两节连堂；单周为本学期第 1、3、5…周，双周为第
-            2、4、6…周。
-          </p>
-          {form.weekPattern === "specified" && (
-            <Field label="指定教学周">
-              <Input
-                value={form.activeWeeks}
-                placeholder="1、3、5、7"
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, activeWeeks: event.target.value }))
-                }
-              />
-            </Field>
-          )}
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="上课地点">
-              <SimpleSelect
-                className="w-full"
-                value={form.roomMode}
-                onValueChange={(value) =>
-                  setForm((current) => ({
-                    ...current,
-                    roomMode: value as "class_default" | "specified",
-                  }))
-                }
-              >
-                <option value="class_default">班级固定教室</option>
-                <option value="specified">指定教室</option>
-              </SimpleSelect>
-            </Field>
-            {form.roomMode === "specified" && (
-              <Field label="指定教室">
-                <RoomPicker
-                  rooms={rooms}
-                  value={form.specifiedRoomId}
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Field label={form.weekPattern === "all" ? "每周节数（节）" : "上课周的节数（节）"}>
+                <Input
+                  type="number"
+                  min="1"
+                  value={form.weeklyItems}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, weeklyItems: event.target.value }))
+                  }
+                />
+              </Field>
+              <Field label="每次连续上几节">
+                <Input
+                  type="number"
+                  min="1"
+                  value={form.itemsPerSession}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, itemsPerSession: event.target.value }))
+                  }
+                />
+              </Field>
+              <Field label="上课周次">
+                <SimpleSelect
+                  className="w-full"
+                  value={form.weekPattern}
                   onValueChange={(value) =>
-                    setForm((current) => ({ ...current, specifiedRoomId: value }))
+                    setForm((current) => ({
+                      ...current,
+                      weekPattern: value as WeekPattern,
+                    }))
+                  }
+                >
+                  <option value="all">每周</option>
+                  <option value="a">单周</option>
+                  <option value="b">双周</option>
+                  <option value="specified">指定周</option>
+                </SimpleSelect>
+              </Field>
+            </div>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              节数按实际需要上课的周计算。连续上 2 节表示两节连堂；单周为本学期第
+              1、3、5…周，双周为第 2、4、6…周。
+            </p>
+            {form.weekPattern === "specified" && (
+              <Field label="指定教学周">
+                <Input
+                  value={form.activeWeeks}
+                  placeholder="1、3、5、7"
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, activeWeeks: event.target.value }))
                   }
                 />
               </Field>
             )}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="上课地点">
+                <SimpleSelect
+                  className="w-full"
+                  value={form.roomMode}
+                  onValueChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      roomMode: value as "class_default" | "specified",
+                    }))
+                  }
+                >
+                  <option value="class_default">班级固定教室</option>
+                  <option value="specified">指定教室</option>
+                </SimpleSelect>
+              </Field>
+              {form.roomMode === "specified" && (
+                <Field label="指定教室">
+                  <RoomPicker
+                    rooms={rooms}
+                    value={form.specifiedRoomId}
+                    onValueChange={(value) =>
+                      setForm((current) => ({ ...current, specifiedRoomId: value }))
+                    }
+                  />
+                </Field>
+              )}
+            </div>
           </div>
-        </div>
+        )}
+        {saveError && (
+          <p role="alert" className="text-sm text-destructive">
+            {saveError}。填写内容与所选范围已保留。
+          </p>
+        )}
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          {reviewing && (
+            <Button variant="outline" disabled={saving} onClick={() => setReviewing(false)}>
+              返回修改
+            </Button>
+          )}
+          <Button variant="outline" disabled={saving} onClick={onClose}>
             取消
           </Button>
           <Button disabled={saving || invalid} onClick={() => void save()}>
-            {saving ? "正在批量保存…" : "确认批量设置"}
+            {saving
+              ? "正在批量保存…"
+              : reviewing
+                ? `确认保存这 ${cells.length} 格`
+                : "核对逐项差异"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1737,4 +2026,243 @@ function isGroupedAssignmentView(value: View): value is GroupedAssignmentView {
 function numericFilterParam(params: URLSearchParams, key: string, fallback = "all") {
   const value = params.get(key)
   return value && /^\d+$/.test(value) ? value : fallback
+}
+
+function assignmentSearchText(assignment: TeachingAssignment) {
+  return [
+    assignment.school_class?.name,
+    assignment.course.name,
+    assignment.teacher.name,
+    assignment.teacher.employee_no,
+    ...assignment.collaborators.map((teacher) => `${teacher.name} ${teacher.employee_no ?? ""}`),
+    assignment.specified_room?.name,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLocaleLowerCase("zh-CN")
+}
+function cellMatches(cell: MatrixCell, search: string) {
+  const query = search.trim().toLocaleLowerCase("zh-CN")
+  return Boolean(
+    query &&
+    `${cell.classSetting.school_class.name} ${cell.course.name} ${cell.assignment ? assignmentSearchText(cell.assignment) : ""}`
+      .toLocaleLowerCase("zh-CN")
+      .includes(query),
+  )
+}
+function AssignmentBatchDiff({
+  cells,
+  template,
+  teachers,
+  rooms,
+}: {
+  cells: MatrixCell[]
+  template: AssignmentTemplate
+  teachers: Teacher[]
+  rooms: Room[]
+}) {
+  const nextTeacher = teachers.find((teacher) => teacher.id === template.teacherId)
+  const after = `${nextTeacher?.name ?? "未选教师"}（${nextTeacher?.employee_no ?? "无工号"}） · ${template.weeklyItems} 节 · 连排 ${template.itemsPerSession} 节 · ${weekPatternLabel(template.weekPattern)}${template.activeWeeks?.length ? ` ${template.activeWeeks.join("、")}` : ""} · ${template.roomMode === "class_default" ? "班级固定教室" : (rooms.find((room) => room.id === template.specifiedRoomId)?.name ?? "未选教室")}`
+  return (
+    <section className="space-y-3" aria-label="批量修改逐项差异">
+      <p className="text-sm">
+        以下 {cells.length}{" "}
+        个班级课程格会提交。协同教师沿用各格原配置；若与新主讲相同，则从协同教师中移除。任意一格校验失败，整批保持原样。
+      </p>
+      <div className="max-h-96 overflow-auto rounded-md border">
+        <table className="w-full text-left text-sm">
+          <thead className="sticky top-0 bg-background">
+            <tr>
+              <th className="p-3">范围</th>
+              <th className="p-3">修改前</th>
+              <th className="p-3">修改后</th>
+            </tr>
+          </thead>
+          <tbody>
+            {cells.map((cell) => (
+              <tr key={cell.key} className="border-t">
+                <th className="p-3 font-medium">
+                  {cell.classSetting.school_class.name} · {cell.course.name}
+                </th>
+                <td className="p-3">
+                  {cell.assignment
+                    ? `${cell.assignment.teacher.name}（${cell.assignment.teacher.employee_no ?? "无工号"}） · ${cell.assignment.weekly_items} 节 · 连排 ${cell.assignment.items_per_session} 节 · ${weekPatternLabel(cell.assignment.week_pattern)}${cell.assignment.active_weeks?.length ? ` ${cell.assignment.active_weeks.join("、")}` : ""} · ${roomLabel(cell.assignment)}`
+                    : "未开课"}
+                </td>
+                <td className="p-3">
+                  {after}
+                  {cell.assignment?.collaborators.some(
+                    (teacher) => teacher.id === template.teacherId,
+                  ) && (
+                    <p className="mt-1 text-muted-foreground">
+                      {nextTeacher?.name}从协同教师改为主讲
+                    </p>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+}
+function QuickAssignmentEditor({
+  cell,
+  semesterId,
+  etag,
+  teachers,
+  rooms,
+  onSaved,
+  onUndo,
+}: {
+  cell: MatrixCell
+  semesterId: number
+  etag: string | null
+  teachers: Teacher[]
+  rooms: Room[]
+  onSaved: () => Promise<void>
+  onUndo: (value: {
+    operations: ReturnType<typeof operationFromTemplate>[]
+    etag: string | null
+  }) => void
+}) {
+  const assignment = cell.assignment!
+  const [editing, setEditing] = useState(false)
+  const [teacher, setTeacher] = useState(String(assignment.teacher_id))
+  const [weekly, setWeekly] = useState(String(assignment.weekly_items))
+  const [room, setRoom] = useState(
+    assignment.room_mode === "class_default" ? "default" : String(assignment.specified_room_id),
+  )
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState("")
+  const snapshot = useRef({ assignment, etag })
+  const startEditing = () => {
+    snapshot.current = { assignment, etag }
+    setTeacher(String(assignment.teacher_id))
+    setWeekly(String(assignment.weekly_items))
+    setRoom(
+      assignment.room_mode === "class_default" ? "default" : String(assignment.specified_room_id),
+    )
+    setError("")
+    setEditing(true)
+  }
+  const save = async () => {
+    if (saving || !snapshot.current.etag) return
+    setSaving(true)
+    setError("")
+    try {
+      const original = snapshot.current.assignment
+      const response = await api(
+        `/api/v1/semesters/${semesterId}/teaching-assignments/${original.id}`,
+        {
+          method: "PATCH",
+          etag: snapshot.current.etag,
+          body: JSON.stringify({
+            teacher_id: Number(teacher),
+            weekly_items: Number(weekly),
+            room_mode: room === "default" ? "class_default" : "specified",
+            specified_room_id: room === "default" ? null : Number(room),
+          }),
+        },
+      )
+      if (original.status === "draft")
+        onUndo({
+          operations: [
+            operationFromTemplate(
+              { ...cell, assignment: original },
+              templateFromAssignment(original),
+            ),
+          ],
+          etag: response.etag,
+        })
+      setEditing(false)
+      await onSaved()
+      toast.success("已保存，工作位置保持不变")
+    } catch (cause) {
+      setError(apiMessage(cause))
+    } finally {
+      setSaving(false)
+    }
+  }
+  if (!editing)
+    return (
+      <Button className="mt-5 w-full" variant="outline" onClick={startEditing}>
+        就地修改教师、课时或教室
+      </Button>
+    )
+  return (
+    <form
+      className="mt-5 space-y-3 border-t pt-4"
+      aria-label="就地编辑任课"
+      onSubmit={(event) => {
+        event.preventDefault()
+        void save()
+      }}
+    >
+      <fieldset disabled={saving} className="space-y-3">
+        <Field label="任课教师">
+          <TeacherPicker teachers={teachers} value={teacher} onValueChange={setTeacher} />
+        </Field>
+        <Field label="每周课时">
+          <Input
+            type="number"
+            min={assignment.items_per_session}
+            max={100}
+            required
+            value={weekly}
+            onChange={(event) => setWeekly(event.target.value)}
+          />
+        </Field>
+        <Field label="上课教室">
+          <SimpleSelect value={room} onValueChange={setRoom} label="上课教室">
+            <option value="default">班级固定教室</option>
+            {rooms
+              .filter((item) => item.is_active || item.id === assignment.specified_room_id)
+              .map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+          </SimpleSelect>
+        </Field>
+        <p className="text-xs text-muted-foreground">
+          已排课程的教师或教室变化，请使用长期调课；连排、周次和协同教师在更多设置中修改。
+        </p>
+        {error && (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        )}
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="submit"
+            disabled={!teacher || !Number.isInteger(Number(weekly)) || Number(weekly) < 1}
+          >
+            {saving ? "保存中…" : "保存此格"}
+          </Button>
+          <Button type="button" variant="outline" onClick={() => setEditing(false)}>
+            取消修改
+          </Button>
+        </div>
+      </fieldset>
+    </form>
+  )
+}
+
+function chooseCellAssignment(
+  assignments: TeachingAssignment[],
+  chosen: number | undefined,
+  search: string,
+) {
+  const query = search.trim().toLocaleLowerCase("zh-CN")
+  const matches = query
+    ? assignments.filter((assignment) => assignmentSearchText(assignment).includes(query))
+    : assignments
+  const options = matches.length ? matches : assignments
+  return (
+    options.find((assignment) => assignment.id === chosen) ??
+    options.find((assignment) => assignment.week_pattern === "all") ??
+    options[0]
+  )
 }

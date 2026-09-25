@@ -24,6 +24,158 @@ beforeEach(function (): void {
     $this->actingAs($this->scheduler)->withSession(['auth_version' => $this->scheduler->auth_version]);
 });
 
+it('keeps temporary preservation separate from persistent locks after candidate adoption', function (string $mode, bool $locked, bool $fixed): void {
+    Queue::fake();
+    $fixture = scheduleRunReliabilityFixture();
+    $baseId = addScheduleRunBaseVersion($fixture, $this->scheduler->id, $locked);
+    $courseId = DB::table('courses')->insertGetId(['name' => '待补课程', 'is_active' => true, 'created_at' => now(), 'updated_at' => now()]);
+    DB::table('teacher_course')->insert(['teacher_id' => $fixture['teacher_id'], 'course_id' => $courseId]);
+    $assignment = (array) DB::table('teaching_assignments')->where('id', $fixture['assignment_id'])->sole();
+    unset($assignment['id']);
+    $missingId = DB::table('teaching_assignments')->insertGetId([...$assignment, 'course_id' => $courseId]);
+    if ($fixed) {
+        DB::table('fixed_placements')->insert([
+            'semester_id' => $fixture['semester_id'], 'teaching_assignment_id' => $fixture['assignment_id'],
+            'week_pattern' => 'all', 'weekday' => 1, 'item_id' => $fixture['item_ids'][0],
+            'room_id' => $fixture['room_id'], 'is_locked' => true, 'status' => 'active',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+    }
+    $base = "/api/v1/semesters/{$fixture['semester_id']}";
+    $payload = scheduleRunPayload(['keep_current' => $mode === 'fill', 'base_version_id' => $baseId]);
+    if ($mode === 'local') {
+        $payload['scope'] = ['type' => 'assignment', 'ids' => [$missingId]];
+    }
+    $etag = $this->getJson($base)->headers->get('ETag');
+    $created = $this->withHeader('If-Match', $etag)->postJson($base.'/schedule-runs', $payload)->assertStatus(202);
+    $run = ScheduleRun::query()->findOrFail($created->json('data.id'));
+    app(AutoScheduler::class)->generate($run);
+    $candidate = $run->fresh()->candidates()->sole();
+    $kept = $candidate->entries()->where('teaching_assignment_id', $fixture['assignment_id'])->sole();
+    expect($kept->weekday)->toBe(1)->and($kept->item_id)->toBe($fixture['item_ids'][0])
+        ->and($kept->is_locked)->toBe($locked || $fixed)
+        ->and($candidate->score_breakdown['change_counts']['added'])->toBe(1)
+        ->and($candidate->score_breakdown['change_counts']['moved'])->toBe(0);
+    $path = $base.'/schedule-runs/'.$run->id.'/candidates/'.$candidate->id;
+    $detail = $this->getJson($path)->assertOk();
+    $adopted = $this->withHeader('If-Match', $detail->headers->get('ETag'))->postJson($path.'/adopt', ['activate' => false])->assertCreated();
+    expect((bool) DB::table('timetable_entries')->where('timetable_version_id', $adopted->json('data.id'))
+        ->where('teaching_assignment_id', $fixture['assignment_id'])->value('is_locked'))->toBe($locked || $fixed);
+})->with([['fill', false, false], ['local', false, false], ['fill', true, false], ['fill', false, true]]);
+
+it('scores teaching gaps and morning preferences using actual teaching periods and clock times', function (bool $teachingGap, string $lastStart, float $expectedCore): void {
+    Queue::fake();
+    $fixture = scheduleRunReliabilityFixture();
+    DB::table('courses')->where('id', $fixture['course_id'])->update(['name' => '数学']);
+    DB::table('teaching_assignments')->where('id', $fixture['assignment_id'])->update(['weekly_items' => 2]);
+    DB::table('items')->where('id', $fixture['item_ids'][1])->update(['sort_order' => 9, 'start_time' => $lastStart, 'end_time' => substr($lastStart, 0, 2).':45']);
+    $item = (array) DB::table('items')->where('id', $fixture['item_ids'][0])->first();
+    unset($item['id']);
+    $middleId = DB::table('items')->insertGetId([...$item, 'name' => $teachingGap ? '中间正式课节' : '课间操',
+        'sort_order' => 5, 'start_time' => '09:30', 'end_time' => '10:15',
+        'type' => $teachingGap ? 'course' : 'fixed_non_course',
+        'allows_course' => $teachingGap, 'counts_as_course' => $teachingGap]);
+    foreach ($fixture['item_ids'] as $itemId) {
+        DB::table('fixed_placements')->insert([
+            'semester_id' => $fixture['semester_id'], 'teaching_assignment_id' => $fixture['assignment_id'],
+            'week_pattern' => 'all', 'weekday' => 1, 'item_id' => $itemId, 'room_id' => $fixture['room_id'],
+            'is_locked' => false, 'status' => 'active', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+    }
+    $this->getJson("/api/v1/semesters/{$fixture['semester_id']}/fixed-placements")
+        ->assertOk()->assertJsonPath('data.0.is_locked', true);
+    $run = createScheduleRunForReliabilityTest($this, $fixture);
+    app(AutoScheduler::class)->generate($run);
+    $candidate = $run->fresh()->candidates()->sole();
+    $score = $candidate->score_breakdown;
+    expect($score['methodology_version'])->toBe(2)
+        ->and((float) $score['teacher_gaps'])->toBe($teachingGap ? 1.0 : 0.0)
+        ->and((float) $score['core_course_priority'])->toBe($expectedCore)
+        ->and($candidate->entries()->where('is_locked', true)->count())->toBe(2);
+    if ($teachingGap) {
+        expect($score['teacher_gap_details'][0]['teacher_id'])->toBe($fixture['teacher_id'])
+            ->and($score['teacher_gap_details'][0]['item_ids'])->toBe([$middleId]);
+    } else {
+        expect($score['teacher_gap_details'])->toBe([]);
+    }
+})->with([[false, '11:00', 100.0], [true, '11:00', 100.0], [false, '12:00', 50.0]]);
+
+it('protects active fixed placements after an entry is unlocked and exposes both conflicting requirements', function (): void {
+    $fixture = scheduleRunReliabilityFixture();
+    $versionId = addScheduleRunBaseVersion($fixture, $this->scheduler->id, false);
+    $entryId = DB::table('timetable_entries')->where('timetable_version_id', $versionId)->value('id');
+    $fixedId = DB::table('fixed_placements')->insertGetId([
+        'semester_id' => $fixture['semester_id'], 'teaching_assignment_id' => $fixture['assignment_id'],
+        'week_pattern' => 'all', 'weekday' => 1, 'item_id' => $fixture['item_ids'][0],
+        'room_id' => $fixture['room_id'], 'is_locked' => false, 'status' => 'active',
+        'created_at' => now(), 'updated_at' => now(),
+    ]);
+    $base = "/api/v1/semesters/{$fixture['semester_id']}";
+    $this->postJson($base.'/timetable/diagnose', ['version_id' => $versionId, 'entry_id' => $entryId,
+        'weekday' => 2, 'item_id' => $fixture['item_ids'][0]])
+        ->assertOk()->assertJsonPath('data.allowed', false)->assertJsonPath('data.hard_conflicts.0.fixed_placement_id', $fixedId);
+    $etag = $this->getJson($base)->headers->get('ETag');
+    $this->withHeader('If-Match', $etag)->deleteJson($base.'/timetable/entries/'.$entryId)
+        ->assertConflict()->assertJsonPath('code', 'FIXED_PLACEMENT_REQUIRED');
+    $this->withHeader('If-Match', $etag)->patchJson($base.'/timetable/entries/'.$entryId, [
+        'weekday' => 2, 'item_id' => $fixture['item_ids'][0],
+    ])->assertConflict();
+    DB::table('scheduling_constraints')->where('id', $fixture['constraint_id'])->update([
+        'name' => '周一不可排课', 'kind' => 'hard', 'category' => 'availability',
+        'requirement' => json_encode(['available' => false], JSON_THROW_ON_ERROR),
+    ]);
+    $conflicts = $this->getJson($base.'/timetable/validation?version_id='.$versionId)
+        ->assertOk()->json('data.hard_conflicts');
+    $conflict = collect($conflicts)->firstWhere('fixed_placement_id', $fixedId);
+    expect($conflict['constraint_id'])->toBe($fixture['constraint_id'])
+        ->and($conflict['weekday'])->toBe(1)
+        ->and($conflict['item_id'])->toBe($fixture['item_ids'][0])
+        ->and($conflict['message'])->toContain('固定安排要求', '周一不可排课');
+    $this->postJson($base.'/timetable-versions/'.$versionId.'/publication-preview')->assertConflict();
+    DB::table('fixed_placements')->where('id', $fixedId)->update(['status' => 'inactive']);
+    $this->withHeader('If-Match', $etag)->patchJson($base.'/timetable/entries/'.$entryId, [
+        'weekday' => 2, 'item_id' => $fixture['item_ids'][0],
+    ])->assertOk();
+});
+
+it('rejects an unlocked fixed placement and creates a locked requirement when the flag is omitted', function (): void {
+    $fixture = scheduleRunReliabilityFixture();
+    $etag = $this->getJson("/api/v1/semesters/{$fixture['semester_id']}")->headers->get('ETag');
+    $payload = ['teaching_assignment_id' => $fixture['assignment_id'], 'week_pattern' => 'all',
+        'weekday' => 1, 'item_id' => $fixture['item_ids'][0]];
+    $this->withHeader('If-Match', $etag)->postJson("/api/v1/semesters/{$fixture['semester_id']}/fixed-placements", [...$payload, 'is_locked' => false])
+        ->assertUnprocessable()->assertJsonValidationErrors('is_locked');
+    $this->withHeader('If-Match', $etag)->postJson("/api/v1/semesters/{$fixture['semester_id']}/fixed-placements", $payload)
+        ->assertCreated()->assertJsonPath('data.is_locked', true);
+});
+
+it('does not combine alternating weeks into a fictitious teacher gap', function (): void {
+    Queue::fake();
+    $fixture = scheduleRunReliabilityFixture();
+    DB::table('teaching_assignments')->where('id', $fixture['assignment_id'])->update(['week_pattern' => 'a']);
+    DB::table('items')->where('id', $fixture['item_ids'][1])->update(['sort_order' => 3, 'start_time' => '11:00', 'end_time' => '11:45']);
+    $middle = (array) DB::table('items')->where('id', $fixture['item_ids'][0])->first();
+    unset($middle['id']);
+    DB::table('items')->insert([...$middle, 'name' => '中间正式课节', 'sort_order' => 2, 'start_time' => '10:00', 'end_time' => '10:45']);
+    $course = DB::table('courses')->insertGetId(['name' => '科学', 'is_active' => true, 'created_at' => now(), 'updated_at' => now()]);
+    DB::table('teacher_course')->insert(['teacher_id' => $fixture['teacher_id'], 'course_id' => $course]);
+    $assignment = (array) DB::table('teaching_assignments')->where('id', $fixture['assignment_id'])->first();
+    unset($assignment['id']);
+    $secondAssignment = DB::table('teaching_assignments')->insertGetId([...$assignment, 'course_id' => $course, 'week_pattern' => 'b']);
+    foreach ([[$fixture['assignment_id'], 'a', $fixture['item_ids'][0]], [$secondAssignment, 'b', $fixture['item_ids'][1]]] as [$assignmentId, $pattern, $itemId]) {
+        DB::table('fixed_placements')->insert([
+            'semester_id' => $fixture['semester_id'], 'teaching_assignment_id' => $assignmentId,
+            'week_pattern' => $pattern, 'weekday' => 1, 'item_id' => $itemId,
+            'room_id' => $fixture['room_id'], 'is_locked' => true, 'status' => 'active',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+    }
+    $run = createScheduleRunForReliabilityTest($this, $fixture);
+    app(AutoScheduler::class)->generate($run);
+    $score = $run->fresh()->candidates()->sole()->score_breakdown;
+    expect((float) $score['teacher_gaps'])->toBe(0.0)->and($score['teacher_gap_details'])->toBe([]);
+});
+
 it('persists the scheduling input snapshot and queues a recoverable database job', function (): void {
     config(['queue.default' => 'sync']);
     $fixture = scheduleRunReliabilityFixture();

@@ -7,6 +7,22 @@ use ZipArchive;
 
 final class SimpleXlsxWriter
 {
+    /** @param list<list<string>> $rows */
+    public function writeTable(array $rows, string $sheetName = '导入明细'): string
+    {
+        $xml = '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" state="frozen"/></sheetView></sheetViews><cols><col min="1" max="32" width="22" customWidth="1"/></cols><sheetData>';
+        foreach ($rows as $index => $row) {
+            $xml .= '<row r="'.($index + 1).'" ht="30" customHeight="1">';
+            foreach ($row as $column => $value) {
+                $xml .= '<c r="'.$this->columnName($column + 1).($index + 1).'" t="inlineStr" s="'.($index === 0 ? '4' : '6').'"><is><t xml:space="preserve">'.$this->xml($value).'</t></is></c>';
+            }
+            $xml .= '</row>';
+        }
+        $xml .= '</sheetData></worksheet>';
+
+        return $this->writePackage($sheetName, $this->timetableStyles(), $xml);
+    }
+
     /**
      * @param  array{
      *     title: string,

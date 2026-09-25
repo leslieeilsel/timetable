@@ -1,4 +1,7 @@
 import { useEffect, type ReactNode } from "react"
+import { useQuery } from "@tanstack/react-query"
+import { api } from "@/lib/api"
+import type { Semester } from "@/lib/types"
 import { Link, Outlet, useLocation } from "react-router"
 import { ChevronDownIcon, MoonIcon, SunIcon, type LucideIcon } from "lucide-react"
 import { useTheme } from "next-themes"
@@ -63,7 +66,8 @@ const labels: Record<string, string> = {
 }
 
 export function WorkspaceShell({ children }: { children?: ReactNode }) {
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
+  const returnVersion = Number(new URLSearchParams(search).get("return_version"))
   const { user } = useAuth()
   const { resolvedTheme, setTheme } = useTheme()
   const isDark = resolvedTheme === "dark"
@@ -75,6 +79,11 @@ export function WorkspaceShell({ children }: { children?: ReactNode }) {
   const isGenerationPage = semesterDestinationForPath(pathname) === "generate"
   const isSemesterPage = isSchedulingSemesterPath(pathname)
   const isDailyPage = isDailySemesterPath(pathname)
+  const activeSemester = useQuery({
+    queryKey: ["semester", semesterId],
+    queryFn: () => api<Semester>(`/api/v1/semesters/${semesterId}`),
+    enabled: semesterId !== null && (isSemesterPage || isDailyPage),
+  })
   const schedulingMenuItems = schedulingNavigationItems.map((item) => ({
     ...item,
     to: semesterPathOrCurrent(semesterId, item.destination),
@@ -171,6 +180,25 @@ export function WorkspaceShell({ children }: { children?: ReactNode }) {
                   </BreadcrumbItem>
                 </BreadcrumbList>
               </Breadcrumb>
+              {(isSemesterPage || isDailyPage) && activeSemester.data && (
+                <p className="order-last w-full text-xs text-muted-foreground sm:order-none sm:w-auto">
+                  {activeSemester.data.data.academic_year?.name} · {activeSemester.data.data.name}
+                </p>
+              )}
+              {semesterId && Number.isSafeInteger(returnVersion) && returnVersion > 0 && (
+                <Button
+                  nativeButton={false}
+                  size="sm"
+                  variant="outline"
+                  render={
+                    <Link
+                      to={`${semesterPathOrCurrent(semesterId, "planning")}?version=${returnVersion}&publish=1`}
+                    />
+                  }
+                >
+                  返回原方案发布检查
+                </Button>
+              )}
               <div className="ml-auto flex shrink-0 items-center gap-2">
                 <Button
                   type="button"

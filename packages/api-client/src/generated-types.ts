@@ -981,7 +981,10 @@ export interface paths {
         /** 分页查询固定安排 */
         get: operations["getSemesterFixedPlacements"];
         put?: never;
-        /** 创建固定安排 */
+        /**
+         * 创建固定安排
+         * @description 固定安排创建后立即启用，要求指定任课保持在指定课节，仍须遵守硬约束和资源冲突检查。is_locked 已固定为 true，可省略；传 false 将返回 422。取消要求请停用或删除固定安排，现有课表及其独立课节锁定不会自动变化。
+         */
         post: operations["createSemesterFixedPlacement"];
         delete?: never;
         options?: never;
@@ -1003,7 +1006,10 @@ export interface paths {
         delete: operations["deleteSemesterFixedPlacement"];
         options?: never;
         head?: never;
-        /** 修改固定安排 */
+        /**
+         * 修改固定安排
+         * @description 修改位置要求不会自动移动现有课表。is_locked 仅接受 true（可省略），历史 false 记录也按必须固定处理。停用记录修改后仍保持停用，需单独启用。
+         */
         patch: operations["updateSemesterFixedPlacement"];
         trace?: never;
     };
@@ -1926,6 +1932,103 @@ export interface paths {
         patch: operations["patchroomsRoom"];
         trace?: never;
     };
+    "/api/v1/data-imports/{kind}/template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 下载中文教师或任课 Excel 模板（单表 .xlsx） */
+        get: operations["downloadDataImportTemplate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/data-imports/{kind}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 映射 Excel 列并逐行预检，不写入业务资料
+         * @description 单工作表首行为表头、最多 500 行和 2 MB；拒绝公式和合并单元格。教师按工号识别。任课以班级、课程、周型识别，只能修改无排课的草稿。返回 token、headers、fields、mapping、rows（行号、对象、动作、前后值、错误）与 summary。预览绑定操作者、学期和资料版本，有效期 30 分钟。
+         */
+        post: operations["previewDataImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/data-imports/{kind}/commit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 确认差异后整批导入，重复提交同一 token 返回首次结果
+         * @description 任一行预检错误或提交时错误均不部分写入；版本变化返回 412 并要求重新预检。新增任课为草稿，不改写已发布课格。返回 created、updated、skipped。
+         */
+        post: operations["commitDataImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/change-messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 查看一次调整的逐教师站内查看时间及人工联系记录
+         * @description calendar_exception_id 与 long_term_change_id 必须且只能传一个。返回 id、teacher_id、name、event、read_at、created_at、contacted_at、contacted_by_name、contact_note。教师账号不可访问。
+         */
+        get: operations["listChangeMessageContacts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/change-messages/{message}/contact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 教务记录已人工联系，不改写教师的 read_at
+         * @description 每条消息的首次联系记录保留；重复提交返回已有记录。操作者和时间由服务器生成，并记入审计。查看和联系均不表示理解或同意。
+         */
+        post: operations["recordManualChangeContact"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2201,6 +2304,7 @@ export interface components {
         };
     };
     parameters: {
+        ImportKind: "teachers" | "assignments";
         SemesterPath: number;
         ConstraintPath: number;
         PlacementPath: number;
@@ -5928,6 +6032,128 @@ export interface operations {
             412: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
             428: components["responses"]["Problem"];
+        };
+    };
+    downloadDataImportTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: components["parameters"]["ImportKind"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 表头模板；教师工号列按文本保存 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+        };
+    };
+    previewDataImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: components["parameters"]["ImportKind"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                    /** @description 任课导入时必填 */
+                    semester_id?: number;
+                    /** @description JSON 对象，字段名映射到从零开始的列索引；null 表示留空。不传时按模板表头自动匹配。 */
+                    mapping?: string;
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    commitDataImport: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": string;
+            };
+            path: {
+                kind: components["parameters"]["ImportKind"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    token: string;
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    listChangeMessageContacts: {
+        parameters: {
+            query?: {
+                calendar_exception_id?: number;
+                long_term_change_id?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    recordManualChangeContact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                message: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    note: string;
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["Success"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
         };
     };
 }

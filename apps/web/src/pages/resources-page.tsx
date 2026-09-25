@@ -1,3 +1,4 @@
+import { DataImportDialog } from "@/components/data-import-dialog"
 import { CourseColorPicker } from "@/components/course-color-picker"
 import { courseColorStyle, courseColorName } from "@/lib/course-colors"
 import { useDeferredValue, useEffect, useRef, useState } from "react"
@@ -110,6 +111,7 @@ export function RoomsPage() {
 }
 
 function ResourcesPage({ kind }: { kind: Kind }) {
+  const [importOpen, setImportOpen] = useState(false)
   const client = useQueryClient()
   const [urlParams, setUrlParams] = useSearchParams()
   const [editing, setEditing] = useState<Resource | null | undefined>(undefined)
@@ -194,10 +196,17 @@ function ResourcesPage({ kind }: { kind: Kind }) {
     }
   }
   const addButton = (
-    <Button onClick={() => setEditing(null)}>
-      <PlusIcon />
-      新增{titles[kind]}
-    </Button>
+    <>
+      {kind === "teachers" && (
+        <Button variant="outline" onClick={() => setImportOpen(true)}>
+          导入 Excel
+        </Button>
+      )}
+      <Button onClick={() => setEditing(null)}>
+        <PlusIcon />
+        新增{titles[kind]}
+      </Button>
+    </>
   )
 
   return (
@@ -303,6 +312,14 @@ function ResourcesPage({ kind }: { kind: Kind }) {
           )}
         </div>
       </div>
+      {kind === "teachers" && (
+        <DataImportDialog
+          kind="teachers"
+          open={importOpen}
+          onClose={() => setImportOpen(false)}
+          onSaved={refresh}
+        />
+      )}
       <ResourceDialog
         kind={kind}
         item={editing}

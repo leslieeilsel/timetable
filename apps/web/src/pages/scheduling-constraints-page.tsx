@@ -1,3 +1,4 @@
+import { useAuth } from "@/lib/auth"
 import {
   useDeferredValue,
   useEffect,
@@ -49,7 +50,6 @@ import {
   useHashPreservingSearchParams,
 } from "@/lib/url-state"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
   DialogContent,
@@ -128,6 +128,30 @@ function SchedulingConfigurationPage({ section }: { section: "rules" | "fixed" }
     | { type: "placement"; value: FixedPlacement }
     | null
   >(null)
+  const focusId = Number(urlParams.get("focus"))
+  const openedFocus = useRef("")
+  const focusedRecord = useQuery({
+    queryKey: ["constraint-repair-focus", semesterId, section, focusId],
+    enabled: semesterId !== null && Number.isSafeInteger(focusId) && focusId > 0,
+    queryFn: async () =>
+      (
+        await apiAllPages<FixedPlacement | SchedulingConstraint>(
+          `/api/v1/semesters/${semesterId}/${section === "fixed" ? "fixed-placements" : "scheduling-constraints"}`,
+        )
+      ).data,
+  })
+  useEffect(() => {
+    const key = `${section}:${focusId}`
+    if (!focusedRecord.data || openedFocus.current === key) return
+    openedFocus.current = key
+    const record = focusedRecord.data.find((item) => item.id === focusId)
+    if (!record) {
+      toast.error("该设置已不存在，请核对问题清单。")
+      return
+    }
+    if (section === "fixed") setEditingPlacement(record as FixedPlacement)
+    else setEditingRule(record as SchedulingConstraint)
+  }, [focusedRecord.data, focusId, section])
 
   const didMountRuleFilters = useRef(false)
   useEffect(() => {
@@ -232,6 +256,8 @@ function SchedulingConfigurationPage({ section }: { section: "rules" | "fixed" }
       client.invalidateQueries({ queryKey: ["scheduling-constraints", semesterId] }),
       client.invalidateQueries({ queryKey: ["fixed-placements", semesterId] }),
       client.invalidateQueries({ queryKey: ["preparation-check", semesterId] }),
+      client.invalidateQueries({ queryKey: ["semester", semesterId] }),
+      client.invalidateQueries({ queryKey: ["timetable-versions", semesterId] }),
     ])
   }
   const ruleAction = async (
@@ -268,7 +294,13 @@ function SchedulingConfigurationPage({ section }: { section: "rules" | "fixed" }
           etag: placements.data.etag,
         },
       )
-      toast.success(action === "delete" ? "固定安排已删除" : "固定安排状态已更新")
+      toast.success(
+        action === "delete"
+          ? "固定安排已删除"
+          : action === "activate"
+            ? "固定安排已启用"
+            : "固定安排已停用；现有课表及课节锁定仍保留",
+      )
       await invalidate()
     } catch (error) {
       toast.error(apiMessage(error))
@@ -297,6 +329,19 @@ function SchedulingConfigurationPage({ section }: { section: "rules" | "fixed" }
     <>
       <PageHeader title={section === "rules" ? "排课规则" : "固定安排"} />
       <div className="space-y-4 p-4 md:p-7">
+        {focusedRecord.isError && (
+          <div role="alert" className="rounded-lg border p-3 text-sm">
+            无法载入待修复的设置。
+            <Button
+              className="ml-2"
+              variant="outline"
+              size="sm"
+              onClick={() => void focusedRecord.refetch()}
+            >
+              重试
+            </Button>
+          </div>
+        )}
         {section === "rules" ? (
           <section className="surface-panel overflow-hidden">
             <ListToolbar
@@ -485,7 +530,7 @@ function SchedulingConfigurationPage({ section }: { section: "rules" | "fixed" }
             ) : !placements.data?.data.length ? (
               <EmptyList
                 title="没有固定安排"
-                description="班会、升旗、实验课等必须固定的课程可以在这里设置。"
+                description="为已确认的任课关系指定必须保留的课节。班会等活动请先建立相应课程与任课关系。"
               />
             ) : (
               <>
@@ -616,7 +661,7 @@ function SchedulingConfigurationPage({ section }: { section: "rules" | "fixed" }
             <DialogDescription>
               {pendingDelete?.type === "rule"
                 ? `确定删除“${pendingDelete.value.name}”吗？删除后无法恢复。`
-                : "确定删除这条固定安排吗？删除后自动排课将不再锁定该位置。"}
+                : "删除后取消该位置要求，现有课表不会自动移动或删除课程，已有课节锁定仍需在编排课表中单独解除。"}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -757,6 +802,15 @@ function RuleDialog({
   onClose: () => void
   onSaved: () => Promise<void>
 }) {
+  const { user } = useAuth()
+  const draftKey = `rule-editor:${user?.id}:${semesterId}:${value?.id ?? "new"}`
+  const [draftReadyKey, setDraftReadyKey] = useState("")
+  const [draftRestored, setDraftRestored] = useState(false)
+  const [draftReset, setDraftReset] = useState(0)
+  const [draftStorageError, setDraftStorageError] = useState(false)
+  const initializedDraft = useRef("")
+  const editEtag = useRef(etag)
+  const finished = useRef(false)
   const [name, setName] = useState("")
   const [preset, setPreset] = useState<RulePreset>("avoid")
   const [targetType, setTargetType] = useState("")
@@ -771,8 +825,22 @@ function RuleDialog({
   const [dragMode, setDragMode] = useState<"add" | "remove" | null>(null)
   const [saving, setSaving] = useState(false)
   const [attemptedSubmit, setAttemptedSubmit] = useState(false)
+  const savedRuleId = useRef<number | null>(null)
+  const [saveError, setSaveError] = useState("")
   useEffect(() => {
-    if (!open) return
+    if (!open) {
+      setDraftReadyKey("")
+      initializedDraft.current = ""
+      return
+    }
+    const initialization = `${draftKey}:${draftReset}`
+    if (initializedDraft.current === initialization) return
+    initializedDraft.current = initialization
+    finished.current = false
+    editEtag.current = etag
+    setDraftRestored(false)
+    savedRuleId.current = value?.id ?? null
+    setSaveError("")
     const currentPreset: RulePreset =
       value?.category === "availability"
         ? "unavailable"
@@ -823,7 +891,92 @@ function RuleDialog({
       ),
     )
     setAttemptedSubmit(false)
-  }, [open, value])
+    try {
+      const cached = JSON.parse(sessionStorage.getItem(draftKey) ?? "null")
+      if (
+        cached?.version === 1 &&
+        typeof cached.name === "string" &&
+        typeof cached.targetType === "string" &&
+        typeof cached.targetId === "string" &&
+        (cached.kind === "hard" || cached.kind === "soft") &&
+        typeof cached.explanation === "string" &&
+        Array.isArray(cached.selectedSlots) &&
+        cached.selectedSlots.every((slot: unknown) => typeof slot === "string") &&
+        Array.isArray(cached.relatedAssignmentIds) &&
+        cached.relatedAssignmentIds.every(Number.isInteger) &&
+        typeof cached.preset === "string" &&
+        Object.values(rulePresetOptions)
+          .flat()
+          .some((option) => option.value === cached.preset) &&
+        Number.isFinite(cached.weight) &&
+        Number.isFinite(cached.limit)
+      ) {
+        setName(cached.name)
+        setPreset(cached.preset)
+        setTargetType(cached.targetType)
+        setTargetId(cached.targetId)
+        setRuleKind(cached.kind)
+        setWeight(cached.weight)
+        setLimit(cached.limit)
+        setRelatedAssignmentIds(cached.relatedAssignmentIds)
+        setExclusionMode(cached.exclusionMode === "same_day" ? "same_day" : "same_slot")
+        setExplanation(cached.explanation)
+        setSelectedSlots(cached.selectedSlots)
+        savedRuleId.current = Number.isInteger(cached.savedRuleId)
+          ? cached.savedRuleId
+          : (value?.id ?? null)
+        editEtag.current = typeof cached.etag === "string" ? cached.etag : etag
+        setDraftRestored(true)
+      }
+    } catch {
+      setDraftStorageError(true)
+    }
+    setDraftReadyKey(draftKey)
+    // Input revision is captured when opening; background refresh must not replace typed values.
+  }, [open, value, draftKey, draftReset, etag])
+  useEffect(() => {
+    if (!open || draftReadyKey !== draftKey || finished.current) return
+    if (!name && !targetId && !selectedSlots.length && !explanation) return
+    try {
+      sessionStorage.setItem(
+        draftKey,
+        JSON.stringify({
+          version: 1,
+          name,
+          preset,
+          targetType,
+          targetId,
+          kind,
+          weight,
+          limit,
+          relatedAssignmentIds,
+          exclusionMode,
+          explanation,
+          selectedSlots,
+          savedRuleId: savedRuleId.current,
+          etag: editEtag.current,
+        }),
+      )
+    } catch {
+      setDraftStorageError(true)
+    }
+  }, [
+    open,
+    draftReadyKey,
+    draftKey,
+    name,
+    preset,
+    targetType,
+    targetId,
+    kind,
+    weight,
+    limit,
+    relatedAssignmentIds,
+    exclusionMode,
+    explanation,
+    selectedSlots,
+    saveError,
+  ])
   useEffect(() => {
     if (!dragMode) return
     const stopDragging = () => setDragMode(null)
@@ -852,10 +1005,13 @@ function RuleDialog({
   })
   const relatedOptions = assignmentOptions.filter((option) => String(option.id) !== targetId)
   const targetName = !targetType
-    ? "全学期"
+    ? "全校任课（本学期）"
     : (options.find((option) => String(option.id) === targetId)?.label ?? "尚未选择具体对象")
   const days = template?.days.filter((day) => day.is_enabled) ?? []
-  const items = template?.items.filter((item) => item.is_active && item.allows_course) ?? []
+  const items =
+    template?.items.filter(
+      (item) => item.is_active && item.allows_course && item.counts_as_course,
+    ) ?? []
   const selectedSlotSet = new Set(selectedSlots)
   const allSlotKeys = days.flatMap((day) => items.map((item) => `${day.weekday}:${item.id}`))
   const morningSlotKeys = days.flatMap((day) =>
@@ -879,13 +1035,12 @@ function RuleDialog({
     relatedCount,
     exclusionMode,
   })
-  const affectedCount = relationBased
-    ? new Set([Number(targetId), ...relatedAssignmentIds].filter((id) => id > 0)).size
-    : targetType && !targetId
-      ? 0
-      : assignments.filter((assignment) =>
-          assignmentMatchesTarget(assignment, targetType, targetId),
-        ).length
+  const affectedAssignments = assignments.filter((assignment) =>
+    relationBased
+      ? [Number(targetId), ...relatedAssignmentIds].includes(assignment.id)
+      : assignmentMatchesTarget(assignment, targetType, targetId, classSettings),
+  )
+  const affectedCount = affectedAssignments.length
   const nameError = !name.trim() ? "请填写一个便于识别的规则名称" : undefined
   const targetError =
     resourceLimited && ["course", "teaching_assignment"].includes(targetType)
@@ -915,7 +1070,7 @@ function RuleDialog({
       grade: "年级",
       teaching_assignment: "任课关系",
       teaching_group: "教学组",
-    }[targetType] ?? "全学期"
+    }[targetType] ?? "全校任课（本学期）"
   const targetPickerPlaceholder =
     targetType === "teacher"
       ? "搜索教师姓名、工号或任教学科"
@@ -948,10 +1103,10 @@ function RuleDialog({
       return [...next]
     })
   }
-  const save = async (event: FormEvent) => {
+  const save = async (event: Pick<FormEvent, "preventDefault">, activate = false) => {
     event.preventDefault()
     setAttemptedSubmit(true)
-    if (missingRequirements.length > 0 || !etag) return
+    if (saving || missingRequirements.length > 0 || !etag) return
     const category = constraintCategoryForPreset(preset)
     const requirement =
       preset === "unavailable"
@@ -992,12 +1147,14 @@ function RuleDialog({
         }
       : {}
     setSaving(true)
+    setSaveError("")
+    let activationPending = false
     try {
-      await api(
-        `/api/v1/semesters/${semesterId}/scheduling-constraints${value ? `/${value.id}` : ""}`,
+      const saved = await api<SchedulingConstraint>(
+        `/api/v1/semesters/${semesterId}/scheduling-constraints${savedRuleId.current ? `/${savedRuleId.current}` : ""}`,
         {
-          method: value ? "PATCH" : "POST",
-          etag,
+          method: savedRuleId.current ? "PATCH" : "POST",
+          etag: editEtag.current,
           body: JSON.stringify({
             name: name.trim(),
             kind: effectiveKind,
@@ -1012,17 +1169,42 @@ function RuleDialog({
           }),
         },
       )
-      toast.success(value ? "规则已保存" : "规则草稿已创建")
+      savedRuleId.current = saved.data.id
+      editEtag.current = saved.etag
+      if (activate && saved.data.status !== "active") {
+        activationPending = true
+        await api(
+          `/api/v1/semesters/${semesterId}/scheduling-constraints/${saved.data.id}/activate`,
+          {
+            method: "POST",
+            etag: saved.etag,
+          },
+        )
+      }
+      toast.success(
+        activate || saved.data.status === "active"
+          ? "规则已保存并启用"
+          : "草稿已保存，尚未参与排课",
+      )
+      finished.current = true
+      try {
+        sessionStorage.removeItem(draftKey)
+      } catch {
+        /* Saving succeeded even when local storage is unavailable. */
+      }
       onClose()
       await onSaved()
     } catch (error) {
-      toast.error(apiMessage(error))
+      setSaveError(
+        `${activationPending ? "草稿已保存，但启用失败。可修改后重试，不会重复创建规则。" : "保存失败，填写内容已保留。"}${apiMessage(error)}`,
+      )
+      await onSaved()
     } finally {
       setSaving(false)
     }
   }
   return (
-    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+    <Dialog open={open} onOpenChange={(next) => !next && !saving && onClose()}>
       <DialogContent className="max-h-[92svh] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-5xl">
         <DialogHeader className="border-b px-6 py-5 pr-14">
           <DialogTitle>{value ? "编辑规则" : "新增规则"}</DialogTitle>
@@ -1035,6 +1217,115 @@ function RuleDialog({
           <div className="min-h-0 overflow-y-auto px-6 py-5">
             <div className="grid gap-6 sm:grid-cols-[minmax(0,1fr)_14rem]">
               <div className="grid min-w-0 gap-5">
+                {draftRestored && (
+                  <p role="status" className="text-sm text-muted-foreground">
+                    已恢复本浏览器中未完成的编辑，尚未提交。
+                    <Button
+                      type="button"
+                      variant="link"
+                      onClick={() => {
+                        try {
+                          sessionStorage.removeItem(draftKey)
+                        } catch {
+                          setDraftStorageError(true)
+                        }
+                        setDraftReadyKey("")
+                        setDraftReset((current) => current + 1)
+                      }}
+                    >
+                      丢弃本地编辑
+                    </Button>
+                  </p>
+                )}
+                {draftStorageError && (
+                  <p role="status" className="text-sm text-destructive">
+                    浏览器未能保存本地编辑，请在离开前保存草稿。
+                  </p>
+                )}
+                {!value && (
+                  <section className="space-y-2" aria-label="常用规则模板">
+                    <h3 className="text-sm font-medium">从常见任务开始</h3>
+                    <p className="text-xs text-muted-foreground">
+                      模板带入常用要求，仍需选择具体对象并核对预览。
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        {
+                          title: "教师周五下午教研禁排",
+                          preset: "unavailable" as RulePreset,
+                          kind: "hard" as RuleKind,
+                          target: "teacher",
+                          limit: 1,
+                        },
+                        {
+                          title: "教师每天课时上限",
+                          preset: "daily_limit" as RulePreset,
+                          kind: "hard" as RuleKind,
+                          target: "teacher",
+                          limit: 4,
+                        },
+                        {
+                          title: "课程尽量分散到不同天",
+                          preset: "distribution" as RulePreset,
+                          kind: "soft" as RuleKind,
+                          target: "course",
+                          limit: 1,
+                        },
+                        {
+                          title: "指定课程优先上午",
+                          preset: "prefer" as RulePreset,
+                          kind: "soft" as RuleKind,
+                          target: "course",
+                          limit: 1,
+                        },
+                        {
+                          title: "尽量减少教师空堂",
+                          preset: "teacher_gaps" as RulePreset,
+                          kind: "soft" as RuleKind,
+                          target: "teacher",
+                          limit: 1,
+                        },
+                      ].map((task) => (
+                        <Button
+                          key={task.title}
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setName(task.title)
+                            setPreset(task.preset)
+                            setRuleKind(task.kind)
+                            setTargetType(task.target)
+                            setTargetId("")
+                            setRelatedAssignmentIds([])
+                            setLimit(task.limit)
+                            setWeight(70)
+                            setExplanation("")
+                            setSelectedSlots(
+                              task.preset === "unavailable"
+                                ? days
+                                    .filter((day) => day.weekday === 5)
+                                    .flatMap((day) =>
+                                      items
+                                        .filter((item) => item.start_time >= "12:00")
+                                        .map((item) => `${day.weekday}:${item.id}`),
+                                    )
+                                : task.preset === "prefer"
+                                  ? days.flatMap((day) =>
+                                      items
+                                        .filter((item) => item.start_time < "12:00")
+                                        .map((item) => `${day.weekday}:${item.id}`),
+                                    )
+                                  : [],
+                            )
+                          }}
+                        >
+                          {task.title}
+                        </Button>
+                      ))}
+                    </div>
+                  </section>
+                )}
                 <RuleFormSection title="1. 定义规则">
                   <div className="grid gap-4 sm:grid-cols-2">
                     <Field label="约束强度">
@@ -1141,20 +1432,25 @@ function RuleDialog({
                           </Button>
                         ))}
                       </div>
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="range"
-                          min={1}
-                          max={100}
-                          value={weight}
-                          aria-label="软规则重要程度"
-                          onChange={(event) => setWeight(Number(event.target.value))}
-                          className="w-full accent-primary"
-                        />
-                        <span className="w-10 text-right text-xs tabular-nums text-muted-foreground">
-                          {weight}/100
-                        </span>
-                      </div>
+                      <details>
+                        <summary className="cursor-pointer text-xs text-muted-foreground">
+                          高级：精确设置重要程度
+                        </summary>
+                        <div className="mt-3 flex items-center gap-3">
+                          <input
+                            type="range"
+                            min={1}
+                            max={100}
+                            value={weight}
+                            aria-label="软规则重要程度"
+                            onChange={(event) => setWeight(Number(event.target.value))}
+                            className="w-full accent-primary"
+                          />
+                          <span className="w-10 text-right text-xs tabular-nums text-muted-foreground">
+                            {weight}/100
+                          </span>
+                        </div>
+                      </details>
                     </RuleFieldGroup>
                   )}
                 </RuleFormSection>
@@ -1171,7 +1467,7 @@ function RuleDialog({
                           setRelatedAssignmentIds([])
                         }}
                       >
-                        <option value="">全学期</option>
+                        <option value="">全校任课（本学期）</option>
                         <option value="teacher">教师</option>
                         <option value="school_class">班级</option>
                         <option value="course" disabled={resourceLimited}>
@@ -1242,8 +1538,8 @@ function RuleDialog({
                       <div className="mb-1 flex flex-wrap gap-2">
                         {[
                           { label: "全部课节", keys: allSlotKeys },
-                          { label: "全部上午", keys: morningSlotKeys },
-                          { label: "全部下午", keys: afternoonSlotKeys },
+                          { label: "全周上午", keys: morningSlotKeys },
+                          { label: "全周下午", keys: afternoonSlotKeys },
                         ].map((option) => {
                           const active =
                             option.keys.length > 0 &&
@@ -1294,6 +1590,31 @@ function RuleDialog({
                                       >
                                         {weekdayNames[day.weekday]}
                                       </button>
+                                      <div className="flex justify-center gap-1">
+                                        {[
+                                          { label: "上午", morning: true },
+                                          { label: "下午", morning: false },
+                                        ].map((period) => (
+                                          <button
+                                            key={period.label}
+                                            type="button"
+                                            className="rounded px-1.5 py-1 font-normal hover:bg-background focus-visible:ring-2 focus-visible:ring-ring"
+                                            aria-label={`选择${weekdayNames[day.weekday]}${period.label}`}
+                                            onClick={() =>
+                                              updateSlots(
+                                                items
+                                                  .filter(
+                                                    (item) =>
+                                                      item.start_time < "12:00" === period.morning,
+                                                  )
+                                                  .map((item) => `${day.weekday}:${item.id}`),
+                                              )
+                                            }
+                                          >
+                                            {period.label}
+                                          </button>
+                                        ))}
+                                      </div>
                                     </th>
                                   ))}
                                 </tr>
@@ -1399,6 +1720,66 @@ function RuleDialog({
               <aside className="self-start rounded-2xl border bg-muted/30 p-4 sm:sticky sm:top-0">
                 <p className="text-sm font-semibold">规则预览</p>
                 <p className="mt-2 text-sm leading-6 text-foreground">{preview}</p>
+                {slotBased && (
+                  <ul className="mt-3 space-y-1 text-xs leading-5 text-muted-foreground">
+                    {days.map((day) => {
+                      const selected = items.filter((item) =>
+                        selectedSlotSet.has(`${day.weekday}:${item.id}`),
+                      )
+                      return selected.length ? (
+                        <li key={day.weekday}>
+                          {weekdayNames[day.weekday]}：
+                          {selected.map((item) => item.name).join("、")}
+                        </li>
+                      ) : null
+                    })}
+                  </ul>
+                )}
+                <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                  {effectiveKind === "hard"
+                    ? "启用后必须满足；不满足时阻止发布。"
+                    : "启用后尽量满足；权重表示偏好强度，不保证全部满足。"}
+                  保存规则不会自动移动现有课表。
+                </p>
+                <details className="mt-3 text-xs">
+                  <summary className="cursor-pointer">匹配 {affectedCount} 条任课关系</summary>
+                  <p className="mt-2 text-muted-foreground">
+                    这是作用对象数量，不代表将移动的课节数。
+                  </p>
+                  <ul className="mt-2 max-h-48 space-y-2 overflow-auto">
+                    {affectedAssignments.map((assignment) => (
+                      <li key={assignment.id}>
+                        {assignmentTarget(assignment)} · {assignment.course.name} ·{" "}
+                        {assignment.teacher.name}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+                {saveError && (
+                  <p role="alert" className="mt-3 text-sm text-destructive">
+                    {saveError}
+                  </p>
+                )}
+                {saveError && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-3"
+                    onClick={async () => {
+                      try {
+                        const current = await api<unknown>(`/api/v1/semesters/${semesterId}`)
+                        editEtag.current = current.etag
+                        setSaveError("已读取最新资料版本。请核对当前规则与预览后，再次保存。")
+                        await onSaved()
+                      } catch (error) {
+                        setSaveError(apiMessage(error))
+                      }
+                    }}
+                  >
+                    读取最新版本后重新核对
+                  </Button>
+                )}
               </aside>
             </div>
           </div>
@@ -1409,15 +1790,24 @@ function RuleDialog({
             >
               {missingRequirements.length
                 ? `还需：${missingRequirements.join("、")}`
-                : `配置完整，预计影响 ${affectedCount} 条任课关系`}
+                : `匹配 ${affectedCount} 条任课关系 · ${value?.status === "active" ? "保存后更新已启用规则" : "草稿不参与排课"}`}
             </p>
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={onClose}>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button type="button" variant="outline" disabled={saving} onClick={onClose}>
                 取消
               </Button>
-              <Button type="submit" disabled={saving}>
-                {saving ? "保存中…" : value ? "保存修改" : "创建草稿"}
+              <Button
+                type="submit"
+                variant={value?.status === "active" ? "default" : "outline"}
+                disabled={saving}
+              >
+                {saving ? "保存中…" : value?.status === "active" ? "保存并更新规则" : "保存草稿"}
               </Button>
+              {value?.status !== "active" && (
+                <Button type="button" disabled={saving} onClick={(event) => void save(event, true)}>
+                  保存并启用
+                </Button>
+              )}
             </div>
           </DialogFooter>
         </form>
@@ -1448,32 +1838,50 @@ function PlacementDialog({
   onSaved: () => Promise<void>
 }) {
   const [assignmentId, setAssignmentId] = useState("")
-  const [weekday, setWeekday] = useState("1")
+  const [weekday, setWeekday] = useState("")
   const [itemId, setItemId] = useState("")
   const [roomId, setRoomId] = useState("")
   const [weekPattern, setWeekPattern] = useState<WeekPattern>("all")
-  const [locked, setLocked] = useState(true)
   const [saving, setSaving] = useState(false)
+  const activePlacements = useQuery({
+    queryKey: ["fixed-placement-capacity", semesterId, assignmentId, etag],
+    enabled: open && Boolean(assignmentId),
+    queryFn: () =>
+      apiAllPages<FixedPlacement>(
+        `/api/v1/semesters/${semesterId}/fixed-placements?status=active&teaching_assignment_id=${assignmentId}`,
+      ),
+  })
+  const selectedAssignment = assignments.find(
+    (assignment) => assignment.id === Number(assignmentId),
+  )
+  const fixedCount = activePlacements.data?.data.length ?? 0
+  const availableCount = (selectedAssignment?.weekly_items ?? 0) - fixedCount
+  const otherFixedCount =
+    activePlacements.data?.data.filter((placement) => placement.id !== value?.id).length ?? 0
+  const exceedsCapacity = Boolean(
+    selectedAssignment && otherFixedCount >= selectedAssignment.weekly_items,
+  )
   useEffect(() => {
     if (!open) return
-    const initialAssignmentId = value?.teaching_assignment_id ?? assignments[0]?.id
-    const initialAssignment = assignments.find((item) => item.id === initialAssignmentId)
+    const initialAssignmentId = value?.teaching_assignment_id
     setAssignmentId(String(initialAssignmentId ?? ""))
-    setWeekday(String(value?.weekday ?? template?.days.find((day) => day.is_enabled)?.weekday ?? 1))
-    setItemId(
-      String(
-        value?.item_id ??
-          template?.items.find((item) => item.is_active && item.allows_course)?.id ??
-          "",
-      ),
-    )
+    setWeekday(String(value?.weekday ?? ""))
+    setItemId(String(value?.item_id ?? ""))
     setRoomId(value?.room_id ? String(value.room_id) : "")
-    setWeekPattern(value?.week_pattern ?? initialAssignment?.week_pattern ?? "all")
-    setLocked(value?.is_locked ?? true)
-  }, [open, value, assignments, template])
+    setWeekPattern(value?.week_pattern ?? "all")
+  }, [open, value])
   const save = async (event: FormEvent) => {
     event.preventDefault()
-    if (!etag || !assignmentId || !itemId) return
+    if (
+      saving ||
+      !etag ||
+      !assignmentId ||
+      !weekday ||
+      !itemId ||
+      !activePlacements.isSuccess ||
+      exceedsCapacity
+    )
+      return
     setSaving(true)
     try {
       await api(`/api/v1/semesters/${semesterId}/fixed-placements${value ? `/${value.id}` : ""}`, {
@@ -1485,10 +1893,12 @@ function PlacementDialog({
           weekday: Number(weekday),
           item_id: Number(itemId),
           room_id: roomId ? Number(roomId) : null,
-          is_locked: locked,
+          is_locked: true,
         }),
       })
-      toast.success(value ? "固定安排已保存" : "固定安排已创建")
+      toast.success(
+        value?.status === "inactive" ? "固定安排已保存，仍为停用状态" : "固定安排已保存并启用",
+      )
       onClose()
       await onSaved()
     } catch (error) {
@@ -1498,77 +1908,126 @@ function PlacementDialog({
     }
   }
   return (
-    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="sm:max-w-xl">
-        <DialogHeader>
+    <Dialog open={open} onOpenChange={(next) => !next && !saving && onClose()}>
+      <DialogContent className="max-h-[calc(100svh-2rem)] grid-rows-[auto_minmax(0,1fr)] gap-0 p-0 sm:max-w-xl">
+        <DialogHeader className="border-b px-6 py-5 pr-14">
           <DialogTitle>{value ? "编辑固定安排" : "新增固定安排"}</DialogTitle>
           <DialogDescription>
-            固定安排优先进入求解器，并默认锁定，自动排课不会移动。
+            启用后，这条任课必须排在指定位置，并占用其周课时。固定安排仍须遵守禁排规则及教师、班级、教室冲突检查。
           </DialogDescription>
         </DialogHeader>
-        <form className="grid gap-4" onSubmit={(event) => void save(event)}>
-          <Field label="任课关系">
-            <AssignmentPicker
-              assignments={assignments}
-              value={assignmentId}
-              onValueChange={(selectedId) => {
-                setAssignmentId(selectedId)
-                const assignment = assignments.find((item) => item.id === Number(selectedId))
-                if (assignment) setWeekPattern(assignment.week_pattern)
-              }}
-            />
-          </Field>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="星期">
-              <SimpleSelect className="w-full" value={weekday} onValueChange={setWeekday}>
-                {template?.days
-                  .filter((day) => day.is_enabled)
-                  .map((day) => (
-                    <option key={day.weekday} value={day.weekday}>
-                      {weekdayNames[day.weekday]}
-                    </option>
-                  ))}
-              </SimpleSelect>
+        <form
+          className="grid min-h-0 grid-rows-[minmax(0,1fr)_auto]"
+          onSubmit={(event) => void save(event)}
+        >
+          <div className="grid gap-4 overflow-y-auto px-6 py-5">
+            <Field label="班级、课程与任课教师">
+              <AssignmentPicker
+                assignments={assignments}
+                value={assignmentId}
+                onValueChange={(selectedId) => {
+                  setAssignmentId(selectedId)
+                  const assignment = assignments.find((item) => item.id === Number(selectedId))
+                  if (assignment) setWeekPattern(assignment.week_pattern)
+                }}
+              />
             </Field>
-            <Field label="课节">
-              <SimpleSelect className="w-full" value={itemId} onValueChange={setItemId}>
-                {template?.items
-                  .filter((item) => item.is_active && item.allows_course)
-                  .map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name} · {item.start_time.slice(0, 5)}
-                    </option>
-                  ))}
-              </SimpleSelect>
-            </Field>
+            {selectedAssignment && (
+              <div className="rounded-lg bg-muted/50 p-3 text-sm" aria-live="polite">
+                <p>
+                  周课时 {selectedAssignment.weekly_items} 节 ·{" "}
+                  {activePlacements.isSuccess
+                    ? `已固定 ${fixedCount} 节 · 尚未固定 ${Math.max(0, availableCount)} 节`
+                    : "正在核对已固定课时…"}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  仅统计启用的固定安排；剩余课时可自动排课。每条固定安排占一个课节，连排课程请按实际课节逐条设置。
+                </p>
+                {exceedsCapacity && (
+                  <p role="alert" className="mt-1 text-destructive">
+                    固定课时已达到周课时，请先调整已有固定安排。
+                  </p>
+                )}
+                {activePlacements.isError && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void activePlacements.refetch()}
+                  >
+                    核对失败，重试
+                  </Button>
+                )}
+              </div>
+            )}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="星期">
+                <SimpleSelect className="w-full" value={weekday} onValueChange={setWeekday}>
+                  <option value="" disabled>
+                    请选择星期
+                  </option>
+                  {template?.days
+                    .filter((day) => day.is_enabled)
+                    .map((day) => (
+                      <option key={day.weekday} value={day.weekday}>
+                        {weekdayNames[day.weekday]}
+                      </option>
+                    ))}
+                </SimpleSelect>
+              </Field>
+              <Field label="课节">
+                <SimpleSelect className="w-full" value={itemId} onValueChange={setItemId}>
+                  <option value="" disabled>
+                    请选择课节
+                  </option>
+                  {template?.items
+                    .filter((item) => item.is_active && item.allows_course && item.counts_as_course)
+                    .map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name} · {item.start_time.slice(0, 5)}
+                      </option>
+                    ))}
+                </SimpleSelect>
+              </Field>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="周型（随任课关系）">
+                <SimpleSelect
+                  className="w-full"
+                  value={weekPattern}
+                  disabled
+                  onValueChange={(value) => setWeekPattern(value as WeekPattern)}
+                >
+                  <option value="all">每周</option>
+                  <option value="a">A 周</option>
+                  <option value="b">B 周</option>
+                  <option value="specified">指定教学周</option>
+                </SimpleSelect>
+              </Field>
+              <Field label="指定教室（可选）">
+                <RoomPicker rooms={rooms} value={roomId} onValueChange={setRoomId} clearable />
+              </Field>
+            </div>
+            <p className="text-xs leading-5 text-muted-foreground">
+              自动排课会保留指定位置。取消要求请停用或删除固定安排；修改要求不会自动调整现有课表，已有课节锁定需在编排课表中单独解除。
+            </p>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="周型（随任课关系）">
-              <SimpleSelect
-                className="w-full"
-                value={weekPattern}
-                disabled
-                onValueChange={(value) => setWeekPattern(value as WeekPattern)}
-              >
-                <option value="all">每周</option>
-                <option value="a">A 周</option>
-                <option value="b">B 周</option>
-                <option value="specified">指定教学周</option>
-              </SimpleSelect>
-            </Field>
-            <Field label="指定教室（可选）">
-              <RoomPicker rooms={rooms} value={roomId} onValueChange={setRoomId} clearable />
-            </Field>
-          </div>
-          <label className="flex items-center gap-2 text-sm">
-            <Checkbox checked={locked} onCheckedChange={(checked) => setLocked(Boolean(checked))} />
-            自动排课和普通调整均保持锁定
-          </label>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
+          <DialogFooter className="border-t bg-popover px-6 py-3">
+            <Button type="button" variant="outline" disabled={saving} onClick={onClose}>
               取消
             </Button>
-            <Button type="submit" disabled={saving || !assignments.length}>
+            <Button
+              type="submit"
+              disabled={
+                saving ||
+                !etag ||
+                !assignmentId ||
+                !weekday ||
+                !itemId ||
+                !activePlacements.isSuccess ||
+                exceedsCapacity
+              }
+            >
               {saving ? "保存中…" : "保存固定安排"}
             </Button>
           </DialogFooter>
@@ -1593,7 +2052,7 @@ function targetLabel(
     assignments: TeachingAssignment[]
   },
 ) {
-  if (!rule.target_type || !rule.target_id) return "全学期"
+  if (!rule.target_type || !rule.target_id) return "全校任课（本学期）"
   return (
     targetOptions(rule.target_type, data).find((option) => option.id === rule.target_id)?.label ??
     "对象已失效"
@@ -1720,6 +2179,7 @@ function assignmentMatchesTarget(
   assignment: TeachingAssignment,
   targetType: string,
   targetId: string,
+  classSettings: ClassSetting[] = [],
 ) {
   if (!targetType) return true
   const id = Number(targetId)
@@ -1732,7 +2192,13 @@ function assignmentMatchesTarget(
       assignment.teaching_group?.school_classes.some((item) => item.id === id) === true
     )
   if (targetType === "course") return assignment.course_id === id
-  if (targetType === "room") return assignment.specified_room_id === id
+  if (targetType === "room")
+    return assignment.room_mode === "class_default"
+      ? classSettings.some(
+          (setting) =>
+            setting.school_class_id === assignment.school_class_id && setting.fixed_room_id === id,
+        )
+      : assignment.specified_room_id === id
   if (targetType === "grade")
     return (
       assignment.school_class?.grade.id === id ||
@@ -1765,7 +2231,7 @@ function rulePreview({
   if (preset === "avoid") return `${targetName}尽量避开选中的 ${selectedSlotCount} 个课节。`
   if (preset === "prefer") return `${targetName}尽量安排在选中的 ${selectedSlotCount} 个课节。`
   if (preset === "distribution")
-    return `${targetName}同一课程每天最多安排 ${limit} 次，并尽量分散到不同工作日。`
+    return `${targetName}同一课程每天${kind === "hard" ? "最多安排" : "尽量不超过"} ${limit} 次，并尽量分散到不同工作日。`
   if (preset === "daily_limit")
     return `${targetName}每天${kind === "hard" ? "最多安排" : "尽量不超过"} ${limit} 个课时。`
   if (preset === "consecutive_limit")

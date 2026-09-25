@@ -1,3 +1,4 @@
+import { ChangeContacts } from "@/components/adjustments/change-contacts"
 import { useEffect, useRef, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { toast } from "sonner"
@@ -253,6 +254,16 @@ export function AdjustmentHistory({
               />
               <RecordChangeBody detail={detailView} historical={detail.status === "cancelled"} />
               <RecordDetailMeta reason={detail.reason} />
+              <ChangeContacts
+                kind="calendar_exception"
+                recordId={detail.id}
+                detail={detailView}
+                reason={detail.reason}
+                status={
+                  detail.status === "active" ? "已发布，仅本次日期生效" : "已撤回，以下是历史调整"
+                }
+                canEdit={canEdit}
+              />
               <RecordDetailFooter>
                 <div>
                   {detail.status === "active" && canEdit && (

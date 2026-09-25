@@ -49,7 +49,7 @@ export function dashboardTasks(semester: Semester, summary: DashboardSummary): D
     if (summary.working_draft_id && !summary.working_draft_is_stale)
       tasks.push({
         id: "draft",
-        title: "最新草稿已就绪，继续复核",
+        title: "最新草稿资料已同步，继续编排与复核",
         description: "这份草稿已使用最新资料。完成检查后，可将它设为当前课表。",
         action: "继续编辑最新草稿",
         href: `${path("planning")}?version=${summary.working_draft_id}`,

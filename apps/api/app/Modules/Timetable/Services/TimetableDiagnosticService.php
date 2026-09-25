@@ -28,6 +28,17 @@ class TimetableDiagnosticService
         private readonly WeekPatternService $weekPatterns,
     ) {}
 
+    public function fixedPlacementForEntry(Semester $semester, TimetableEntry $entry): ?FixedPlacement
+    {
+        return FixedPlacement::query()->where('semester_id', $semester->id)
+            ->where('teaching_assignment_id', $entry->teaching_assignment_id)
+            ->where('weekday', $entry->weekday)->where('item_id', $entry->item_id)
+            ->where('status', ResourceStatus::Active->value)->get()
+            ->first(fn (FixedPlacement $fixed): bool => ($fixed->room_id === null || $fixed->room_id === $entry->actual_room_id)
+                && $this->weekPatterns->mask($semester, $fixed->week_pattern, $fixed->active_weeks)
+                    === $this->weekPatterns->mask($semester, $entry->week_pattern, $entry->active_weeks));
+    }
+
     /**
      * Evaluate slot restrictions for both fixed preparation inputs and timetable edits.
      *
@@ -95,7 +106,8 @@ class TimetableDiagnosticService
         }
         $conflicts = [];
         foreach ($entries as $entry) {
-            $identity = ['entry_id' => $entry->id, 'assignment_id' => $entry->teaching_assignment_id];
+            $identity = ['entry_id' => $entry->id, 'assignment_id' => $entry->teaching_assignment_id,
+                'weekday' => $entry->weekday, 'item_id' => $entry->item_id, 'item_name' => $entry->item->name];
             if (! in_array($entry->weekday, $days, true) || ! in_array($entry->item_id, $itemIds, true)) {
                 $conflicts[] = [...$identity, 'type' => 'slot', 'message' => '课程所在星期或课节已不可排课。'];
             }
@@ -140,14 +152,26 @@ class TimetableDiagnosticService
         $fixedPlacements = FixedPlacement::query()->where('semester_id', $semester->id)
             ->where('status', ResourceStatus::Active->value)->get();
         foreach ($fixedPlacements as $fixed) {
+            $identity = ['type' => 'fixed_placement', 'fixed_placement_id' => $fixed->id,
+                'assignment_id' => $fixed->teaching_assignment_id, 'weekday' => $fixed->weekday,
+                'item_id' => $fixed->item_id, 'item_name' => $fixed->item->name];
+            try {
+                $fixedCandidate = $this->candidate($semester, $fixed->teachingAssignment);
+                $fixedCandidate['room_id'] = $fixed->room_id ?? $fixedCandidate['room_id'];
+                foreach ($this->availabilityConflicts($fixedCandidate, $constraints, $fixed->weekday, $fixed->item_id, $fixed->item->sort_order) as $conflict) {
+                    $conflicts[] = [...$conflict, ...$identity,
+                        'message' => '固定安排要求周'.['', '一', '二', '三', '四', '五', '六', '日'][$fixed->weekday].' '.$fixed->item->name.'；'.$conflict['message']];
+                }
+            } catch (ApiProblemException $exception) {
+                $conflicts[] = [...$identity, 'message' => '固定安排的任课资料需要修复：'.$exception->getMessage()];
+            }
             $mask = $this->weekPatterns->mask($semester, $fixed->week_pattern, $fixed->active_weeks);
             $matches = $entries->contains(fn (TimetableEntry $entry): bool => $entry->teaching_assignment_id === $fixed->teaching_assignment_id
                 && $entry->weekday === $fixed->weekday && $entry->item_id === $fixed->item_id
                 && ($fixed->room_id === null || $entry->actual_room_id === $fixed->room_id)
                 && $this->weekPatterns->mask($semester, $entry->week_pattern, $entry->active_weeks) === $mask);
             if (! $matches) {
-                $conflicts[] = ['type' => 'fixed_placement', 'fixed_placement_id' => $fixed->id,
-                    'assignment_id' => $fixed->teaching_assignment_id, 'message' => '课表没有满足当前启用的固定安排。'];
+                $conflicts[] = [...$identity, 'message' => '课表没有满足当前启用的固定安排。'];
             }
         }
 
@@ -529,11 +553,21 @@ class TimetableDiagnosticService
         ?TimetableVersion $version,
     ): array {
         $hardConflicts = $this->availabilityConflicts($candidate, $constraints, $weekday, $itemId, $itemSortOrder);
+        $teachingItems = $semester->scheduleTemplate->items->where('is_active', true)
+            ->where('allows_course', true)->where('counts_as_course', true)->sortBy('sort_order')->values();
         if ($version !== null && $version->status !== TimetableVersionStatus::Draft) {
             $hardConflicts[] = ['type' => 'version', 'message' => '当前版本只读，请先创建编辑草稿。'];
         }
         if ($movingEntry?->is_locked) {
-            $hardConflicts[] = ['type' => 'locked', 'message' => '该课程已锁定，需先解锁才能移动。'];
+            $hardConflicts[] = ['type' => 'locked', 'message' => '该课程已锁定。解锁后仍需满足固定安排及其他已启用的硬规则。'];
+        }
+        if ($movingEntry !== null && ($movingEntry->weekday !== $weekday || $movingEntry->item_id !== $itemId
+            || $movingEntry->teaching_assignment_id !== $candidate['assignment_id'])) {
+            $fixed = $this->fixedPlacementForEntry($semester, $movingEntry);
+            if ($fixed !== null) {
+                $hardConflicts[] = ['type' => 'fixed_placement', 'fixed_placement_id' => $fixed->id,
+                    'message' => '该课节有已启用的固定安排，解除课节锁定不会取消位置要求。请先修改或停用固定安排。'];
+            }
         }
         foreach ($candidate['resources'] as $resource) {
             foreach ($existing as $entry) {
@@ -682,7 +716,7 @@ class TimetableDiagnosticService
                 $courseNames = $requirement['prefer_earlier_items'] ?? [];
                 $violated = is_array($courseNames)
                     && in_array($candidate['course_name'], $courseNames, true)
-                    && $itemSortOrder > 4;
+                    && substr($teachingItems->firstWhere('id', $itemId)->start_time ?? '12:00', 0, 5) >= '12:00';
             }
             if ($category === 'consecutive_items') {
                 $limit = $this->integerRequirement($requirement, ['max_consecutive_items', 'maximum']) ?? 3;
@@ -741,11 +775,11 @@ class TimetableDiagnosticService
             if ($category === 'teacher_gaps') {
                 foreach ($candidate['teacher_ids'] as $teacherId) {
                     $violated = $violated || $this->projectedGap(
-                        $existing,
+                        array_map(fn (array $entry): array => [...$entry, 'item_sort_order' => (int) $teachingItems->search(fn ($item): bool => $item->id === $entry['item_id']) + 1], $existing),
                         "teacher:{$teacherId}",
                         $weekday,
                         $candidate['week_mask'],
-                        $itemSortOrder,
+                        (int) $teachingItems->search(fn ($item): bool => $item->id === $itemId) + 1,
                     ) > 0;
                 }
             }

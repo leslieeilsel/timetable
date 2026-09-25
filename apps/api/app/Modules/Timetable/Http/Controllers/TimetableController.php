@@ -516,6 +516,11 @@ class TimetableController
             }
             $deletedIds = [];
             foreach ($groupEntries as $groupEntry) {
+                $fixed = $this->diagnostics->fixedPlacementForEntry($lockedSemester, $groupEntry);
+                if ($fixed !== null) {
+                    throw new ApiProblemException('FIXED_PLACEMENT_REQUIRED', '该课程有已启用的固定安排，请先修改或停用固定安排，再删除课表课节。', 409,
+                        ['fixed_placement_id' => $fixed->id, 'entry_id' => $groupEntry->id]);
+                }
                 $before = $groupEntry->toArray();
                 $groupEntry->delete();
                 $deletedIds[] = $groupEntry->id;

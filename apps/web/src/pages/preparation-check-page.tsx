@@ -89,7 +89,7 @@ export function PreparationCheckPage() {
                     data.ready ? statusStyle.passed.tone : statusStyle.blocking.tone,
                   )}
                 >
-                  {data.ready ? "准备就绪" : `${blocking} 项待处理`}
+                  {data.ready ? "资料具备排课条件，课表仍需生成与复核" : `${blocking} 项待处理`}
                 </span>
                 {warnings > 0 && <span className="text-muted-foreground">· {warnings} 项提醒</span>}
               </>

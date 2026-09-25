@@ -186,7 +186,9 @@ class FixedPlacementController
             'weekday' => [$presence, 'integer', 'between:1,7'],
             'item_id' => [$presence, 'integer'],
             'room_id' => ['sometimes', 'nullable', 'integer'],
-            'is_locked' => ['sometimes', 'boolean'],
+            'is_locked' => ['sometimes', 'boolean', 'accepted'],
+        ], [
+            'is_locked.accepted' => '固定安排启用后必须保持指定位置；如需取消要求，请停用固定安排。课表课节的锁定需单独处理。',
         ]);
     }
 

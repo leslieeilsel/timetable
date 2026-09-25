@@ -4,12 +4,14 @@ use App\Modules\AcademicCalendar\Http\Controllers\AcademicCalendarController;
 use App\Modules\AcademicCalendar\Http\Controllers\ContextController;
 use App\Modules\AcademicCalendar\Http\Controllers\SchoolSettingsController;
 use App\Modules\DailyOperations\Http\Controllers\CalendarExceptionController;
+use App\Modules\DailyOperations\Http\Controllers\ChangeContactController;
 use App\Modules\DailyOperations\Http\Controllers\TeacherChangeMessageController;
 use App\Modules\DailyOperations\Http\Controllers\TeacherLeaveController;
 use App\Modules\Identity\Http\Controllers\AuthController;
 use App\Modules\Identity\Http\Controllers\MeController;
 use App\Modules\Identity\Http\Controllers\UserController;
 use App\Modules\Resources\Http\Controllers\CatalogController;
+use App\Modules\Resources\Http\Controllers\DataImportController;
 use App\Modules\Resources\Http\Controllers\SchoolClassController;
 use App\Modules\ScheduleTemplate\Http\Controllers\ScheduleTemplateController;
 use App\Modules\Scheduling\Http\Controllers\ConstraintBatchController;
@@ -64,6 +66,8 @@ Route::prefix('v1')->group(function (): void {
         Route::get('/teacher/me/classes/{schoolClass}/timetable', [MyTimetableController::class, 'classTimetable'])->middleware('role.teacher');
 
         Route::middleware('role.staff')->group(function (): void {
+            Route::get('/change-messages', [ChangeContactController::class, 'index']);
+            Route::post('/change-messages/{message}/contact', [ChangeContactController::class, 'contact']);
             Route::get('/users', [UserController::class, 'index']);
             Route::post('/users', [UserController::class, 'store']);
             Route::patch('/users/{user}', [UserController::class, 'update']);
@@ -73,6 +77,9 @@ Route::prefix('v1')->group(function (): void {
             Route::put('/context/current-semester', [ContextController::class, 'update']);
             Route::get('/school-settings', [SchoolSettingsController::class, 'show']);
             Route::patch('/school-settings', [SchoolSettingsController::class, 'update']);
+            Route::get('/data-imports/{kind}/template', [DataImportController::class, 'template']);
+            Route::post('/data-imports/{kind}/preview', [DataImportController::class, 'preview']);
+            Route::post('/data-imports/{kind}/commit', [DataImportController::class, 'commit']);
             Route::get('/catalog', [CatalogController::class, 'catalog']);
             Route::get('/grades', [CatalogController::class, 'grades']);
             Route::post('/grades', [CatalogController::class, 'storeGrade']);

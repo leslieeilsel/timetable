@@ -482,6 +482,11 @@ function LongTermWorkbench({
                     每周{["", "一", "二", "三", "四", "五", "六", "日"][linkedEntry.weekday]} ·{" "}
                     {linkedEntry.item.name}
                   </p>
+                  {linkedEntry.is_locked && (
+                    <p role="status" className="mt-2 text-sm text-muted-foreground">
+                      这节课已锁定，不能持续调整。请重选课程；如确需修改，请先在编排课表中核对锁定及固定安排。
+                    </p>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <Button
@@ -502,6 +507,7 @@ function LongTermWorkbench({
                   <Button
                     disabled={
                       !canEdit ||
+                      linkedEntry.is_locked ||
                       availableSource.isFetching ||
                       from < minDate ||
                       from > to ||

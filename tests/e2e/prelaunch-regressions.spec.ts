@@ -40,7 +40,7 @@ test("R10 指定教师的连续课时表单遵守接口字段约定", async ({ p
   await page.getByRole("button", { name: "确认选择", exact: true }).click()
   await dialog.getByRole("spinbutton").fill("2")
   await dialog.getByLabel("规则名称").fill("教师连续课时上限")
-  await dialog.getByRole("button", { name: "创建草稿", exact: true }).click()
+  await dialog.getByRole("button", { name: "保存草稿", exact: true }).click()
   await expect(dialog).toBeHidden()
   expect(submittedRules).toHaveLength(1)
   expect(submittedRules[0]).toMatchObject({

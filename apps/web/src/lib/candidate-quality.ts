@@ -21,6 +21,9 @@ export function assessCandidateQuality(
 ): CandidateQualityAssessment {
   const score = Number(candidate.quality_score ?? 0)
   const reasons: string[] = []
+  if (candidate.score_breakdown.methodology_version !== 2) {
+    reasons.push("历史评分口径已更新，请重新生成后再比较")
+  }
 
   if (candidate.hard_conflict_count > 0) reasons.push("仍有硬冲突")
   if (candidate.unscheduled_count > 0) reasons.push(`仍有 ${candidate.unscheduled_count} 节未排`)
@@ -30,7 +33,7 @@ export function assessCandidateQuality(
 
   const dimensions = [
     [
-      "教师体验",
+      "教师课时安排",
       "teacher_experience",
       candidate.score_breakdown.teacher_experience,
       candidateRecommendationFloor.teacherExperience,

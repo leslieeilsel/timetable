@@ -57,7 +57,7 @@ export function AdjustmentScopeDialog({
           <DialogTitle>发起调课</DialogTitle>
           <DialogDescription>
             {row &&
-              `${row.target_name} · ${row.course_name} · ${dateLabel(row.date)} ${row.item_name}`}
+              `${row.target_name} · ${row.course_name} · ${row.teacher_names.join("、")} · ${dateLabel(row.date)} ${row.item_name}`}
           </DialogDescription>
         </DialogHeader>
         <fieldset className="grid gap-2 py-2">

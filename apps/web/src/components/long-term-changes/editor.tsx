@@ -321,6 +321,11 @@ export function LongTermEditor({
         <div className="space-y-6">
           {first && original && (
             <>
+              {selected.some((entry) => entry.is_locked) && (
+                <p role="status" className="rounded-lg border p-3 text-sm text-muted-foreground">
+                  所选课程含已锁定课节，不能持续调整。请重选课程；如确需修改，请先在编排课表中核对锁定及固定安排。
+                </p>
+              )}
               <div className="flex flex-wrap items-center gap-2">
                 <div className="min-w-0 flex-1">
                   <AdjustmentActionTabs

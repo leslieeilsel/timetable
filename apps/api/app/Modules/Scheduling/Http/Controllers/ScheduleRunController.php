@@ -166,7 +166,7 @@ class ScheduleRunController
                 'constraint_revision' => $constraintRevision,
                 'base_version_id' => $baseVersionId,
                 'base_version_fingerprint' => $baseVersionFingerprint,
-                'algorithm_version' => 'resource-block-v4-quality',
+                'algorithm_version' => 'resource-block-v6-scoring-v2-diff',
                 'random_seed' => random_int(1, 2_000_000_000),
                 'progress_stage' => 'queued',
                 'progress_percent' => 0,
