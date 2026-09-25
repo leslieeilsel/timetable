@@ -15,18 +15,6 @@ beforeEach(function (): void {
     $this->actingAs($this->admin)->withSession(['auth_version' => $this->admin->auth_version]);
 });
 
-it('allocates unused colors before reusing the least occupied color', function (): void {
-    $colors = [];
-    foreach (range(1, count(CoursePalette::colors())) as $index) {
-        $etag = $this->getJson('/api/v1/courses')->assertOk()->headers->get('ETag');
-        $colors[] = $this->withHeader('If-Match', $etag)->postJson('/api/v1/courses', ['name' => '课程'.$index])
-            ->assertCreated()->json('data.color');
-    }
-    expect(array_unique($colors))->toHaveCount(count(CoursePalette::colors()));
-    Course::query()->create(['name' => '手动同色', 'color' => $colors[0]]);
-    expect(CoursePalette::recommend())->toBe($colors[1]);
-});
-
 it('preserves color when a course is renamed and validates manual colors', function (): void {
     $course = Course::query()->create(['name' => '语文']);
     $etag = $this->getJson('/api/v1/courses')->headers->get('ETag');

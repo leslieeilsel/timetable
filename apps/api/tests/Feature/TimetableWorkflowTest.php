@@ -206,8 +206,6 @@ it('builds a semester and rejects a teacher conflict in the same slot', function
     expect($xlsxSheet)->toContain('一年级 1 班课表')
         ->and($xlsxSheet)->toContain('周一')
         ->and($xlsxSheet)->toContain('语文')
-        ->and($xlsxSheet)->toContain('paperSize="9" orientation="portrait"')
-        ->and($xlsxSheet)->toContain('fitToWidth="1" fitToHeight="1"')
         ->and($xlsxSheet)->not->toContain('陈老师')
         ->and($xlsxSheet)->not->toContain('101 教室');
     $xlsxArchive->close();

@@ -53,7 +53,26 @@ describe("candidate recommendation floor", () => {
 
   it("recommends only complete, conflict-free candidates above every floor", () => {
     expect(assessCandidateQuality(candidate())).toEqual({ eligible: true, reasons: [] })
-    expect(assessCandidateQuality(candidate({ unscheduled_count: 1 })).eligible).toBe(false)
+    for (const overrides of [
+      { hard_conflict_count: 1 },
+      { unscheduled_count: 1 },
+      { quality_score: "69.99" },
+    ]) {
+      expect(assessCandidateQuality(candidate(overrides)).eligible).toBe(false)
+    }
+    for (const dimension of [
+      "teacher_experience",
+      "course_distribution",
+      "class_load",
+      "session_spacing",
+    ] as const) {
+      const value = candidate()
+      value.score_breakdown[dimension] = 59.99
+      expect(assessCandidateQuality(value).eligible).toBe(false)
+      value.score_breakdown[dimension] = 60
+      value.quality_score = "70.00"
+      expect(assessCandidateQuality(value).eligible).toBe(true)
+    }
   })
 
   it("ignores recommendation floors for dimensions that are not active in the score", () => {

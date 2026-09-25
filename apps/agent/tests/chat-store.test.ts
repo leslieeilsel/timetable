@@ -235,7 +235,34 @@ describe("private durable conversation state", () => {
         chat.id,
         turn.seq,
         turn.assistant,
-        [{ role: "user", content: `问题 ${i}`, timestamp: i }],
+        [
+          { role: "user", content: `问题 ${i}`, timestamp: i },
+          {
+            role: "assistant",
+            api: "openai-completions",
+            provider: "deepseek",
+            model: "deepseek-flash",
+            content: [{ type: "toolCall", id: `query-${i}`, name: "get_context", arguments: {} }],
+            stopReason: "toolUse",
+            timestamp: i,
+            usage: {
+              input: 0,
+              output: 0,
+              cacheRead: 0,
+              cacheWrite: 0,
+              totalTokens: 0,
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+            },
+          },
+          {
+            role: "toolResult",
+            toolCallId: `query-${i}`,
+            toolName: "get_context",
+            content: [{ type: "text", text: `学期 ${i}` }],
+            isError: false,
+            timestamp: i,
+          },
+        ],
         true,
       )
     }
@@ -243,6 +270,18 @@ describe("private durable conversation state", () => {
     expect(latest.messages).toHaveLength(60)
     expect(latest.has_earlier).toBe(true)
     expect(db.detail(1, chat.id, latest.before!).messages).toHaveLength(6)
-    expect(db.history(1, chat.id)).toHaveLength(20)
+    const history = db.history(1, chat.id)
+    expect(history).toHaveLength(60)
+    for (let i = 0; i < 20; i++) {
+      expect(history.slice(i * 3, i * 3 + 3)).toMatchObject([
+        { role: "user", content: `问题 ${i + 13}` },
+        { role: "assistant", content: [{ type: "toolCall", id: `query-${i + 13}` }] },
+        {
+          role: "toolResult",
+          toolCallId: `query-${i + 13}`,
+          content: [{ text: `学期 ${i + 13}` }],
+        },
+      ])
+    }
   })
 })

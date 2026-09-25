@@ -55,6 +55,7 @@ describe("grade timetable", () => {
   })
   it("does not infer pending lessons from empty cells", () => {
     const rows = gradeRows(settings, 1, [], [], { hard_conflicts: [], incomplete_assignments: [] })
+    expect(rows).toHaveLength(3)
     expect(rows.every((row) => !row.hasIssues && row.remaining === 0)).toBe(true)
   })
   it("assigns shared teaching-group requirements to every affected class", () => {

@@ -9,9 +9,13 @@ beforeEach(function (): void {
     $this->withHeaders(['Origin' => 'http://localhost:5173', 'Referer' => 'http://localhost:5173/']);
 });
 
-it('publishes only the system name without authentication', function (): void {
+it('publishes only the configured name and tagline without authentication', function (): void {
+    AppSetting::query()->findOrFail(1)->update([
+        'system_name' => '第一中学',
+        'system_tagline' => '教务工作台',
+    ]);
     $this->getJson('/api/v1/branding')->assertOk()->assertExactJson([
-        'data' => ['system_name' => '教务排课中心', 'system_tagline' => null],
+        'data' => ['system_name' => '第一中学', 'system_tagline' => '教务工作台'],
     ]);
     $this->getJson('/api/v1/school-settings')->assertUnauthorized();
 });

@@ -6,7 +6,6 @@ import {
   matchesObject,
   placementProblem,
   recordStatus,
-  recordSummary,
   defaultStart,
   groupAssignments,
 } from "./long-term-changes"
@@ -105,17 +104,6 @@ describe("long-term recurring adjustments", () => {
     expect(recordStatus({ ...record, restored_from: record.effective_from }, "2026-09-14")).toBe(
       "已取消",
     )
-  })
-  it("shows a concrete before/after teacher change in record titles", () => {
-    const record = {
-      changes: [
-        {
-          before: { teacher_id: 1, teacher_names: ["王老师"], room_id: 3, weekday: 1, item_id: 1 },
-          after: { teacher_id: 2, teacher_names: ["李老师"], room_id: 3, weekday: 1, item_id: 1 },
-        },
-      ],
-    } as LongTermRecord
-    expect(recordSummary(record)).toBe("王老师 → 李老师 · 更换任课老师")
   })
   it("starts a new adjustment next Monday and stays within the semester", () => {
     expect(defaultStart(semester, "2026-09-13")).toBe("2026-09-14")

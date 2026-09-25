@@ -314,7 +314,7 @@ describe("Chat HTTP and AI SDK stream contract", () => {
     expect(new Headers(call[1]?.headers).get("if-match")).toBe(action.preview.etag)
     expect(JSON.parse(call[1]!.body as string)).toEqual({ constraints: action.preview.constraints })
   })
-  it("retries an uncertain business write with the same key and expires a definitively stale preview", async () => {
+  it("retries an uncertain business write with the same key", async () => {
     const action = proposal()
     let calls = 0
     const service = await app(
@@ -322,7 +322,7 @@ describe("Chat HTTP and AI SDK stream contract", () => {
       async () => {
         calls++
         return calls === 1
-          ? Response.json({ message: "private server error" }, { status: 500 })
+          ? Response.json({ message: "write rejected" }, { status: 500 })
           : Response.json({ data: [{ id: 101 }] })
       },
     )
@@ -336,6 +336,25 @@ describe("Chat HTTP and AI SDK stream contract", () => {
       .filter(([url]) => (url instanceof Request ? url.url : url.toString()).endsWith("/bulk"))
       .map(([, init]) => new Headers(init?.headers).get("Idempotency-Key"))
     expect(keys).toEqual([action.id, action.id])
+  })
+  it("expires a stale preview and refuses to send it to the business API again", async () => {
+    const action = proposal()
+    const bulk = vi.fn<(init?: RequestInit) => Promise<Response>>(async () =>
+      Response.json({ message: "stale preview" }, { status: 412 }),
+    )
+    const service = await app(
+      async () => ({ parts: [{ type: "data-proposal", data: action }], transcript: [] }),
+      bulk,
+    )
+    const chat = await service.create()
+    await (await service.request(`/${chat.id}/messages`, message())).text()
+    const path = `/${chat.id}/actions/${action.id}/confirm`
+    expect((await service.request(path, {})).status).toBe(412)
+    const retry = await service.request(path, {})
+    expect(retry.status).toBe(409)
+    expect(await retry.json()).toMatchObject({ code: "ACTION_EXPIRED" })
+    expect(bulk).toHaveBeenCalledOnce()
+    expect((await service.detail(chat.id)).busy).toBe(false)
   })
   it("keeps partial text on cancellation and never exposes a raw provider error or half-finished proposal", async () => {
     let started!: () => void

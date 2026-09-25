@@ -1,0 +1,690 @@
+{
+  "date": "2026-09-25",
+  "branch": "main",
+  "baseline_commit": "30887f344fca4d4d7d0e54c48a1a6b0357f927b4",
+  "working_patch_sha256": "d8c91cd9c744b9b288d98ac04ca0d5b25b18e35f5fac06d30874a910a5b12eb6",
+  "inventory": {
+    "baseline": {
+      "files": 52,
+      "declarations": 336,
+      "file_lines": 10584
+    },
+    "current": {
+      "files": 47,
+      "declarations": 306,
+      "file_lines": 9908
+    }
+  },
+  "test_results": {
+    "baseline": {
+      "web": {
+        "passed": 117,
+        "failed": 0,
+        "total": 117
+      },
+      "teacher": {
+        "passed": 12,
+        "failed": 0,
+        "total": 12
+      },
+      "agent": {
+        "passed": 71,
+        "failed": 0,
+        "total": 71
+      },
+      "api": {
+        "passed": 173,
+        "failed": 0,
+        "total": 173,
+        "assertions": 1762
+      },
+      "e2e": {
+        "startTime": "2026-09-25T04:59:38.524Z",
+        "duration": 29915.29,
+        "expected": 11,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      }
+    },
+    "current": {
+      "web": {
+        "passed": 89,
+        "failed": 0,
+        "total": 89
+      },
+      "teacher": {
+        "passed": 10,
+        "failed": 0,
+        "total": 10
+      },
+      "agent": {
+        "passed": 71,
+        "failed": 0,
+        "total": 71
+      },
+      "api": {
+        "passed": 171,
+        "failed": 0,
+        "total": 171,
+        "assertions": 1701
+      },
+      "e2e": {
+        "startTime": "2026-09-25T05:00:08.931Z",
+        "duration": 25622.778000000002,
+        "expected": 10,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      }
+    }
+  },
+  "coverage": {
+    "baseline": {
+      "web": {
+        "lines": {
+          "total": 6799,
+          "covered": 599,
+          "skipped": 0,
+          "pct": 8.81
+        },
+        "statements": {
+          "total": 7681,
+          "covered": 673,
+          "skipped": 0,
+          "pct": 8.76
+        },
+        "functions": {
+          "total": 2957,
+          "covered": 178,
+          "skipped": 0,
+          "pct": 6.01
+        },
+        "branches": {
+          "total": 8788,
+          "covered": 570,
+          "skipped": 0,
+          "pct": 6.48
+        },
+        "branchesTrue": {
+          "total": 0,
+          "covered": 0,
+          "skipped": 0,
+          "pct": 100
+        }
+      },
+      "teacher": {
+        "lines": {
+          "total": 809,
+          "covered": 26,
+          "skipped": 0,
+          "pct": 3.21
+        },
+        "statements": {
+          "total": 910,
+          "covered": 30,
+          "skipped": 0,
+          "pct": 3.29
+        },
+        "functions": {
+          "total": 237,
+          "covered": 4,
+          "skipped": 0,
+          "pct": 1.68
+        },
+        "branches": {
+          "total": 842,
+          "covered": 28,
+          "skipped": 0,
+          "pct": 3.32
+        },
+        "branchesTrue": {
+          "total": 0,
+          "covered": 0,
+          "skipped": 0,
+          "pct": 100
+        }
+      },
+      "agent": {
+        "lines": {
+          "total": 1343,
+          "covered": 1176,
+          "skipped": 0,
+          "pct": 87.56
+        },
+        "statements": {
+          "total": 1499,
+          "covered": 1281,
+          "skipped": 0,
+          "pct": 85.45
+        },
+        "functions": {
+          "total": 291,
+          "covered": 254,
+          "skipped": 0,
+          "pct": 87.28
+        },
+        "branches": {
+          "total": 1114,
+          "covered": 861,
+          "skipped": 0,
+          "pct": 77.28
+        },
+        "branchesTrue": {
+          "total": 0,
+          "covered": 0,
+          "skipped": 0,
+          "pct": "Unknown"
+        }
+      },
+      "api": {
+        "files": 116,
+        "loc": 19915,
+        "ncloc": 18474,
+        "classes": 99,
+        "methods": 731,
+        "coveredmethods": 420,
+        "conditionals": 0,
+        "coveredconditionals": 0,
+        "statements": 11133,
+        "coveredstatements": 9005,
+        "elements": 11864,
+        "coveredelements": 9425
+      }
+    },
+    "current": {
+      "web": {
+        "lines": {
+          "total": 6799,
+          "covered": 463,
+          "skipped": 0,
+          "pct": 6.8
+        },
+        "statements": {
+          "total": 7681,
+          "covered": 514,
+          "skipped": 0,
+          "pct": 6.69
+        },
+        "functions": {
+          "total": 2957,
+          "covered": 146,
+          "skipped": 0,
+          "pct": 4.93
+        },
+        "branches": {
+          "total": 8788,
+          "covered": 454,
+          "skipped": 0,
+          "pct": 5.16
+        },
+        "branchesTrue": {
+          "total": 0,
+          "covered": 0,
+          "skipped": 0,
+          "pct": 100
+        }
+      },
+      "teacher": {
+        "lines": {
+          "total": 809,
+          "covered": 13,
+          "skipped": 0,
+          "pct": 1.6
+        },
+        "statements": {
+          "total": 910,
+          "covered": 16,
+          "skipped": 0,
+          "pct": 1.75
+        },
+        "functions": {
+          "total": 237,
+          "covered": 3,
+          "skipped": 0,
+          "pct": 1.26
+        },
+        "branches": {
+          "total": 842,
+          "covered": 17,
+          "skipped": 0,
+          "pct": 2.01
+        },
+        "branchesTrue": {
+          "total": 0,
+          "covered": 0,
+          "skipped": 0,
+          "pct": 100
+        }
+      },
+      "agent": {
+        "lines": {
+          "total": 1343,
+          "covered": 1176,
+          "skipped": 0,
+          "pct": 87.56
+        },
+        "statements": {
+          "total": 1499,
+          "covered": 1281,
+          "skipped": 0,
+          "pct": 85.45
+        },
+        "functions": {
+          "total": 291,
+          "covered": 254,
+          "skipped": 0,
+          "pct": 87.28
+        },
+        "branches": {
+          "total": 1114,
+          "covered": 861,
+          "skipped": 0,
+          "pct": 77.28
+        },
+        "branchesTrue": {
+          "total": 0,
+          "covered": 0,
+          "skipped": 0,
+          "pct": "Unknown"
+        }
+      },
+      "api": {
+        "files": 116,
+        "loc": 19915,
+        "ncloc": 18474,
+        "classes": 99,
+        "methods": 731,
+        "coveredmethods": 420,
+        "conditionals": 0,
+        "coveredconditionals": 0,
+        "statements": 11133,
+        "coveredstatements": 9006,
+        "elements": 11864,
+        "coveredelements": 9426
+      }
+    }
+  },
+  "line_coverage_changes": [
+    {
+      "file": "apps/web/src/components/grid-selection-frame.tsx",
+      "before_covered_lines": 25,
+      "after_covered_lines": 0,
+      "total_lines": 68,
+      "delta": -25
+    },
+    {
+      "file": "apps/web/src/lib/agent.ts",
+      "before_covered_lines": 59,
+      "after_covered_lines": 0,
+      "total_lines": 67,
+      "delta": -59
+    },
+    {
+      "file": "apps/web/src/lib/api.ts",
+      "before_covered_lines": 83,
+      "after_covered_lines": 68,
+      "total_lines": 110,
+      "delta": -15
+    },
+    {
+      "file": "apps/web/src/lib/brand.ts",
+      "before_covered_lines": 10,
+      "after_covered_lines": 3,
+      "total_lines": 10,
+      "delta": -7
+    },
+    {
+      "file": "apps/web/src/lib/course-colors.ts",
+      "before_covered_lines": 8,
+      "after_covered_lines": 0,
+      "total_lines": 9,
+      "delta": -8
+    },
+    {
+      "file": "apps/web/src/lib/long-term-changes.ts",
+      "before_covered_lines": 62,
+      "after_covered_lines": 54,
+      "total_lines": 73,
+      "delta": -8
+    },
+    {
+      "file": "apps/web/src/lib/scheduling-workflow.ts",
+      "before_covered_lines": 10,
+      "after_covered_lines": 0,
+      "total_lines": 10,
+      "delta": -10
+    },
+    {
+      "file": "apps/web/src/lib/semester.ts",
+      "before_covered_lines": 41,
+      "after_covered_lines": 37,
+      "total_lines": 44,
+      "delta": -4
+    },
+    {
+      "file": "apps/teacher/src/lib/timetable.ts",
+      "before_covered_lines": 26,
+      "after_covered_lines": 13,
+      "total_lines": 29,
+      "delta": -13
+    }
+  ],
+  "decisions": {
+    "R": 283,
+    "F": 20,
+    "C": 2,
+    "D": 1
+  },
+  "experiments": [
+    {
+      "label": "experiment-two-deletions",
+      "exit": 0,
+      "passed": 69,
+      "failed": 0,
+      "failures": []
+    },
+    {
+      "label": "mutation-ambiguous-resolver",
+      "exit": 1,
+      "passed": 17,
+      "failed": 1,
+      "failures": [
+        "Business tools refuses to silently choose one of multiple matching teachers"
+      ]
+    },
+    {
+      "label": "mutation-without-legacy-ambiguity-test",
+      "exit": 0,
+      "passed": 17,
+      "failed": 0,
+      "failures": []
+    },
+    {
+      "label": "mutation-missing-hard-conflict-rejection",
+      "exit": 0,
+      "passed": 89,
+      "failed": 0,
+      "failures": []
+    },
+    {
+      "label": "mutation-stale-title-after-two-deletions",
+      "exit": 1,
+      "passed": 15,
+      "failed": 1,
+      "failures": [
+        "private durable conversation state keeps title edits independent from chat revisions and ignores superseded AI results"
+      ]
+    }
+  ],
+  "coverage_scope": "JS all app src excluding test files; PHP app using PCOV; browser E2E and MySQL not included in coverage",
+  "audit_directory": "/var/folders/zg/g866782x6rv7d60_z94qjmgc0000gn/T/timetable-test-audit-ed3yhne1",
+  "implementation": {
+    "inventory": {
+      "files": 47,
+      "declarations": 305,
+      "file_lines": 10002
+    },
+    "test_results": {
+      "web": {
+        "passed": 89,
+        "failed": 0,
+        "total": 89
+      },
+      "teacher": {
+        "passed": 10,
+        "failed": 0,
+        "total": 10
+      },
+      "agent": {
+        "passed": 70,
+        "failed": 0,
+        "total": 70
+      },
+      "api": {
+        "passed": 172,
+        "failed": 0,
+        "total": 172
+      },
+      "e2e": {
+        "passed": 10,
+        "failed": 0,
+        "total": 10,
+        "skipped": 0,
+        "flaky": 0
+      }
+    },
+    "coverage": {
+      "web": {
+        "lines": {
+          "total": 6799,
+          "covered": 464,
+          "skipped": 0,
+          "pct": 6.82
+        },
+        "statements": {
+          "total": 7681,
+          "covered": 516,
+          "skipped": 0,
+          "pct": 6.71
+        },
+        "functions": {
+          "total": 2957,
+          "covered": 146,
+          "skipped": 0,
+          "pct": 4.93
+        },
+        "branches": {
+          "total": 8788,
+          "covered": 456,
+          "skipped": 0,
+          "pct": 5.18
+        },
+        "branchesTrue": {
+          "total": 0,
+          "covered": 0,
+          "skipped": 0,
+          "pct": 100
+        }
+      },
+      "teacher": {
+        "lines": {
+          "total": 809,
+          "covered": 13,
+          "skipped": 0,
+          "pct": 1.6
+        },
+        "statements": {
+          "total": 910,
+          "covered": 16,
+          "skipped": 0,
+          "pct": 1.75
+        },
+        "functions": {
+          "total": 237,
+          "covered": 3,
+          "skipped": 0,
+          "pct": 1.26
+        },
+        "branches": {
+          "total": 842,
+          "covered": 17,
+          "skipped": 0,
+          "pct": 2.01
+        },
+        "branchesTrue": {
+          "total": 0,
+          "covered": 0,
+          "skipped": 0,
+          "pct": 100
+        }
+      },
+      "agent": {
+        "lines": {
+          "total": 1343,
+          "covered": 1176,
+          "skipped": 0,
+          "pct": 87.56
+        },
+        "statements": {
+          "total": 1499,
+          "covered": 1282,
+          "skipped": 0,
+          "pct": 85.52
+        },
+        "functions": {
+          "total": 291,
+          "covered": 255,
+          "skipped": 0,
+          "pct": 87.62
+        },
+        "branches": {
+          "total": 1114,
+          "covered": 864,
+          "skipped": 0,
+          "pct": 77.55
+        },
+        "branchesTrue": {
+          "total": 0,
+          "covered": 0,
+          "skipped": 0,
+          "pct": "Unknown"
+        }
+      },
+      "api_runs": {
+        "current": {
+          "files": 116,
+          "loc": 19915,
+          "ncloc": 18474,
+          "classes": 99,
+          "methods": 731,
+          "coveredmethods": 420,
+          "conditionals": 0,
+          "coveredconditionals": 0,
+          "statements": 11133,
+          "coveredstatements": 9006,
+          "elements": 11864,
+          "coveredelements": 9426
+        },
+        "before-repeat": {
+          "files": 116,
+          "loc": 19915,
+          "ncloc": 18474,
+          "classes": 99,
+          "methods": 731,
+          "coveredmethods": 419,
+          "conditionals": 0,
+          "coveredconditionals": 0,
+          "statements": 11133,
+          "coveredstatements": 8995,
+          "elements": 11864,
+          "coveredelements": 9414
+        },
+        "final": {
+          "files": 116,
+          "loc": 19915,
+          "ncloc": 18474,
+          "classes": 99,
+          "methods": 731,
+          "coveredmethods": 420,
+          "conditionals": 0,
+          "coveredconditionals": 0,
+          "statements": 11133,
+          "coveredstatements": 8997,
+          "elements": 11864,
+          "coveredelements": 9417
+        },
+        "final-repeat": {
+          "files": 116,
+          "loc": 19915,
+          "ncloc": 18474,
+          "classes": 99,
+          "methods": 731,
+          "coveredmethods": 420,
+          "conditionals": 0,
+          "coveredconditionals": 0,
+          "statements": 11133,
+          "coveredstatements": 8998,
+          "elements": 11864,
+          "coveredelements": 9418
+        }
+      }
+    },
+    "mutations": [
+      {
+        "label": "hard-conflict",
+        "exit": 1,
+        "caught": true,
+        "failed": [
+          "candidate recommendation floor recommends only complete, conflict-free candidates above every floor"
+        ],
+        "errors": []
+      },
+      {
+        "label": "empty-grade-rows",
+        "exit": 1,
+        "caught": true,
+        "failed": [
+          "grade timetable does not infer pending lessons from empty cells"
+        ],
+        "errors": []
+      },
+      {
+        "label": "wrong-swap-date",
+        "exit": 1,
+        "caught": true,
+        "failed": [
+          "adjustment detail presentation keeps same-day swaps on the original date when no replacement date is recorded"
+        ],
+        "errors": []
+      },
+      {
+        "label": "retry-expired-preview",
+        "exit": 1,
+        "caught": true,
+        "failed": [
+          "Chat HTTP and AI SDK stream contract expires a stale preview and refuses to send it to the business API again"
+        ],
+        "errors": []
+      },
+      {
+        "label": "stale-impact-hash",
+        "exit": 1,
+        "caught": true,
+        "failed": [
+          "it requires a fresh impact confirmation before deactivating a used resource"
+        ],
+        "errors": []
+      },
+      {
+        "label": "cancelled-before-stage",
+        "exit": 1,
+        "caught": true,
+        "failed": [
+          "it preserves cancellation before a stage update or candidate persistence with data set \"('stage')\""
+        ],
+        "errors": []
+      },
+      {
+        "label": "cancelled-before-persistence",
+        "exit": 1,
+        "caught": true,
+        "failed": [
+          "it preserves cancellation before a stage update or candidate persistence with data set \"('persistence')\""
+        ],
+        "errors": []
+      },
+      {
+        "label": "changed-catalog-before-persistence",
+        "exit": 1,
+        "caught": true,
+        "failed": [
+          "it rechecks the catalog revision before persisting completed candidates"
+        ],
+        "errors": []
+      }
+    ],
+    "tracked_patch_sha256": "f9ee05dc1d85401f3b38a0cdf700de7180f8749ac28db31a1e98191dc8e9598f",
+    "changes": "Removed 2 declarations; added 1 stale-preview case and 1 cancellation parameter row; addressed all 20 repair findings and both consolidation findings; no production changes."
+  }
+}

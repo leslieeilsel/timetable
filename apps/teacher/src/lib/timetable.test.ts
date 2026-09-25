@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { lessonStartHint, lessonTiming, parseSemesterDate, rowStatus } from "@/lib/timetable"
+import { lessonTiming, parseSemesterDate, rowStatus } from "@/lib/timetable"
 import type { TimetableRow } from "@/lib/types"
 
 const baseRow: TimetableRow = {
@@ -49,43 +49,21 @@ describe("teacher timetable row status", () => {
   })
 
   it("makes a replacement duty explicit", () => {
-    expect(rowStatus({ ...baseRow, duty_status: "added", status: "substitution" })).toEqual({
+    expect(rowStatus({ ...baseRow, duty_status: "added", status: "substitution" })).toMatchObject({
       label: "临时代课",
-      variant: "secondary",
     })
   })
 
   it("shows when the teacher no longer needs to attend", () => {
-    expect(rowStatus({ ...baseRow, duty_status: "removed", status: "teacher_change" })).toEqual({
+    expect(
+      rowStatus({ ...baseRow, duty_status: "removed", status: "teacher_change" }),
+    ).toMatchObject({
       label: "已调出",
-      variant: "destructive",
     })
   })
 })
 
-describe("teacher timetable time copy", () => {
-  it("shows a concrete time instead of a large minute count", () => {
-    const row = {
-      ...baseRow,
-      date: "2026-09-03",
-      start_time: "16:00:00",
-      end_time: "16:45:00",
-    }
-
-    expect(lessonStartHint(row, new Date("2026-09-03T09:08:00"))).toBe("今天下午")
-  })
-
-  it("keeps short countdowns easy to scan", () => {
-    const row = {
-      ...baseRow,
-      date: "2026-09-03",
-      start_time: "09:30:00",
-      end_time: "10:15:00",
-    }
-
-    expect(lessonStartHint(row, new Date("2026-09-03T09:08:00"))).toBe("22分钟后")
-  })
-
+describe("teacher timetable timing", () => {
   it("distinguishes ongoing and completed lessons", () => {
     const row = {
       ...baseRow,

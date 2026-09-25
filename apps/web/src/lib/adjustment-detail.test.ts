@@ -78,7 +78,11 @@ describe("adjustment detail presentation", () => {
   })
   it("keeps same-day swaps on the original date when no replacement date is recorded", () => {
     const detail = temporaryDetail(record("swap", { replacement_date: null }))
-    expect(detail.rows[0].before.secondary).toBe(detail.rows[0].after.secondary)
+    expect(detail.rows).toHaveLength(2)
+    for (const row of detail.rows) {
+      expect(row.before.secondary).toContain("9/14")
+      expect(row.after.secondary).toContain("9/14")
+    }
   })
   it("shows the changed primary teacher and preserves collaborating teachers as context", () => {
     const detail = temporaryDetail(

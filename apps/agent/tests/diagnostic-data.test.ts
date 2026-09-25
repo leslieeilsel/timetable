@@ -25,6 +25,10 @@ describe("complete diagnostic evidence", () => {
       offset: 0,
       total_characters: value.length,
     })
-    expect(segments[1].offset).toBe(2000)
+    let offset = 0
+    for (const segment of segments) {
+      expect(segment.offset).toBe(offset)
+      offset += segment.text.length
+    }
   })
 })

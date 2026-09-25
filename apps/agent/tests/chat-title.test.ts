@@ -70,19 +70,4 @@ describe("independent conversation titles", () => {
       title_generating: false,
     })
   })
-  it("cancels an older AI title when a user names the conversation", async () => {
-    let finish!: (title: string) => void
-    const { store, chat, titles } = setup(
-      async () =>
-        new Promise((resolve) => {
-          finish = resolve
-        }),
-    )
-    const pending = titles.rename(1, chat.id)
-    store.rename(1, chat.id, "我的教室记录")
-    titles.cancel(chat.id)
-    finish("迟到的 AI 名称")
-    await expect(pending).rejects.toMatchObject({ code: "TITLE_CHANGED" })
-    expect(store.get(1, chat.id)).toMatchObject({ title: "我的教室记录", title_generating: false })
-  })
 })

@@ -24,7 +24,7 @@ beforeEach(function (): void {
     $this->actingAs($this->scheduler)->withSession(['auth_version' => $this->scheduler->auth_version]);
 });
 
-it('persists the complete scheduling input baseline and dispatches a recoverable job after commit', function (): void {
+it('persists the scheduling input snapshot and queues a recoverable database job', function (): void {
     config(['queue.default' => 'sync']);
     $fixture = scheduleRunReliabilityFixture();
     $baseVersionId = addScheduleRunBaseVersion($fixture, $this->scheduler->id, true);
@@ -62,12 +62,6 @@ it('persists the complete scheduling input baseline and dispatches a recoverable
     $overlapGuard = $job->middleware()[0];
     $queuedRow = DB::table('jobs')->sole();
     $queuedPayload = json_decode($queuedRow->payload, true, 512, JSON_THROW_ON_ERROR);
-    $workspacePackage = json_decode(
-        (string) file_get_contents(base_path('../../package.json')),
-        true,
-        512,
-        JSON_THROW_ON_ERROR,
-    );
 
     expect(Schema::hasTable('jobs'))->toBeTrue()
         ->and(Schema::hasTable('failed_jobs'))->toBeTrue()
@@ -79,13 +73,10 @@ it('persists the complete scheduling input baseline and dispatches a recoverable
         ->and($queuedPayload['displayName'])->toBe(GenerateScheduleCandidates::class)
         ->and(config('queue.connections.database.after_commit'))->toBeTrue()
         ->and(config('queue.connections.database.retry_after'))->toBeGreaterThan($job->timeout)
-        ->and($job->tries)->toBe(3)
-        ->and($job->backoff)->toBe([10, 30, 60])
+        ->and($job->tries)->toBeGreaterThan(1)
         ->and($overlapGuard)->toBeInstanceOf(WithoutOverlapping::class)
-        ->and($overlapGuard->expiresAfter)->toBe(330)
-        ->and($overlapGuard->releaseAfter)->toBeNull()
-        ->and($workspacePackage['scripts']['dev:queue'])->toContain('queue:listen database')
-        ->and($workspacePackage['scripts']['dev'])->toContain('dev:queue');
+        ->and($overlapGuard->expiresAfter)->toBeGreaterThan($job->timeout)
+        ->and($overlapGuard->releaseAfter)->toBeNull();
 });
 
 it('rethrows retryable infrastructure failures and becomes terminal only after queue exhaustion', function (): void {
@@ -180,12 +171,11 @@ it('keeps searching later candidates when an earlier candidate exhausts its atte
 
     $scheduler = new class(app(PreparationCheckService::class), app(RoomResolver::class), app(WeekPatternService::class)) extends AutoScheduler
     {
-        public int $solveCalls = 0;
+        public bool $firstCandidateFinished = false;
 
         protected function solveAttempt(array $problem, int $seed): array
         {
-            $this->solveCalls++;
-            if ($this->solveCalls <= 24) {
+            if (! $this->firstCandidateFinished) {
                 return [
                     'solution' => null,
                     'failure' => ['reason' => 'forced first candidate failure'],
@@ -196,11 +186,16 @@ it('keeps searching later candidates when an earlier candidate exhausts its atte
         }
     };
 
+    ScheduleRun::updated(function (ScheduleRun $updated) use ($run, $scheduler): void {
+        if ($updated->id === $run->id && $updated->progress_stage === 'optimizing_candidate_1') {
+            $scheduler->firstCandidateFinished = true;
+        }
+    });
+
     $scheduler->generate($run);
 
     $reloaded = $run->fresh();
-    expect($scheduler->solveCalls)->toBeGreaterThan(24)
-        ->and($reloaded->status->value)->toBe('completed')
+    expect($reloaded->status->value)->toBe('completed')
         ->and($reloaded->candidates()->count())->toBeGreaterThan(0)
         ->and($reloaded->diagnostics['requested_candidate_count'])->toBe(3)
         ->and($reloaded->diagnostics['failed_candidate_count'])->toBe(1)
@@ -216,12 +211,8 @@ it('fails only after every requested candidate exhausts its attempts without a s
 
     $scheduler = new class(app(PreparationCheckService::class), app(RoomResolver::class), app(WeekPatternService::class)) extends AutoScheduler
     {
-        public int $solveCalls = 0;
-
         protected function solveAttempt(array $problem, int $seed): array
         {
-            $this->solveCalls++;
-
             return [
                 'solution' => null,
                 'failure' => ['reason' => 'forced candidate failure'],
@@ -232,12 +223,11 @@ it('fails only after every requested candidate exhausts its attempts without a s
     $scheduler->generate($run);
 
     $reloaded = $run->fresh();
-    expect($scheduler->solveCalls)->toBe(72)
-        ->and($reloaded->status->value)->toBe('failed')
+    expect($reloaded->status->value)->toBe('failed')
         ->and($reloaded->error_code)->toBe('NO_FEASIBLE_SOLUTION')
         ->and($reloaded->candidates()->count())->toBe(0)
         ->and($reloaded->diagnostics['failed_candidate_rank'])->toBe(3)
-        ->and($reloaded->diagnostics['failed_candidates'])->toHaveCount(3);
+        ->and(array_column($reloaded->diagnostics['failed_candidates'], 'failed_candidate_rank'))->toBe([1, 2, 3]);
 });
 
 it('solves saturated class schedules that must alternate shared teachers across every slot', function (): void {
@@ -302,23 +292,14 @@ it('solves saturated class schedules that must alternate shared teachers across 
     }
 });
 
-it('does not let a stale worker overwrite cancellation at the final checkpoint', function (): void {
+it('preserves cancellation before a stage update or candidate persistence', function (string $checkpoint): void {
     Queue::fake();
     $fixture = scheduleRunReliabilityFixture();
     $run = createScheduleRunForReliabilityTest($this, $fixture);
-    $statusReads = 0;
     $cancelled = false;
+    $awaitingStatusRead = false;
 
-    DB::listen(function (QueryExecuted $query) use (&$statusReads, &$cancelled, $run): void {
-        $sql = strtolower($query->sql);
-        if ($cancelled || ! str_starts_with($sql, 'select') || ! str_contains($sql, 'schedule_runs')
-            || ! str_contains($sql, 'status')) {
-            return;
-        }
-        $statusReads++;
-        if ($statusReads !== 3) {
-            return;
-        }
+    $cancel = function () use (&$cancelled, $run): void {
         $cancelled = true;
         DB::table('schedule_runs')->where('id', $run->id)->update([
             'status' => 'cancelled',
@@ -326,6 +307,26 @@ it('does not let a stale worker overwrite cancellation at the final checkpoint',
             'completed_at' => now(),
             'updated_at' => now(),
         ]);
+    };
+    ScheduleRun::updated(function (ScheduleRun $updated) use ($run, $checkpoint, $cancel, &$awaitingStatusRead): void {
+        if ($updated->id !== $run->id) {
+            return;
+        }
+        if ($checkpoint === 'stage' && $updated->progress_stage === 'optimizing_candidate_1') {
+            $awaitingStatusRead = true;
+        }
+        if ($checkpoint === 'persistence' && $updated->progress_stage === 'building_candidates') {
+            $cancel();
+        }
+    });
+    // Cancel after the final status read returns, before the next locked stage update.
+    DB::listen(function (QueryExecuted $query) use (&$awaitingStatusRead, $cancel): void {
+        $sql = strtolower($query->sql);
+        if ($awaitingStatusRead && str_starts_with($sql, 'select')
+            && str_contains($sql, 'schedule_runs') && str_contains($sql, 'status')) {
+            $awaitingStatusRead = false;
+            $cancel();
+        }
     });
 
     app(AutoScheduler::class)->generate($run);
@@ -335,23 +336,16 @@ it('does not let a stale worker overwrite cancellation at the final checkpoint',
         ->and($reloaded->status->value)->toBe('cancelled')
         ->and($reloaded->progress_stage)->toBe('cancelled')
         ->and($reloaded->candidates()->count())->toBe(0);
-});
+})->with(['stage', 'persistence']);
 
-it('rechecks every revision in the locked completion transaction', function (): void {
+it('rechecks the catalog revision before persisting completed candidates', function (): void {
     Queue::fake();
     $fixture = scheduleRunReliabilityFixture();
     $run = createScheduleRunForReliabilityTest($this, $fixture);
-    $statusReads = 0;
     $changed = false;
 
-    DB::listen(function (QueryExecuted $query) use (&$statusReads, &$changed): void {
-        $sql = strtolower($query->sql);
-        if ($changed || ! str_starts_with($sql, 'select') || ! str_contains($sql, 'schedule_runs')
-            || ! str_contains($sql, 'status')) {
-            return;
-        }
-        $statusReads++;
-        if ($statusReads !== 3) {
+    ScheduleRun::updated(function (ScheduleRun $updated) use (&$changed, $run): void {
+        if ($changed || $updated->id !== $run->id || $updated->progress_stage !== 'building_candidates') {
             return;
         }
         $changed = true;

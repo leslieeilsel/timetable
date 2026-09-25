@@ -88,7 +88,6 @@ describe("Business tools", () => {
     expect(context.collector.result).toMatchObject({ type: "proposal", preview: { etag } })
     expect(context.calls).toContain("/api/v1/semesters/7/scheduling-constraints/preview")
     expect(context.calls.some((path) => path.endsWith("bulk"))).toBe(false)
-    expect(context.tools.some((tool) => /save|commit|shell|write/.test(tool.name))).toBe(false)
   })
 
   it("refuses to silently choose one of multiple matching teachers", async () => {

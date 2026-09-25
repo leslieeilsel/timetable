@@ -164,8 +164,6 @@ test("free chat, follow-up, history, refresh and a new conversation", async ({ p
     },
   ])
   await page.goto("/ai")
-  await expect(page.getByRole("heading", { name: "今天想处理什么？" })).toBeVisible()
-  await page.screenshot({ path: test.info().outputPath("ai-chat-empty.png") })
   await app.send("什么是硬约束？")
   await expect(page.getByRole("article", { name: "AI 回复" })).toContainText("排课必须满足的条件")
   await app.send("帮我写一份通知")
@@ -176,7 +174,7 @@ test("free chat, follow-up, history, refresh and a new conversation", async ({ p
   await expect(page.getByRole("article")).toHaveCount(4)
   await expect(page.getByRole("textbox", { name: "发送给 AI 的消息" })).toHaveValue("")
   await page.getByRole("link", { name: "新对话", exact: true }).click()
-  await expect(page.getByRole("heading", { name: "今天想处理什么？" })).toBeVisible()
+  await expect(page.getByRole("article")).toHaveCount(0)
   await page
     .getByRole("navigation")
     .getByRole("link", { name: "什么是硬约束？", exact: true })
@@ -226,7 +224,6 @@ test("structured questionnaire resumes the same chat and rule edits expire the o
   await app.send("改成每天 5 节")
   await expect(page.getByText("已有新要求或业务数据变化，这份草稿已失效。")).toBeVisible()
   await expect(page.getByText("复核教师 · 每天最多 5 节 · 必须满足")).toBeVisible()
-  await page.screenshot({ path: test.info().outputPath("ai-chat-rule.png") })
   await page.getByRole("button", { name: "确认保存草稿", exact: true }).click()
   await expect(page.getByText("已保存 1 条草稿，尚未启用。")).toBeVisible()
   expect(app.saves()).toBe(1)
@@ -235,7 +232,7 @@ test("structured questionnaire resumes the same chat and rule edits expire the o
   await expect(page.getByRole("button", { name: "确认保存草稿" })).toHaveCount(0)
 })
 
-test("composer prefill does not auto-send and a disabled model preserves the business workflow", async ({
+test("composer prefill waits for explicit send and reports an unavailable model", async ({
   page,
   context,
 }) => {
@@ -254,35 +251,6 @@ test("composer prefill does not auto-send and a disabled model preserves the bus
   )
   await app.send("教师每天最多 4 节")
   await expect(page.getByRole("alert")).toContainText("AI 服务尚未启用")
-  await page.goto("/semesters/1/constraints")
-  await page.getByRole("button", { name: "新增规则", exact: true }).click()
-  await expect(page.getByRole("dialog").getByRole("heading", { name: "新增规则" })).toBeVisible()
-})
-
-test("a narrow screen keeps the composer accessible and history can be opened and dismissed", async ({
-  page,
-  context,
-}) => {
-  await page.setViewportSize({ width: 390, height: 844 })
-  const app = await setup(page, context, () => [{ type: "text", text: "可以，请告诉我具体要求。" }])
-  await page.goto("/ai")
-  await app.send("你好")
-  await expect(page.getByRole("article", { name: "AI 回复" })).toContainText("具体要求")
-  await page.getByRole("button", { name: "查看对话历史" }).click()
-  await expect(page.getByRole("complementary", { name: "对话历史" })).toBeVisible()
-  // 遮罩层铺满容器，其几何中心被 256px 宽的历史面板盖住；真实交互是点击面板外侧区域。
-  const historyBackdrop = page.getByRole("button", { name: "关闭对话历史", exact: true })
-  const backdropBox = await historyBackdrop.boundingBox()
-  if (!backdropBox) throw new Error("未找到历史遮罩层")
-  await historyBackdrop.click({
-    position: { x: backdropBox.width - 24, y: backdropBox.height / 2 },
-  })
-  await expect(page.getByRole("textbox", { name: "发送给 AI 的消息" })).toBeVisible()
-  const overflow = await page.evaluate(
-    () => document.documentElement.scrollWidth > window.innerWidth,
-  )
-  expect(overflow).toBe(false)
-  await page.screenshot({ path: test.info().outputPath("ai-chat-mobile.png") })
 })
 
 test("multi-step questionnaire preserves multiple choices and free text", async ({

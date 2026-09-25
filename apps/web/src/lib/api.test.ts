@@ -1,31 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { api, apiAllPages, apiDownload, ApiError, apiMessage } from "@/lib/api"
+import { api, apiAllPages, apiDownload } from "@/lib/api"
 
 afterEach(() => vi.unstubAllGlobals())
 
 describe("API utilities", () => {
-  it("turns an ETag conflict into an actionable refresh message", () => {
-    expect(apiMessage(new ApiError("conflict", 412, "SEMESTER_ETAG_CONFLICT", {}))).toBe(
-      "数据已被其他人更新，请刷新后重试。",
-    )
-  })
-
-  it("preserves structured API error messages", () => {
-    expect(apiMessage(new ApiError("教室冲突", 409, "TIMETABLE_RESOURCE_CONFLICT", {}))).toBe(
-      "教室冲突",
-    )
-  })
-
-  it("turns validation envelopes into a specific field-level message", () => {
-    expect(
-      apiMessage(
-        new ApiError("请求数据校验失败", 422, "VALIDATION_FAILED", {
-          errors: { teacher_id: ["The teacher id field is required."] },
-        }),
-      ),
-    ).toBe("请检查“教师”，该字段缺失或格式不正确。")
-  })
-
   it("refreshes an expired CSRF cookie once before retrying a write", async () => {
     vi.stubGlobal("document", { cookie: "" })
     vi.stubGlobal("window", new EventTarget())

@@ -14,7 +14,7 @@ describe("supportsConstraintKindCategory", () => {
     ["soft", "consecutive_items"],
     ["soft", "spacing"],
     ["soft", "course_priority"],
-  ] as const)("allows %s %s rules implemented by both execution paths", (kind, category) => {
+  ] as const)("allows selecting %s %s in the rule form", (kind, category) => {
     expect(supportsConstraintKindCategory(kind, category)).toBe(true)
   })
 
@@ -22,7 +22,7 @@ describe("supportsConstraintKindCategory", () => {
     ["soft", "daily_load"],
     ["soft", "weekly_load"],
     ["hard", "mutual_exclusion"],
-  ] as const)("blocks %s %s rules not implemented by both execution paths", (kind, category) => {
+  ] as const)("disallows selecting %s %s in the rule form", (kind, category) => {
     expect(supportsConstraintKindCategory(kind, category)).toBe(false)
   })
 })

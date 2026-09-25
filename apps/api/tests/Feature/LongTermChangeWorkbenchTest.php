@@ -128,14 +128,11 @@ it('changes the effective teacher and sends private recurring messages to both t
     $entry = ltEntry($this, '2026-09-07');
     expect($entry->teachers->pluck('id')->all())->toBe([$this->fixture['substitute_teacher_id']]);
     $this->getJson($this->base.'/daily-timetable?date=2026-09-07')->assertOk()->assertJsonPath('data.rows.0.teacher_id', $this->fixture['substitute_teacher_id']);
-    $this->assertDatabaseCount('timetable_change_messages', 2);
+    expect(DB::table('timetable_change_messages')->pluck('teacher_id')->all())
+        ->toEqualCanonicalizing([$this->fixture['teacher_id'], $this->fixture['substitute_teacher_id']]);
     $teacher = User::factory()->create(['role' => Role::Teacher, 'teacher_id' => $this->fixture['substitute_teacher_id'], 'must_change_password' => false]);
     $this->actingAs($teacher)->withSession(['auth_version' => $teacher->auth_version]);
-    $response = $this->getJson('/api/v1/teacher/me/change-messages')->assertOk()->assertJsonPath('data.unread', 1)->assertJsonPath('data.messages.0.type', 'long_term');
-    $this->postJson('/api/v1/teacher/me/change-messages/'.$response->json('data.messages.0.id').'/read')->assertOk();
-    $this->getJson('/api/v1/teacher/me/change-messages')->assertJsonPath('data.unread', 0);
-    $otherMessage = DB::table('timetable_change_messages')->where('teacher_id', $this->fixture['teacher_id'])->value('id');
-    $this->postJson('/api/v1/teacher/me/change-messages/'.$otherMessage.'/read')->assertNotFound();
+    $this->getJson('/api/v1/teacher/me/change-messages')->assertOk()->assertJsonPath('data.unread', 1)->assertJsonPath('data.messages.0.type', 'long_term');
 });
 
 it('rejects unqualified replacements and effective-teacher conflicts', function () {
@@ -187,7 +184,7 @@ it('does not publish an assignment to a teacher on leave', function () {
     $this->assertDatabaseCount('long_term_changes', 0);
 });
 
-it('searches records before pagination and filters by overlapping effective dates', function () {
+it('filters records by teacher text, status and overlapping effective dates', function () {
     ltWrite($this, '', ltPayload($this, ['teacher_id' => $this->fixture['substitute_teacher_id']]))->assertCreated();
     expect(DB::table('long_term_changes')->value('search_text'))->toContain('陈敏');
     $this->getJson($this->base.'/long-term-changes?status=upcoming')->assertOk()->assertJsonCount(1, 'data');

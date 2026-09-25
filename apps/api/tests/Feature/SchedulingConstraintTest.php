@@ -164,7 +164,7 @@ it('rejects unsupported kind category pairs and non strict nested payloads', fun
     }
 });
 
-it('accepts every template soft rule implemented by generation and manual diagnostics', function (): void {
+it('accepts the supported soft rule categories in draft requests', function (): void {
     [$semesterId] = constraintFixture();
 
     foreach ([

@@ -58,7 +58,7 @@ it('requires a fresh impact confirmation before deactivating a used resource', f
         'fixed_room_id' => $room->id,
         'status' => ResourceStatus::Active,
     ]);
-    TeachingAssignment::query()->create([
+    $assignment = TeachingAssignment::query()->create([
         'semester_id' => $semester->id,
         'academic_year_id' => $year->id,
         'school_class_id' => $class->id,
@@ -77,10 +77,21 @@ it('requires a fresh impact confirmation before deactivating a used resource', f
         ->assertJsonPath('impacts.0.confirmed_assignments', 1)
         ->assertJsonPath('impacts.0.unplaced_items', 2);
 
-    $this->withHeader('If-Match', $etag)->patchJson("/api/v1/grades/{$grade->id}", [
+    $assignment->update(['weekly_items' => 3]);
+    $etag = $this->getJson('/api/v1/grades')->assertOk()->headers->get('ETag');
+    $stale = $this->withHeader('If-Match', $etag)->patchJson("/api/v1/grades/{$grade->id}", [
         'is_active' => false,
         'confirm_open_impact' => true,
         'impact_hash' => $warning->json('impact_hash'),
+    ])->assertStatus(409)
+        ->assertJsonPath('code', 'ACTIVE_RESOURCE_IN_USE')
+        ->assertJsonPath('impacts.0.unplaced_items', 3);
+    expect($grade->fresh()->is_active)->toBeTrue();
+
+    $this->withHeader('If-Match', $etag)->patchJson("/api/v1/grades/{$grade->id}", [
+        'is_active' => false,
+        'confirm_open_impact' => true,
+        'impact_hash' => $stale->json('impact_hash'),
     ])->assertOk()
         ->assertJsonPath('data.is_active', false);
 });

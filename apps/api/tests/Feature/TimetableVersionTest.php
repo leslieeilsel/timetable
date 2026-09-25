@@ -287,7 +287,7 @@ it('blocks publication when a temporary adjustment references a lesson moved to 
         ->toBe($entryId);
 });
 
-it('uses a selected draft as the preserved baseline for local replanning', function (): void {
+it('preserves locked placements from the selected draft instead of a newer empty draft', function (): void {
     Queue::fake();
     $fixture = timetableVersionFixture();
     $classId = (int) DB::table('teaching_assignments')
@@ -300,7 +300,15 @@ it('uses a selected draft as the preserved baseline for local replanning', funct
             'weekday' => 1,
             'item_id' => $fixture['item_ids'][0],
         ])->assertCreated();
-    $created = $this->withHeader('If-Match', $placed->headers->get('ETag'))
+    $locked = $this->withHeader('If-Match', $placed->headers->get('ETag'))
+        ->putJson("/api/v1/semesters/{$fixture['semester_id']}/timetable/entries/{$placed->json('data.id')}/lock")
+        ->assertOk();
+    $otherDraft = $this->withHeader('If-Match', $locked->headers->get('ETag'))
+        ->postJson("/api/v1/semesters/{$fixture['semester_id']}/timetable-versions", [
+            'name' => '不应使用的空白草稿',
+            'base_version_id' => null,
+        ])->assertCreated()->assertJsonPath('data.entries_count', 0);
+    $created = $this->withHeader('If-Match', $otherDraft->headers->get('ETag'))
         ->postJson("/api/v1/semesters/{$fixture['semester_id']}/schedule-runs", [
             'scope' => ['type' => 'class', 'ids' => [$classId]],
             'preservation' => [
@@ -317,7 +325,13 @@ it('uses a selected draft as the preserved baseline for local replanning', funct
     app(AutoScheduler::class)->generate($run);
 
     expect($run->fresh()->status->value)->toBe('completed')
-        ->and($run->fresh()->candidates()->firstOrFail()->entries()->count())->toBe(1);
+        ->and($run->fresh()->candidates()->sole()->entries()->sole()->toArray())
+        ->toMatchArray([
+            'teaching_assignment_id' => $fixture['assignment_id'],
+            'weekday' => 1,
+            'item_id' => $fixture['item_ids'][0],
+            'is_locked' => true,
+        ]);
 });
 
 it('preserves existing placements while automatically filling the remaining class items', function (): void {

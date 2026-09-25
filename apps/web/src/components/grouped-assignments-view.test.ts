@@ -116,13 +116,14 @@ describe("buildAssignmentGroups", () => {
       settings,
     )
 
-    expect(groups.map((item) => item.name)).toEqual([
-      "博学楼101教室",
-      "计算机教室1",
-      "随班级固定教室",
-      "未指定教室",
+    expect(
+      groups.map((item) => [item.name, item.entries.map((entry) => entry.assignment.id)]),
+    ).toEqual([
+      ["博学楼101教室", [1]],
+      ["计算机教室1", [3]],
+      ["随班级固定教室", [4]],
+      ["未指定教室", [2]],
     ])
-    expect(groups.slice(0, 2).map((item) => item.subtitle)).toEqual(["普通教室", "计算机教室"])
   })
 })
 

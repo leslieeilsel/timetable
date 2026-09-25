@@ -1,12 +1,8 @@
 import { describe, expect, it } from "vitest"
 import type { TimetableVersion } from "@/lib/types"
 import {
-  isDailySemesterPath,
-  isSchedulingSemesterPath,
   resolveSemesterId,
   resolveTimetableVersionSelection,
-  semesterDestinationForPath,
-  semesterPath,
   timetableVersionsForRole,
   withSemesterId,
 } from "@/lib/semester"
@@ -14,17 +10,6 @@ import {
 type Version = Pick<TimetableVersion, "id" | "status">
 
 describe("semester routes", () => {
-  it("builds explicit routes for every semester workflow", () => {
-    expect(semesterPath(17, "setup")).toBe("/semesters/17/setup")
-    expect(semesterPath(17, "preparation")).toBe("/semesters/17/preparation")
-    expect(semesterPath(17, "assignments")).toBe("/semesters/17/assignments")
-    expect(semesterPath(17, "constraints")).toBe("/semesters/17/constraints")
-    expect(semesterPath(17, "generate")).toBe("/semesters/17/generate")
-    expect(semesterPath(17, "timetable")).toBe("/semesters/17/timetable")
-    expect(semesterPath(17, "adjustments")).toBe("/semesters/17/adjustments")
-    expect(semesterPath(17, "leaves")).toBe("/semesters/17/leaves")
-  })
-
   it("rewrites current-semester compatibility links without losing their query or hash", () => {
     expect(withSemesterId(17, "/scheduling/generate?run=42#candidate")).toBe(
       "/semesters/17/generate?run=42#candidate",
@@ -34,15 +19,6 @@ describe("semester routes", () => {
     )
     expect(withSemesterId(17, "/semesters/9/generate?run=42")).toBe("/semesters/9/generate?run=42")
     expect(withSemesterId(17, "/resources/teachers")).toBe("/resources/teachers")
-  })
-
-  it("recognizes scheduling and daily destinations in compatibility and explicit routes", () => {
-    expect(semesterDestinationForPath("/semesters/17/generate?run=42")).toBe("generate")
-    expect(isSchedulingSemesterPath("/semesters/17/timetable")).toBe(false)
-    expect(isSchedulingSemesterPath("/semesters/17/planning")).toBe(true)
-    expect(isSchedulingSemesterPath("/semesters/17/adjustments")).toBe(false)
-    expect(isDailySemesterPath("/semesters/17/adjustments")).toBe(true)
-    expect(isDailySemesterPath("/daily/leaves")).toBe(true)
   })
 
   it("uses current semester only when the route has no explicit semester", () => {

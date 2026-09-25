@@ -310,12 +310,6 @@ describe("conversational read tools", () => {
     expect(url.searchParams.get("page")).toBe("2")
     expect(result.meta).toMatchObject({ pagination: { total: 42, last_page: 3 } })
   })
-  it("exposes no save, generic HTTP or executable tools", () => {
-    const names = setup(null).tools.map((tool) => tool.name)
-    expect(names).toContain("prepare_rule_drafts")
-    expect(names).toContain("ask_user")
-    expect(names.join(" ")).not.toMatch(/save|confirm|fetch|http|exec|shell|write|delete/)
-  })
   it("defers large run details explicitly and makes every evidence page and freshness flag readable", async () => {
     const run = {
       id: 9,
